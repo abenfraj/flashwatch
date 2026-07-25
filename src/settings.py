@@ -99,22 +99,38 @@ DEFAULTS: dict[str, Any] = {
     # --- capture / OCR -------------------------------------------------
     "capture_interval_ms": 200,
     "ocr_lines_kept": 40,
-    "chat_region": None,             # [x, y, w, h] in virtual-screen coords
+    # [x, y, w, h] in virtual-screen coords. Seeded with a working 1920x1080
+    # layout so a fresh install has somewhere sensible to start rather than
+    # exploring the whole screen on its first game.
+    #
+    # This does *not* hardcode the chat position. The seed is paired with
+    # chat_region_window below and is only honoured while the League window
+    # actually is that size; on any other resolution or in windowed mode the
+    # restore path discards it and detection runs normally. Left deliberately
+    # unlocked for the same reason -- locking would pin it unconditionally.
+    "chat_region": [39, 537, 556, 285],
     "chat_region_locked": False,     # True == user pinned it manually
     # Client size the saved region was found at; it is discarded if the window
     # size changes, since the region would no longer line up.
-    "chat_region_window": None,
+    "chat_region_window": [1920, 1080],
 
     # Two further areas the user places by hand in test mode, both [x, y, w, h]
-    # in virtual-screen coordinates.
+    # in virtual-screen coordinates. Seeded from the same 1920x1080 layout.
+    #
+    # Neither is guarded by a window size the way the chat region is, because
+    # neither is ever searched for: there is nothing to fall back to, so a seed
+    # that is wrong for the screen is no worse than the None it replaces -- the
+    # user places it by hand either way. The clock is the one that matters, and
+    # a misplaced one is cheap: a reading is only adopted once a second one
+    # agrees with it, and anything that is not a plausible mm:ss is dropped.
     #
     # The clock is read and used: it is the game time itself, so it beats the
     # timestamps prefixing chat lines (which the player can switch off) and keeps
     # ping age-correction and ultimate ranks honest.
-    "clock_region": None,
+    "clock_region": [1852, 8, 56, 18],
     # The scoreboard is read and shown but not yet interpreted; placing it now is
     # what the planned reader (enemy items -> real ability haste) will use.
-    "scoreboard_region": None,
+    "scoreboard_region": [326, 237, 1267, 540],
 
     # --- Riot data ------------------------------------------------------
     # Locale of the League client, chosen in the settings window. Drives three
