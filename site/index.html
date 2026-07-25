@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flashwatch — les cooldowns ennemis, lus à l'écran</title>
-<meta name="description" content="Overlay Windows qui lit le chat de League of Legends et affiche les cooldowns des sorts d'invocateur ennemis. Aucune injection, aucune lecture mémoire : uniquement les pixels affichés.">
+<title>Flashwatch — enemy cooldowns, read off the screen</title>
+<meta name="description" content="Windows overlay that reads the League of Legends chat and shows enemy summoner spell cooldowns. No injection, no memory reading: only the pixels already on screen.">
 <meta name="theme-color" content="#0a0c11">
 <meta property="og:title" content="Flashwatch">
-<meta property="og:description" content="Les cooldowns ennemis, lus à l'écran. Rien d'installé, rien d'injecté.">
+<meta property="og:description" content="Enemy cooldowns, read off the screen. Nothing installed, nothing injected.">
 <meta property="og:type" content="website">
 
 <!-- ═══════════════════════════════════════════════════════════════════════
@@ -121,6 +121,19 @@ p{margin:0 0 1em}
 }
 .topbar .mini:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(90,200,255,.32)}
 @media (max-width:880px){.topnav{display:none}}
+
+/* Language switch. Deliberately a sibling of .topnav rather than a child:
+   the nav is hidden below 880px, and the switch has to survive that. */
+.langsw{display:flex;flex:none;border:var(--rule);border-radius:3px;overflow:hidden}
+.langsw button{
+  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;
+  background:none;border:0;color:var(--ink-faint);padding:6px 9px;cursor:pointer;
+  transition:color .16s,background .16s;
+}
+.langsw button+button{border-left:var(--rule)}
+.langsw button:hover{color:var(--ink)}
+.langsw button[aria-pressed="true"]{background:rgba(90,200,255,.14);color:var(--signal)}
+@media (max-width:880px){.topnav{display:none}.topbar .wrap{gap:12px}}
 
 /* ══ hero ═══════════════════════════════════════════════════════════════ */
 .hero{padding:clamp(54px,9vh,110px) 0 0}
@@ -456,14 +469,18 @@ footer .sep{margin-left:auto}
       <b>Flashwatch</b><span>Windows</span>
     </a>
     <nav class="topnav">
-      <a href="#install">Installation</a>
-      <a href="#config">Configuration</a>
-      <a href="#fonctionnement">Fonctionnement</a>
-      <a href="#securite">Sécurité</a>
-      <a href="#versions">Versions</a>
-      <a href="#faq">FAQ</a>
+      <a href="#install" data-i18n="nav.install">Install</a>
+      <a href="#config" data-i18n="nav.config">Setup</a>
+      <a href="#fonctionnement" data-i18n="nav.how">How it works</a>
+      <a href="#securite" data-i18n="nav.safety">Safety</a>
+      <a href="#versions" data-i18n="nav.versions">Versions</a>
+      <a href="#faq" data-i18n="nav.faq">FAQ</a>
     </nav>
-    <a class="mini" data-dl href="#install">Télécharger</a>
+    <div class="langsw" role="group" data-i18n-label="lang.group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="fr" aria-pressed="false">FR</button>
+    </div>
+    <a class="mini" data-dl href="#install" data-i18n="nav.download">Download</a>
   </div>
 </header>
 
@@ -474,33 +491,33 @@ footer .sep{margin-left:auto}
   <div class="wrap">
     <div class="hero-grid">
       <div>
-        <div class="kicker rise">Overlay · League of Legends · Windows</div>
-        <h1 class="rise">Les cooldowns<br>ennemis, <em>lus à l'écran</em>.</h1>
-        <p class="lede rise">Le programme lit le chat de la partie, reconnaît les sorts d'invocateur utilisés en face, et affiche une barre discrète en haut de ton écran. Aucune touche à presser, rien à configurer pendant la partie.</p>
+        <div class="kicker rise" data-i18n="hero.kicker">Overlay · League of Legends · Windows</div>
+        <h1 class="rise" data-i18n="hero.h1">Enemy cooldowns,<br><em>read off the screen</em>.</h1>
+        <p class="lede rise" data-i18n="hero.lede">The program reads the match chat, recognises the summoner spells the enemy team has used, and shows a discreet bar at the top of your screen. No key to press, nothing to configure mid-game.</p>
       </div>
 
       <div class="hero-side rise">
         <!-- A readout in the same language as the app's own status tab: it fills
              the column with something true rather than decoration. -->
-        <div class="readout brackets" aria-hidden="true">
-          <div><span>jeu</span><b>En jeu (1920×1080)</b></div>
-          <div><span>zone de chat</span><b>806×190 @ 140,439</b></div>
-          <div><span>ocr</span><b>1,4 ms · 94 % ignorées</b></div>
-          <div><span>timers actifs</span><b>4</b></div>
+        <div class="readout brackets" aria-hidden="true" data-i18n="hero.readout">
+          <div><span>game</span><b>In game (1920×1080)</b></div>
+          <div><span>chat area</span><b>806×190 @ 140,439</b></div>
+          <div><span>ocr</span><b>1.4 ms · 94 % skipped</b></div>
+          <div><span>active timers</span><b>4</b></div>
         </div>
         <div class="hero-cta">
           <a class="btn" data-dl href="#install">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-            <span><b>Télécharger</b><small data-dl-detail>Windows · 99 Mo · gratuit</small></span>
+            <span><b data-i18n="hero.cta">Download</b><small data-dl-detail data-i18n="dl.detail1">Windows · 99 MB · free</small></span>
           </a>
-          <a class="btn-ghost" href="#install">Comment ça s'installe →</a>
+          <a class="btn-ghost" href="#install" data-i18n="hero.cta2">How to install it →</a>
         </div>
         <dl class="specs">
-          <div><dt>Installation</dt><dd>Aucune</dd></div>
-          <div><dt>Processeur</dt><dd>≈ 0,2 %</dd></div>
-          <div><dt>Langues</dt><dd>FR / EN</dd></div>
+          <div><dt data-i18n="spec.install">Install</dt><dd data-i18n="spec.install.v">None</dd></div>
+          <div><dt data-i18n="spec.cpu">Processor</dt><dd>≈ 0.2 %</dd></div>
+          <div><dt data-i18n="spec.lang">Languages</dt><dd>EN / FR</dd></div>
         </dl>
-        <p class="side-note">Verrouillée, la barre laisse passer les clics : elle ne peut pas te voler le focus en pleine partie.</p>
+        <p class="side-note" data-i18n="hero.note">Locked, the bar lets clicks through: it cannot steal focus in the middle of a fight.</p>
       </div>
     </div>
 
@@ -509,17 +526,17 @@ footer .sep{margin-left:auto}
       <div class="demo-frame brackets">
         <div class="demo-chrome">
           <i class="on"></i><i></i><i></i>
-          <em style="font-style:normal;letter-spacing:.13em">aperçu de l'overlay — en direct</em>
+          <em style="font-style:normal;letter-spacing:.13em" data-i18n="demo.title">overlay preview — live</em>
           <span id="clock" class="mono">12:34</span>
         </div>
         <div class="demo-stage">
           <div class="bar" id="bar">
             <div class="bar-track"></div>
           </div>
-          <p class="chatline">(12:31) <u>Darius</u> a utilisé Saut éclair<span style="color:var(--ink-faint)">   ← la ligne que le jeu écrit</span></p>
+          <p class="chatline" data-i18n="demo.chatline">(12:31) <u>Darius</u> used Flash<span style="color:var(--ink-faint)">   ← the line the game writes</span></p>
           <div class="demo-caption">
-            <span><b>Un portrait par sort en recharge</b> — il entre à gauche au cast, arrive à droite quand le sort revient</span>
-            <span><b>READY</b> reste 5 s, puis la ligne disparaît</span>
+            <span data-i18n="demo.cap1"><b>One portrait per spell on cooldown</b> — it enters on the left at cast, reaches the right when the spell is back</span>
+            <span data-i18n="demo.cap2"><b>READY</b> stays 5 s, then the row disappears</span>
           </div>
         </div>
       </div>
@@ -533,28 +550,28 @@ footer .sep{margin-left:auto}
     <div class="sec-head">
       <div class="sec-num">01</div>
       <div>
-        <h2>Trois choses, faites toutes seules</h2>
-        <p class="lede">Tu lances le programme avant de jouer et tu l'oublies. Il détecte la partie, trouve le chat, et se cache quand tu n'es plus en jeu.</p>
+        <h2 data-i18n="what.h2">Three things, done on their own</h2>
+        <p class="lede" data-i18n="what.lede">You start the program before playing and forget about it. It detects the match, finds the chat, and hides itself once you are out of game.</p>
       </div>
     </div>
     <div class="tri">
       <div>
         <svg class="glyph" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="14" rx="2"/><path d="M6 21h12M12 18v3M6 9h5M6 13h8"/></svg>
-        <div class="n">01 · LECTURE</div>
-        <h3>Il lit ton écran, rien d'autre</h3>
-        <p>Une capture de la zone du chat toutes les 200 ms, puis de la reconnaissance de texte. Aucun accès au jeu : uniquement les pixels que tu vois déjà.</p>
+        <div class="n" data-i18n="what.1.n">01 · READING</div>
+        <h3 data-i18n="what.1.h">It reads your screen, nothing else</h3>
+        <p data-i18n="what.1.p">A capture of the chat area every 200 ms, then text recognition. No access to the game: only the pixels you can already see.</p>
       </div>
       <div>
         <svg class="glyph" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>
-        <div class="n">02 · TIMERS</div>
-        <h3>Il part de l'annonce du jeu</h3>
-        <p>« Darius a utilisé Saut éclair » : cette ligne, le jeu ne l'écrit que pour l'équipe d'en face. Le cooldown est calculé à partir de là, en français comme en anglais.</p>
+        <div class="n" data-i18n="what.2.n">02 · TIMERS</div>
+        <h3 data-i18n="what.2.h">It starts from the game's own announcement</h3>
+        <p data-i18n="what.2.p">“Darius used Flash”: the game only writes that line for the opposing team. The cooldown is computed from it, in English as in French.</p>
       </div>
       <div>
         <svg class="glyph" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7"/><path d="M8 12h8"/></svg>
-        <div class="n">03 · AFFICHAGE</div>
-        <h3>Invisible hors partie</h3>
-        <p>La barre n'existe pas sur le bureau ni dans le client : elle apparaît avec l'écran de jeu et repart avec lui. Clics traversants, position et taille libres.</p>
+        <div class="n" data-i18n="what.3.n">03 · DISPLAY</div>
+        <h3 data-i18n="what.3.h">Invisible out of game</h3>
+        <p data-i18n="what.3.p">The bar does not exist on your desktop or in the client: it appears with the game screen and leaves with it. Click-through, free to move and resize.</p>
       </div>
     </div>
   </div>
@@ -566,45 +583,45 @@ footer .sep{margin-left:auto}
     <div class="sec-head">
       <div class="sec-num">02</div>
       <div>
-        <h2>Installation en trois minutes</h2>
-        <p class="lede">Un seul fichier, rien à installer, aucun droit administrateur. Windows 10 ou 11 en 64 bits.</p>
+        <h2 data-i18n="install.h2">Installed in three minutes</h2>
+        <p class="lede" data-i18n="install.lede">One file, nothing to install, no administrator rights. Windows 10 or 11, 64-bit.</p>
       </div>
     </div>
 
     <div class="steps">
-      <div class="step">
-        <h3>Télécharge le fichier</h3>
-        <p>Un seul <code class="mono">.exe</code> de <span data-dl-size>99 Mo</span> — pas de Python, pas d'installeur, pas de dépendances.</p>
-        <p><b>Mets-le dans son propre dossier</b> (par exemple <span class="mono" style="color:var(--ink)">Documents\Flashwatch\</span>) : il crée un dossier <span class="mono" style="color:var(--ink)">assets</span> à côté de lui pour ses réglages.</p>
+      <div class="step" data-i18n="install.s1">
+        <h3>Download the file</h3>
+        <p>A single <code class="mono">.exe</code>, <span data-dl-size>99 MB</span> — no Python, no installer, no dependencies.</p>
+        <p><b>Put it in its own folder</b> (say <span class="mono" style="color:var(--ink)">Documents\Flashwatch\</span>): it creates an <span class="mono" style="color:var(--ink)">assets</span> folder next to itself for its settings.</p>
       </div>
-      <div class="step">
-        <h3>Passe l'avertissement Windows</h3>
-        <p>Double-clic. Windows affiche « <b>Windows a protégé votre PC</b> » parce que le programme n'est pas signé.</p>
-        <p>Clique <kbd>Informations complémentaires</kbd> puis <kbd>Exécuter quand même</kbd>. C'est le prix d'un certificat de signature, pas un signe que le fichier est douteux.</p>
+      <div class="step" data-i18n="install.s2">
+        <h3>Get past the Windows warning</h3>
+        <p>Double-click. Windows shows “<b>Windows protected your PC</b>” because the program is not signed.</p>
+        <p>Click <kbd>More info</kbd>, then <kbd>Run anyway</kbd>. That is the price of a signing certificate, not a sign that the file is dubious.</p>
       </div>
-      <div class="step">
-        <h3>Cherche l'icône, pas une fenêtre</h3>
-        <p>Rien ne s'ouvre à l'écran : le programme vit dans la <b>zone de notification</b>, en bas à droite de la barre des tâches, parfois sous la flèche <kbd>^</kbd>.</p>
-        <p>Double-clic sur l'icône pour ouvrir les réglages. Clic droit → <kbd>Quitter</kbd> pour le fermer.</p>
+      <div class="step" data-i18n="install.s3">
+        <h3>Look for the icon, not a window</h3>
+        <p>Nothing opens on screen: the program lives in the <b>notification area</b>, bottom right of the taskbar, sometimes under the <kbd>^</kbd> arrow.</p>
+        <p>Double-click the icon to open the settings. Right-click → <kbd>Quit</kbd> to close it.</p>
       </div>
     </div>
 
     <div class="note">
       <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 9v5M12 17.5v.5"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-      <div><b>Internet est nécessaire au premier lancement</b> — le programme télécharge les portraits des champions et les icônes de sorts (environ 9 Mo) depuis les serveurs de données publics de Riot. Ensuite il fonctionne hors ligne.</div>
+      <div data-i18n="install.note"><b>Internet is required on first launch</b> — the program downloads champion portraits and spell icons (about 9 MB) from Riot's public data servers. After that it works offline.</div>
     </div>
 
     <div style="margin-top:34px" class="hero-cta">
       <a class="btn" data-dl href="#">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-        <span><b>Télécharger Flashwatch.exe</b><small data-dl-detail>99 Mo · Windows 10/11 64 bits</small></span>
+        <span><b data-i18n="dl.exe">Download Flashwatch.exe</b><small data-dl-detail data-i18n="dl.detail2">99 MB · Windows 10/11 64-bit</small></span>
       </a>
     </div>
 
     <!-- Latest release: filled in from the GitHub API, empty until then. -->
     <div class="latest" id="latest" hidden>
       <div class="latest-head">
-        <div class="kicker">Dernière version</div>
+        <div class="kicker" data-i18n="latest.title">Latest version</div>
         <div class="latest-meta mono">
           <b id="latest-tag">—</b><span id="latest-date"></span><span id="latest-size"></span>
         </div>
@@ -620,47 +637,47 @@ footer .sep{margin-left:auto}
     <div class="sec-head">
       <div class="sec-num">03</div>
       <div>
-        <h2>Configuration : deux choses obligatoires</h2>
-        <p class="lede">Le reste marche par défaut. Ces deux-là, non — et sans elles tu ne verras rien.</p>
+        <h2 data-i18n="cfg.h2">Setup: two things are mandatory</h2>
+        <p class="lede" data-i18n="cfg.lede">The rest works out of the box. These two do not — and without them you will see nothing.</p>
       </div>
     </div>
 
     <div class="cfg">
-      <div class="win brackets" aria-hidden="true">
+      <div class="win brackets" aria-hidden="true" data-i18n="cfg.win">
         <div class="win-bar"><i></i> Flashwatch</div>
-        <div class="win-tabs"><span>Statut</span><span class="on">Réglages</span><span>Équipe</span><span>Debug</span></div>
+        <div class="win-tabs"><span>Status</span><span class="on">Settings</span><span>Team</span><span>Debug</span></div>
         <div class="win-body">
-          <div class="row">Langue / Language <span class="sel">Français ▾</span></div>
-          <div class="row">Disposition <span class="sel">Barre en haut ▾</span></div>
-          <div class="row on"><span class="sw"></span> Masquer hors partie</div>
-          <div class="row on"><span class="sw"></span> Trier par rôle</div>
-          <div class="row">Garder READY affiché <span class="val">5 s</span></div>
-          <div class="row">Échelle <span class="val">1,00</span></div>
-          <div class="row on"><span class="sw"></span> Activer le son</div>
+          <div class="row">Langue / Language <span class="sel">English ▾</span></div>
+          <div class="row">Layout <span class="sel">Bar on top ▾</span></div>
+          <div class="row on"><span class="sw"></span> Hide out of game</div>
+          <div class="row on"><span class="sw"></span> Sort by role</div>
+          <div class="row">Keep READY shown <span class="val">5 s</span></div>
+          <div class="row">Scale <span class="val">1.00</span></div>
+          <div class="row on"><span class="sw"></span> Enable sound</div>
         </div>
-        <div class="win-foot">Réglages enregistrés automatiquement</div>
+        <div class="win-foot">Settings saved automatically</div>
       </div>
 
-      <dl>
+      <dl data-i18n="cfg.dl">
         <div>
-          <dt>Langue du client <em>obligatoire</em></dt>
-          <dd><b style="color:var(--ink)">Si ton League est en anglais</b>, ouvre <span class="mono">Réglages → Langue / Language</span> et choisis <span class="mono">English</span>. Le programme cherche les phrases du chat dans cette langue : réglé sur français avec un client anglais, il ne détectera rien du tout. Le changement s'applique tout de suite.</dd>
+          <dt>Client language <em>mandatory</em></dt>
+          <dd><b style="color:var(--ink)">If your League is in French</b>, open <span class="mono">Settings → Langue / Language</span> and pick <span class="mono">Français</span>. The program looks for the chat wording in that language: set to English against a French client, it will detect nothing at all. The change takes effect immediately.</dd>
         </div>
         <div>
-          <dt>Fenêtré sans bordure <em>obligatoire</em></dt>
-          <dd>Dans les options vidéo de League, mets <span class="mono">Fenêtré sans bordure</span>. En plein écran exclusif, Windows interdit à n'importe quel overlay de s'afficher — ce n'est pas une limite du programme.</dd>
+          <dt>Borderless windowed <em>mandatory</em></dt>
+          <dd>In League's video options, set <span class="mono">Borderless</span>. In exclusive fullscreen, Windows forbids any overlay from drawing — that is not a limitation of this program.</dd>
         </div>
         <div>
-          <dt>Zone du chat <em class="opt">si rien ne s'affiche</em></dt>
-          <dd>Le chat est trouvé automatiquement, quelle que soit ta résolution. Si les timers ne démarrent pas, ouvre <span class="mono">Statut → Mode test : zone du chat</span> : un cadre apparaît autour de la zone lue, tu le déplaces sur ton chat et tu vois <b style="color:var(--ink)">en direct ce qu'il lit</b> sous le cadre. <span class="mono">Valider</span> l'enregistre.</dd>
+          <dt>Chat area <em class="opt">if nothing shows up</em></dt>
+          <dd>The chat is found automatically, whatever your resolution. If timers never start, open <span class="mono">Status → Test mode: chat area</span>: a frame appears around the area being read, you drag it onto your chat and you see <b style="color:var(--ink)">live what it reads</b> underneath. <span class="mono">Apply</span> saves it.</dd>
         </div>
         <div>
-          <dt>Zone du temps de partie <em class="opt">recommandé</em></dt>
-          <dd>Même principe, cadré sur le chronomètre en haut de l'écran. Une fois validé, le programme lit l'heure du jeu directement : une annonce lue deux secondes trop tard ne coûte plus rien en précision.</dd>
+          <dt>Game clock area <em class="opt">recommended</em></dt>
+          <dd>Same idea, framed on the match timer at the top of the screen. Once applied, the program reads the game clock directly: an announcement read two seconds late no longer costs any accuracy.</dd>
         </div>
         <div>
-          <dt>Confort <em class="opt">au goût</em></dt>
-          <dd>Barre compacte en haut ou liste verticale, thème sombre / clair / néon, opacité, échelle, tri par rôle, sons quand un sort revient, alerte quelques secondes avant. Déverrouille l'overlay pour le déplacer ou le redimensionner, reverrouille pour retrouver les clics traversants.</dd>
+          <dt>Comfort <em class="opt">to taste</em></dt>
+          <dd>Compact bar on top or vertical list, dark / light / neon theme, opacity, scale, sorting by role, sounds when a spell comes back, a warning a few seconds before. Unlock the overlay to move or resize it, lock it again to get click-through back.</dd>
         </div>
       </dl>
     </div>
@@ -673,13 +690,273 @@ footer .sep{margin-left:auto}
     <div class="sec-head">
       <div class="sec-num">04</div>
       <div>
-        <h2>D'où viennent les timers</h2>
-        <p class="lede">D'une phrase que le jeu écrit lui-même, et qu'il n'écrit que pour l'équipe adverse. Rien n'est deviné : sans annonce, la barre reste vide.</p>
+        <h2 data-i18n="how.h2">Where the timers come from</h2>
+        <p class="lede" data-i18n="how.lede">From a sentence the game writes itself, and only ever writes for the opposing team. Nothing is guessed: with no announcement, the bar stays empty.</p>
       </div>
     </div>
 
-    <div class="anatomy">
-<pre>En partie, la ligne à lire est celle-ci — et le jeu ne l'affiche
+    <div class="anatomy" data-i18n="how.pre">
+<pre>In game, this is the line to read — and the game never shows
+it for your own team:
+
+  (12:04) <u>Darius</u> used <i>Flash</i>
+  <b>│</b>       <b>│</b>           <b>│</b>
+  <b>│</b>       <b>│</b>           <b>└─ the spell</b>
+  <b>│</b>       <b>└─ the champion, an enemy by construction</b>
+  <b>└─ the match clock</b>
+
+  Also accepted: <u>Darius</u> has used <i>Flash</i>   ·   FR: <u>Darius</u> a utilisé <i>Saut éclair</i>
+
+The cooldown comes from the game's table (Flash: 300 s, <s>246 s</s>
+with Cosmic Insight, assumed by default). The match clock corrects
+the reading delay: a line read two seconds late costs nothing.
+
+To check that the OCR really reads your chat, just type:
+
+  Wait Darius Flash - 245 sec.
+
+The game does not write that sentence during a match; the program
+accepts it because it carries a remaining time, which makes it a
+clean test.</pre>
+    </div>
+
+    <div class="flow" data-i18n="how.flow">
+      <div><div class="t">Capture</div><div class="v">200 ms</div></div>
+      <div><div class="t">Recognition</div><div class="v">Chat area</div></div>
+      <div><div class="t">Once set</div><div class="v">Left alone</div></div>
+      <div><div class="t">New match</div><div class="v">Reset</div></div>
+    </div>
+
+    <p class="lede" style="margin-top:26px" data-i18n="how.tail">A timer once set is never modified: the same line read again, a line revealed by scrolling back through the chat, or a misread timestamp can no longer shift a running countdown. Only an announcement implying clearly more time is treated as a new cast.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ SAFETY ══════════════════════════════ -->
+<section id="securite">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">05</div>
+      <div>
+        <h2 data-i18n="safe.h2">What it does, what it does not</h2>
+        <p class="lede" data-i18n="safe.lede">The program behaves like someone watching your screen over your shoulder and counting in their head.</p>
+      </div>
+    </div>
+    <div class="safe">
+      <div class="no">
+        <h3><span data-i18n="safe.never">Never</span></h3>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> <span data-i18n="safe.n1">No injection into League of Legends</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> <span data-i18n="safe.n2">No reading of the game's memory</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> <span data-i18n="safe.n3">No game file modified</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> <span data-i18n="safe.n4">No automated keyboard or mouse action</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> <span data-i18n="safe.n5">No connection to the game servers</span></li>
+        </ul>
+      </div>
+      <div class="yes">
+        <h3><span data-i18n="safe.only">Only</span></h3>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> <span data-i18n="safe.y1">A screenshot of the chat area</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> <span data-i18n="safe.y2">Text recognition, run locally</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> <span data-i18n="safe.y3">Countdowns computed on your machine</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> <span data-i18n="safe.y4">A transparent window over the game</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> <span data-i18n="safe.y5">A one-off download of the public icons</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ VERSIONS ════════════════════════════ -->
+<section id="versions">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">06</div>
+      <div>
+        <h2 data-i18n="ver.h2">Every version</h2>
+        <p class="lede" data-i18n="ver.lede">Every published version stays downloadable, with its notes. If a new one causes trouble, the previous one is right below it.</p>
+      </div>
+    </div>
+
+    <div id="versions-list" class="versions">
+      <p class="versions-status mono" id="versions-status" data-i18n="ver.loading">Loading versions…</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════ FAQ ══════════════════════════════ -->
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">07</div>
+      <div><h2 data-i18n="faq.h2">Frequently asked</h2></div>
+    </div>
+    <div class="faq" data-i18n="faq.body">
+      <details open>
+        <summary>Windows says the file is dangerous, is that normal?</summary>
+        <div class="a">Yes. An executable without a signing certificate triggers SmartScreen (“Windows protected your PC”), and sometimes a browser warning on download. Some antivirus products also flag programs packaged this way on principle: if yours deletes the file, you have to allow it explicitly. Signing the program would mean paying for a certificate.</div>
+      </details>
+      <details>
+        <summary>Nothing shows up during my match.</summary>
+        <div class="a">In order: is League in <b>borderless windowed</b>? Does the program's <b>language</b> match your client's? Has an enemy actually used a summoner spell yet — with no announcement, the bar stays deliberately empty. If all of that is fine, type <span class="mono">Wait Darius Flash - 245 sec.</span> in chat: a timer must appear immediately. If it does not, open <span class="mono">Status → Test mode: chat area</span> and look at what the area really reads.</div>
+      </details>
+      <details>
+        <summary>Is it heavy on resources?</summary>
+        <div class="a">No. Idle, the loop costs about <b>0.2 % of one core</b>: the chat area image is compared from one capture to the next, and text recognition only runs when something changed. A few percent during an active read, on a single core.</div>
+      </details>
+      <details>
+        <summary>Can I run it twice?</summary>
+        <div class="a">The program handles it: the second copy tells you and bows out, rather than reading the same chat twice and drawing two bars. Since nothing appears for the first two or three seconds, one double-click too many is easily done.</div>
+      </details>
+      <details>
+        <summary>Where are my settings?</summary>
+        <div class="a">In an <code>assets</code> folder created <b>next to the executable</b>: settings, cached icons and the <code>flashwatch.log</code> file. The program is portable — move the folder and you keep everything. If the location is read-only, it falls back to <code>%LOCALAPPDATA%\Flashwatch</code>.</div>
+      </details>
+      <details>
+        <summary>What about enemy ultimates?</summary>
+        <div class="a">Tracked too, but marked with a <span class="mono">~</span>: their cooldown depends on rank and ability haste, neither of which is visible on screen. The rank is inferred from the match clock, and the estimate is replaced by the exact value if a line states a remaining time.</div>
+      </details>
+      <details>
+        <summary>Does it work at 1440p, 4K, on two monitors?</summary>
+        <div class="a">Yes. No coordinate is hardcoded: the chat area is recognised by its content, not its position, which covers resolutions, HUD scales and windowed mode. The bar goes wherever you want on any monitor.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="close-cta">
+  <div class="wrap">
+    <div class="kicker" style="justify-content:center" data-i18n="cta.kicker">Ready</div>
+    <h2 style="margin-top:18px" data-i18n="cta.h2">One file. Three minutes.</h2>
+    <p class="lede" data-i18n="cta.lede">Windows 10/11 64-bit · no installation · free</p>
+    <div class="hero-cta">
+      <a class="btn" data-dl href="#">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <span><b data-i18n="dl.exe2">Download Flashwatch.exe</b><small data-dl-detail data-i18n="dl.detail3">99 MB</small></span>
+      </a>
+      <a class="btn-ghost" href="#install" data-i18n="cta.back">Re-read the install steps</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Flashwatch</span>
+    <span data-i18n="foot.disclaimer">Not affiliated with Riot Games</span>
+    <a class="sep" data-dl href="#" data-i18n="foot.dl">Download</a>
+    <a href="#versions" data-i18n="nav.versions">Versions</a>
+    <a href="#faq" data-i18n="nav.faq">FAQ</a>
+  </div>
+</footer>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   0. LANGUE. English is the page as written; French is the translation.
+
+   Only one dictionary is stored. The English strings are captured out of the
+   markup at load, so there is no second copy of the page to drift out of sync
+   with the page itself -- edit the HTML and the English is already right.
+
+   Keys sit on the element that owns the whole fragment, so a block with inline
+   markup (a <pre> diagram, a list of settings rows) is swapped in one piece and
+   the two languages are free to differ in shape.
+   ═══════════════════════════════════════════════════════════════════ */
+const FR = {
+  "lang.group": "Langue",
+  "nav.install": "Installation",
+  "nav.config": "Configuration",
+  "nav.how": "Fonctionnement",
+  "nav.safety": "Sécurité",
+  "nav.versions": "Versions",
+  "nav.faq": "FAQ",
+  "nav.download": "Télécharger",
+
+  "hero.kicker": "Overlay · League of Legends · Windows",
+  "hero.h1": "Les cooldowns<br>ennemis, <em>lus à l'écran</em>.",
+  "hero.lede": "Le programme lit le chat de la partie, reconnaît les sorts d'invocateur utilisés en face, et affiche une barre discrète en haut de ton écran. Aucune touche à presser, rien à configurer pendant la partie.",
+  "hero.readout":
+    "<div><span>jeu</span><b>En jeu (1920×1080)</b></div>" +
+    "<div><span>zone de chat</span><b>806×190 @ 140,439</b></div>" +
+    "<div><span>ocr</span><b>1,4 ms · 94 % ignorées</b></div>" +
+    "<div><span>timers actifs</span><b>4</b></div>",
+  "hero.cta": "Télécharger",
+  "hero.cta2": "Comment ça s'installe →",
+  "hero.note": "Verrouillée, la barre laisse passer les clics : elle ne peut pas te voler le focus en pleine partie.",
+  "spec.install": "Installation",
+  "spec.install.v": "Aucune",
+  "spec.cpu": "Processeur",
+  "spec.lang": "Langues",
+  "dl.detail1": "Windows · 99 Mo · gratuit",
+  "dl.detail2": "99 Mo · Windows 10/11 64 bits",
+  "dl.detail3": "99 Mo",
+
+  "demo.title": "aperçu de l'overlay — en direct",
+  "demo.chatline": "(12:31) <u>Darius</u> a utilisé Saut éclair<span style=\"color:var(--ink-faint)\">   ← la ligne que le jeu écrit</span>",
+  "demo.cap1": "<b>Un portrait par sort en recharge</b> — il entre à gauche au cast, arrive à droite quand le sort revient",
+  "demo.cap2": "<b>READY</b> reste 5 s, puis la ligne disparaît",
+
+  "what.h2": "Trois choses, faites toutes seules",
+  "what.lede": "Tu lances le programme avant de jouer et tu l'oublies. Il détecte la partie, trouve le chat, et se cache quand tu n'es plus en jeu.",
+  "what.1.n": "01 · LECTURE",
+  "what.1.h": "Il lit ton écran, rien d'autre",
+  "what.1.p": "Une capture de la zone du chat toutes les 200 ms, puis de la reconnaissance de texte. Aucun accès au jeu : uniquement les pixels que tu vois déjà.",
+  "what.2.n": "02 · TIMERS",
+  "what.2.h": "Il part de l'annonce du jeu",
+  "what.2.p": "« Darius a utilisé Saut éclair » : cette ligne, le jeu ne l'écrit que pour l'équipe d'en face. Le cooldown est calculé à partir de là, en français comme en anglais.",
+  "what.3.n": "03 · AFFICHAGE",
+  "what.3.h": "Invisible hors partie",
+  "what.3.p": "La barre n'existe pas sur le bureau ni dans le client : elle apparaît avec l'écran de jeu et repart avec lui. Clics traversants, position et taille libres.",
+
+  "install.h2": "Installation en trois minutes",
+  "install.lede": "Un seul fichier, rien à installer, aucun droit administrateur. Windows 10 ou 11 en 64 bits.",
+  "install.s1":
+    "<h3>Télécharge le fichier</h3>" +
+    "<p>Un seul <code class=\"mono\">.exe</code> de <span data-dl-size>99 Mo</span> — pas de Python, pas d'installeur, pas de dépendances.</p>" +
+    "<p><b>Mets-le dans son propre dossier</b> (par exemple <span class=\"mono\" style=\"color:var(--ink)\">Documents\\Flashwatch\\</span>) : il crée un dossier <span class=\"mono\" style=\"color:var(--ink)\">assets</span> à côté de lui pour ses réglages.</p>",
+  "install.s2":
+    "<h3>Passe l'avertissement Windows</h3>" +
+    "<p>Double-clic. Windows affiche « <b>Windows a protégé votre PC</b> » parce que le programme n'est pas signé.</p>" +
+    "<p>Clique <kbd>Informations complémentaires</kbd> puis <kbd>Exécuter quand même</kbd>. C'est le prix d'un certificat de signature, pas un signe que le fichier est douteux.</p>",
+  "install.s3":
+    "<h3>Cherche l'icône, pas une fenêtre</h3>" +
+    "<p>Rien ne s'ouvre à l'écran : le programme vit dans la <b>zone de notification</b>, en bas à droite de la barre des tâches, parfois sous la flèche <kbd>^</kbd>.</p>" +
+    "<p>Double-clic sur l'icône pour ouvrir les réglages. Clic droit → <kbd>Quitter</kbd> pour le fermer.</p>",
+  "install.note": "<b>Internet est nécessaire au premier lancement</b> — le programme télécharge les portraits des champions et les icônes de sorts (environ 9 Mo) depuis les serveurs de données publics de Riot. Ensuite il fonctionne hors ligne.",
+  "dl.exe": "Télécharger Flashwatch.exe",
+  "dl.exe2": "Télécharger Flashwatch.exe",
+  "latest.title": "Dernière version",
+
+  "cfg.h2": "Configuration : deux choses obligatoires",
+  "cfg.lede": "Le reste marche par défaut. Ces deux-là, non — et sans elles tu ne verras rien.",
+  "cfg.win":
+    "<div class=\"win-bar\"><i></i> Flashwatch</div>" +
+    "<div class=\"win-tabs\"><span>Statut</span><span class=\"on\">Réglages</span><span>Équipe</span><span>Debug</span></div>" +
+    "<div class=\"win-body\">" +
+      "<div class=\"row\">Langue / Language <span class=\"sel\">Français ▾</span></div>" +
+      "<div class=\"row\">Disposition <span class=\"sel\">Barre en haut ▾</span></div>" +
+      "<div class=\"row on\"><span class=\"sw\"></span> Masquer hors partie</div>" +
+      "<div class=\"row on\"><span class=\"sw\"></span> Trier par rôle</div>" +
+      "<div class=\"row\">Garder READY affiché <span class=\"val\">5 s</span></div>" +
+      "<div class=\"row\">Échelle <span class=\"val\">1,00</span></div>" +
+      "<div class=\"row on\"><span class=\"sw\"></span> Activer le son</div>" +
+    "</div>" +
+    "<div class=\"win-foot\">Réglages enregistrés automatiquement</div>",
+  "cfg.dl":
+    "<div><dt>Langue du client <em>obligatoire</em></dt>" +
+    "<dd><b style=\"color:var(--ink)\">Si ton League est en anglais</b>, ouvre <span class=\"mono\">Réglages → Langue / Language</span> et choisis <span class=\"mono\">English</span>. Le programme cherche les phrases du chat dans cette langue : réglé sur français avec un client anglais, il ne détectera rien du tout. Le changement s'applique tout de suite.</dd></div>" +
+    "<div><dt>Fenêtré sans bordure <em>obligatoire</em></dt>" +
+    "<dd>Dans les options vidéo de League, mets <span class=\"mono\">Fenêtré sans bordure</span>. En plein écran exclusif, Windows interdit à n'importe quel overlay de s'afficher — ce n'est pas une limite du programme.</dd></div>" +
+    "<div><dt>Zone du chat <em class=\"opt\">si rien ne s'affiche</em></dt>" +
+    "<dd>Le chat est trouvé automatiquement, quelle que soit ta résolution. Si les timers ne démarrent pas, ouvre <span class=\"mono\">Statut → Mode test : zone du chat</span> : un cadre apparaît autour de la zone lue, tu le déplaces sur ton chat et tu vois <b style=\"color:var(--ink)\">en direct ce qu'il lit</b> sous le cadre. <span class=\"mono\">Valider</span> l'enregistre.</dd></div>" +
+    "<div><dt>Zone du temps de partie <em class=\"opt\">recommandé</em></dt>" +
+    "<dd>Même principe, cadré sur le chronomètre en haut de l'écran. Une fois validé, le programme lit l'heure du jeu directement : une annonce lue deux secondes trop tard ne coûte plus rien en précision.</dd></div>" +
+    "<div><dt>Confort <em class=\"opt\">au goût</em></dt>" +
+    "<dd>Barre compacte en haut ou liste verticale, thème sombre / clair / néon, opacité, échelle, tri par rôle, sons quand un sort revient, alerte quelques secondes avant. Déverrouille l'overlay pour le déplacer ou le redimensionner, reverrouille pour retrouver les clics traversants.</dd></div>",
+
+  "how.h2": "D'où viennent les timers",
+  "how.lede": "D'une phrase que le jeu écrit lui-même, et qu'il n'écrit que pour l'équipe adverse. Rien n'est deviné : sans annonce, la barre reste vide.",
+  "how.pre":
+`<pre>En partie, la ligne à lire est celle-ci — et le jeu ne l'affiche
 jamais pour ta propre équipe :
 
   (12:04) <u>Darius</u> a utilisé <i>Saut éclair</i>
@@ -700,139 +977,112 @@ Pour vérifier que l'OCR lit bien ton chat, tape simplement :
   Attendez Darius Saut éclair - 245 sec.
 
 Le jeu n'écrit pas cette phrase en partie ; le programme l'accepte
-parce qu'elle porte un temps restant, ce qui en fait un test net.</pre>
-    </div>
+parce qu'elle porte un temps restant, ce qui en fait un test net.</pre>`,
+  "how.flow":
+    "<div><div class=\"t\">Capture</div><div class=\"v\">200 ms</div></div>" +
+    "<div><div class=\"t\">Reconnaissance</div><div class=\"v\">Zone du chat</div></div>" +
+    "<div><div class=\"t\">Une fois posé</div><div class=\"v\">Plus touché</div></div>" +
+    "<div><div class=\"t\">Nouvelle partie</div><div class=\"v\">Remise à zéro</div></div>",
+  "how.tail": "Un timer posé n'est plus modifié : la même ligne relue, une ligne révélée en remontant le chat, ou un horodatage mal lu ne peuvent plus décaler un compte à rebours en cours. Seule une annonce impliquant nettement plus de temps est traitée comme un nouveau cast.",
 
-    <div class="flow">
-      <div><div class="t">Capture</div><div class="v">200 ms</div></div>
-      <div><div class="t">Reconnaissance</div><div class="v">Zone du chat</div></div>
-      <div><div class="t">Une fois posé</div><div class="v">Plus touché</div></div>
-      <div><div class="t">Nouvelle partie</div><div class="v">Remise à zéro</div></div>
-    </div>
+  "safe.h2": "Ce qu'il fait, ce qu'il ne fait pas",
+  "safe.lede": "Le programme se comporte comme quelqu'un qui regarde ton écran par-dessus ton épaule et compte dans sa tête.",
+  "safe.never": "Jamais",
+  "safe.n1": "Aucune injection dans League of Legends",
+  "safe.n2": "Aucune lecture de la mémoire du jeu",
+  "safe.n3": "Aucun fichier du jeu modifié",
+  "safe.n4": "Aucune action clavier ou souris automatisée",
+  "safe.n5": "Aucune connexion aux serveurs de jeu",
+  "safe.only": "Uniquement",
+  "safe.y1": "Une capture d'écran de la zone du chat",
+  "safe.y2": "De la reconnaissance de texte, en local",
+  "safe.y3": "Des comptes à rebours calculés sur ta machine",
+  "safe.y4": "Une fenêtre transparente par-dessus le jeu",
+  "safe.y5": "Le téléchargement des icônes publiques, une fois",
 
-    <p class="lede" style="margin-top:26px">Un timer posé n'est plus modifié : la même ligne relue, une ligne révélée en remontant le chat, ou un horodatage mal lu ne peuvent plus décaler un compte à rebours en cours. Seule une annonce impliquant nettement plus de temps est traitée comme un nouveau cast.</p>
-  </div>
-</section>
+  "ver.h2": "Toutes les versions",
+  "ver.lede": "Chaque version publiée reste téléchargeable, avec ses notes. Si une nouvelle sème le désordre, la précédente est juste en dessous.",
+  "ver.loading": "Chargement des versions…",
+  "ver.current": "actuelle",
+  "ver.get": "Télécharger",
+  "ver.see": "Voir",
+  "ver.none": "aucune version publiée",
+  "ver.fail": "Liste indisponible",
+  "ver.fail2": "Toutes les versions restent sur",
+  "ver.failLink": "la page des releases",
 
-<!-- ═══════════════════════════ SAFETY ══════════════════════════════ -->
-<section id="securite">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="sec-num">05</div>
-      <div>
-        <h2>Ce qu'il fait, ce qu'il ne fait pas</h2>
-        <p class="lede">Le programme se comporte comme quelqu'un qui regarde ton écran par-dessus ton épaule et compte dans sa tête.</p>
-      </div>
-    </div>
-    <div class="safe">
-      <div class="no">
-        <h3><span>Jamais</span></h3>
-        <ul>
-          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucune injection dans League of Legends</li>
-          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucune lecture de la mémoire du jeu</li>
-          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucun fichier du jeu modifié</li>
-          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucune action clavier ou souris automatisée</li>
-          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucune connexion aux serveurs de jeu</li>
-        </ul>
-      </div>
-      <div class="yes">
-        <h3><span>Uniquement</span></h3>
-        <ul>
-          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Une capture d'écran de la zone du chat</li>
-          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> De la reconnaissance de texte, en local</li>
-          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Des comptes à rebours calculés sur ta machine</li>
-          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Une fenêtre transparente par-dessus le jeu</li>
-          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Le téléchargement des icônes publiques, une fois</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
+  "faq.h2": "Questions fréquentes",
+  "faq.body":
+    "<details open><summary>Windows dit que le fichier est dangereux, c'est normal ?</summary>" +
+    "<div class=\"a\">Oui. Un exécutable sans certificat de signature déclenche SmartScreen (« Windows a protégé votre PC ») et parfois un avertissement du navigateur au téléchargement. Certains antivirus signalent aussi par principe les programmes empaquetés de cette façon : si le tien supprime le fichier, il faut l'autoriser explicitement. Signer le programme coûterait un certificat payant.</div></details>" +
+    "<details><summary>Rien ne s'affiche pendant ma partie.</summary>" +
+    "<div class=\"a\">Dans l'ordre : League est-il en <b>fenêtré sans bordure</b> ? La <b>langue</b> du programme correspond-elle à celle de ton client ? Un ennemi a-t-il utilisé un sort d'invocateur depuis le début de la partie — sans annonce, la barre reste volontairement vide. Si tout est bon, tape <span class=\"mono\">Attendez Darius Saut éclair - 245 sec.</span> dans le chat : un timer doit apparaître immédiatement. Sinon, ouvre <span class=\"mono\">Statut → Mode test : zone du chat</span> et regarde ce que la zone lit réellement.</div></details>" +
+    "<details><summary>Ça consomme beaucoup ?</summary>" +
+    "<div class=\"a\">Non. Au repos la boucle coûte environ <b>0,2 % d'un cœur</b> : l'image de la zone du chat est comparée d'une capture à l'autre et la reconnaissance de texte ne tourne que si quelque chose a changé. Quelques pourcents pendant une lecture active, sur un seul cœur.</div></details>" +
+    "<details><summary>Est-ce que je peux le lancer deux fois ?</summary>" +
+    "<div class=\"a\">Le programme s'en charge : la seconde copie te le dit et se retire, plutôt que de lire le même chat en double et de dessiner deux barres. Comme rien ne s'affiche pendant les deux ou trois premières secondes, un double-clic de trop est vite arrivé.</div></details>" +
+    "<details><summary>Où sont mes réglages ?</summary>" +
+    "<div class=\"a\">Dans un dossier <code>assets</code> créé <b>à côté de l'exécutable</b> : réglages, icônes en cache et journal <code>flashwatch.log</code>. Le programme est portable — déplace le dossier, tu gardes tout. Si l'emplacement est en lecture seule, il se rabat sur <code>%LOCALAPPDATA%\\Flashwatch</code>.</div></details>" +
+    "<details><summary>Et les ultimes ennemis ?</summary>" +
+    "<div class=\"a\">Suivis aussi, mais marqués d'un <span class=\"mono\">~</span> : leur cooldown dépend du rang et de l'accélération de compétences, invisibles à l'écran. Le rang est déduit de l'horloge de la partie, et l'estimation est remplacée par la valeur exacte si une ligne donne un temps restant.</div></details>" +
+    "<details><summary>Ça marche en 1440p, en 4K, sur deux écrans ?</summary>" +
+    "<div class=\"a\">Oui. Aucune coordonnée n'est codée en dur : la zone du chat est reconnue à son contenu, pas à sa position, ce qui couvre les résolutions, les échelles d'interface et le mode fenêtré. La barre se place où tu veux sur n'importe quel écran.</div></details>",
 
-<!-- ═══════════════════════════ VERSIONS ════════════════════════════ -->
-<section id="versions">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="sec-num">06</div>
-      <div>
-        <h2>Toutes les versions</h2>
-        <p class="lede">Chaque version publiée reste téléchargeable, avec ses notes. Si une nouvelle sème le désordre, la précédente est juste en dessous.</p>
-      </div>
-    </div>
+  "cta.kicker": "Prêt",
+  "cta.h2": "Un fichier. Trois minutes.",
+  "cta.lede": "Windows 10/11 64 bits · aucune installation · gratuit",
+  "cta.back": "Relire l'installation",
+  "foot.disclaimer": "Non affilié à Riot Games",
+  "foot.dl": "Téléchargement",
+  "doc.title": "Flashwatch — les cooldowns ennemis, lus à l'écran",
+};
 
-    <div id="versions-list" class="versions">
-      <p class="versions-status mono" id="versions-status">Chargement des versions…</p>
-    </div>
-  </div>
-</section>
+// English, lifted straight out of the markup that is already on the page.
+const EN = { "doc.title": document.title };
+for (const el of document.querySelectorAll("[data-i18n]")) {
+  if (!(el.dataset.i18n in EN)) EN[el.dataset.i18n] = el.innerHTML;
+}
+for (const el of document.querySelectorAll("[data-i18n-label]")) {
+  EN[el.dataset.i18nLabel] = el.getAttribute("aria-label") || "";
+}
+// Strings that only ever exist inside the version list, so they have no element
+// to be read from.
+Object.assign(EN, {
+  "ver.current": "current", "ver.get": "Download", "ver.see": "View",
+  "ver.none": "no version published yet",
+  "ver.fail": "List unavailable",
+  "ver.fail2": "Every version is still on",
+  "ver.failLink": "the releases page",
+});
 
-<!-- ═════════════════════════════ FAQ ══════════════════════════════ -->
-<section id="faq">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="sec-num">07</div>
-      <div><h2>Questions fréquentes</h2></div>
-    </div>
-    <div class="faq">
-      <details open>
-        <summary>Windows dit que le fichier est dangereux, c'est normal ?</summary>
-        <div class="a">Oui. Un exécutable sans certificat de signature déclenche SmartScreen (« Windows a protégé votre PC ») et parfois un avertissement du navigateur au téléchargement. Certains antivirus signalent aussi par principe les programmes empaquetés de cette façon : si le tien supprime le fichier, il faut l'autoriser explicitement. Signer le programme coûterait un certificat payant.</div>
-      </details>
-      <details>
-        <summary>Rien ne s'affiche pendant ma partie.</summary>
-        <div class="a">Dans l'ordre : League est-il en <b>fenêtré sans bordure</b> ? La <b>langue</b> du programme correspond-elle à celle de ton client ? Un ennemi a-t-il utilisé un sort d'invocateur depuis le début de la partie — sans annonce, la barre reste volontairement vide. Si tout est bon, tape <span class="mono">Attendez Darius Saut éclair - 245 sec.</span> dans le chat : un timer doit apparaître immédiatement. Sinon, ouvre <span class="mono">Statut → Mode test : zone du chat</span> et regarde ce que la zone lit réellement.</div>
-      </details>
-      <details>
-        <summary>Ça consomme beaucoup ?</summary>
-        <div class="a">Non. Au repos la boucle coûte environ <b>0,2 % d'un cœur</b> : l'image de la zone du chat est comparée d'une capture à l'autre et la reconnaissance de texte ne tourne que si quelque chose a changé. Quelques pourcents pendant une lecture active, sur un seul cœur.</div>
-      </details>
-      <details>
-        <summary>Est-ce que je peux le lancer deux fois ?</summary>
-        <div class="a">Le programme s'en charge : la seconde copie te le dit et se retire, plutôt que de lire le même chat en double et de dessiner deux barres. Comme rien ne s'affiche pendant les deux ou trois premières secondes, un double-clic de trop est vite arrivé.</div>
-      </details>
-      <details>
-        <summary>Où sont mes réglages ?</summary>
-        <div class="a">Dans un dossier <code>assets</code> créé <b>à côté de l'exécutable</b> : réglages, icônes en cache et journal <code>flashwatch.log</code>. Le programme est portable — déplace le dossier, tu gardes tout. Si l'emplacement est en lecture seule, il se rabat sur <code>%LOCALAPPDATA%\Flashwatch</code>.</div>
-      </details>
-      <details>
-        <summary>Et les ultimes ennemis ?</summary>
-        <div class="a">Suivis aussi, mais marqués d'un <span class="mono">~</span> : leur cooldown dépend du rang et de l'accélération de compétences, invisibles à l'écran. Le rang est déduit de l'horloge de la partie, et l'estimation est remplacée par la valeur exacte si une ligne donne un temps restant.</div>
-      </details>
-      <details>
-        <summary>Ça marche en 1440p, en 4K, sur deux écrans ?</summary>
-        <div class="a">Oui. Aucune coordonnée n'est codée en dur : la zone du chat est reconnue à son contenu, pas à sa position, ce qui couvre les résolutions, les échelles d'interface et le mode fenêtré. La barre se place où tu veux sur n'importe quel écran.</div>
-      </details>
-    </div>
-  </div>
-</section>
+let LANG = "en";
+const t = (key) => (LANG === "fr" && FR[key] != null) ? FR[key] : (EN[key] ?? key);
 
-<section class="close-cta">
-  <div class="wrap">
-    <div class="kicker" style="justify-content:center">Prêt</div>
-    <h2 style="margin-top:18px">Un fichier. Trois minutes.</h2>
-    <p class="lede">Windows 10/11 64 bits · aucune installation · gratuit</p>
-    <div class="hero-cta">
-      <a class="btn" data-dl href="#">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-        <span><b>Télécharger Flashwatch.exe</b><small data-dl-detail>99 Mo</small></span>
-      </a>
-      <a class="btn-ghost" href="#install">Relire l'installation</a>
-    </div>
-  </div>
-</section>
-</main>
+function applyLang(lang) {
+  LANG = lang === "fr" ? "fr" : "en";
+  document.documentElement.lang = LANG;
+  document.title = t("doc.title");
 
-<footer>
-  <div class="wrap">
-    <span>Flashwatch</span>
-    <span>Non affilié à Riot Games</span>
-    <a class="sep" data-dl href="#">Téléchargement</a>
-    <a href="#versions">Versions</a>
-    <a href="#faq">FAQ</a>
-  </div>
-</footer>
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    el.innerHTML = t(el.dataset.i18n);
+  }
+  for (const el of document.querySelectorAll("[data-i18n-label]")) {
+    el.setAttribute("aria-label", t(el.dataset.i18nLabel));
+  }
+  for (const button of document.querySelectorAll(".langsw button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.lang === LANG));
+  }
+  try { localStorage.setItem("fw-lang", LANG); } catch (_) { /* private mode */ }
 
-<script>
+  // The version list bakes its dates and labels in at render time, so it has to
+  // be drawn again. Defined below; hoisted, so callable from here.
+  renderReleases();
+}
+
+for (const button of document.querySelectorAll(".langsw button")) {
+  button.addEventListener("click", () => applyLang(button.dataset.lang));
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    1. LE LIEN DE TÉLÉCHARGEMENT — la seule ligne à changer.
    Remplace GITHUB_USER (et le nom du dépôt si besoin). L'URL
@@ -892,9 +1142,13 @@ function markdownLite(text) {
   return blocks.join("");
 }
 
-const frDate = (iso) => new Date(iso).toLocaleDateString("fr-FR",
+// Both follow the chosen language rather than the browser's: the page is
+// already claiming to be in one language, and a date in another reads as a bug.
+const localDate = (iso) => new Date(iso).toLocaleDateString(
+  LANG === "fr" ? "fr-FR" : "en-GB",
   { day: "numeric", month: "long", year: "numeric" });
-const megabytes = (bytes) => `${Math.round(bytes / 1048576)} Mo`;
+const megabytes = (bytes) =>
+  `${Math.round(bytes / 1048576)} ${LANG === "fr" ? "Mo" : "MB"}`;
 
 function assetOf(release) {
   const assets = release.assets || [];
@@ -904,7 +1158,7 @@ function assetOf(release) {
 
 function renderLatest(release, asset) {
   document.getElementById("latest-tag").textContent = release.tag_name;
-  document.getElementById("latest-date").textContent = frDate(release.published_at);
+  document.getElementById("latest-date").textContent = localDate(release.published_at);
   if (asset) document.getElementById("latest-size").textContent = megabytes(asset.size);
   document.getElementById("latest-notes").innerHTML = markdownLite(release.body);
   document.getElementById("latest").hidden = false;
@@ -912,7 +1166,7 @@ function renderLatest(release, asset) {
   // The buttons gain the version they actually point at, and every advertised
   // size becomes the real one -- a page claiming a size the file does not have
   // is a small lie that erodes the rest.
-  const size = asset ? megabytes(asset.size) : "99 Mo";
+  const size = asset ? megabytes(asset.size) : (LANG === "fr" ? "99 Mo" : "99 MB");
   for (const el of document.querySelectorAll("[data-dl-detail]")) {
     el.textContent = `${release.tag_name} · ${size} · Windows 10/11`;
   }
@@ -928,20 +1182,31 @@ function renderVersions(releases) {
     const asset = assetOf(release);
     const item = document.createElement("details");
     if (index === 0) item.open = true;
-    const badge = index === 0 ? '<span class="v-latest">actuelle</span>' : "";
+    const badge = index === 0
+      ? `<span class="v-latest">${escapeHtml(t("ver.current"))}</span>` : "";
     const get = asset
-      ? `<a class="v-get" href="${escapeHtml(asset.browser_download_url)}" rel="noopener">Télécharger</a>`
-      : `<a class="v-get" href="${escapeHtml(release.html_url)}" rel="noopener">Voir</a>`;
+      ? `<a class="v-get" href="${escapeHtml(asset.browser_download_url)}" rel="noopener">${escapeHtml(t("ver.get"))}</a>`
+      : `<a class="v-get" href="${escapeHtml(release.html_url)}" rel="noopener">${escapeHtml(t("ver.see"))}</a>`;
     item.innerHTML =
       `<summary>` +
         `<span class="v-tag">${escapeHtml(release.tag_name)}</span>${badge}` +
-        `<span class="v-when">${escapeHtml(frDate(release.published_at))}</span>` +
+        `<span class="v-when">${escapeHtml(localDate(release.published_at))}</span>` +
         (asset ? `<span class="v-size">${megabytes(asset.size)}</span>` : "") +
         get +
       `</summary>` +
       `<div class="notes">${markdownLite(release.body)}</div>`;
     host.appendChild(item);
   });
+}
+
+// Kept so a language switch can redraw the list -- the dates and the labels
+// inside it are baked in at render time -- without asking GitHub again.
+let LOADED = null;
+
+function renderReleases() {
+  if (!LOADED || !LOADED.length) return;
+  renderVersions(LOADED);
+  renderLatest(LOADED[0], assetOf(LOADED[0]));
 }
 
 async function loadReleases() {
@@ -954,21 +1219,25 @@ async function loadReleases() {
     const releases = (await response.json())
       .filter(r => !r.draft)
       .sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
-    if (!releases.length) throw new Error("aucune version publiée");
+    if (!releases.length) throw new Error(t("ver.none"));
 
-    renderVersions(releases);
-    const first = releases[0];
-    renderLatest(first, assetOf(first));
+    LOADED = releases;
+    renderReleases();
   } catch (error) {
     // Offline, rate-limited, or nothing published yet. The static download link
     // still works, so the page loses a list rather than its purpose.
     if (status) {
-      status.innerHTML = `Liste indisponible (${escapeHtml(error.message)}). ` +
-        `Toutes les versions restent sur <a href="${RELEASES}" rel="noopener" ` +
-        `style="color:var(--signal)">la page des releases</a>.`;
+      status.innerHTML = `${escapeHtml(t("ver.fail"))} (${escapeHtml(error.message)}). ` +
+        `${escapeHtml(t("ver.fail2"))} <a href="${RELEASES}" rel="noopener" ` +
+        `style="color:var(--signal)">${escapeHtml(t("ver.failLink"))}</a>.`;
     }
   }
 }
+// English by default; a previous choice on this browser wins over it.
+let saved = null;
+try { saved = localStorage.getItem("fw-lang"); } catch (_) { /* private mode */ }
+applyLang(saved === "fr" ? "fr" : "en");
+
 loadReleases();
 
 /* ═══════════════════════════════════════════════════════════════════════

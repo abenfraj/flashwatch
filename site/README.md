@@ -48,6 +48,27 @@ A note on that: Chromium headless has a minimum window width of about 492 px, so
 exactly like a broken responsive layout. Measure `document.documentElement.scrollWidth`
 against `clientWidth` before believing a screenshot.
 
+## Two languages, one copy of the text
+
+The page is written in English and translated to French at runtime; the switch
+sits in the top bar, next to the download button rather than inside `.topnav`,
+which is hidden below 880 px.
+
+Only the French strings are stored, in the `FR` object at the top of the script.
+The English is read out of the markup itself at load, so there is no second copy
+of the page to fall out of step with it — edit the HTML and the English is
+already correct. A block with inline markup (the `<pre>` diagram, the settings
+mock-up, the FAQ) carries one key on its container and is swapped whole, so the
+two languages are free to differ in shape.
+
+The choice is remembered in `localStorage`; English is the default. The `og:` and
+`description` meta tags stay English on purpose: crawlers read the static HTML
+and never press the button.
+
+Adding a string means adding `data-i18n="some.key"` in the markup and one entry
+to `FR`. Nothing else — and if you forget the entry, the block simply stays in
+English rather than breaking.
+
 ## What is in the page
 
 - the hero, with a **live mock of the overlay**: the markers really do ride the
