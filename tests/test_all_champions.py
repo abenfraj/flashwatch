@@ -10,7 +10,7 @@ surfaces that class of bug.
 """
 import sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
 
 from riot_assets import RiotAssets
 from message_parser import MessageParser

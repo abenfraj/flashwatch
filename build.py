@@ -1,7 +1,7 @@
 """Package the application into something you can send to someone.
 
-    .venv\\Scripts\\python build.py           -> dist/LoLTimer.exe   (one file)
-    .venv\\Scripts\\python build.py --dir     -> dist/LoLTimer/      (a folder)
+    .venv\\Scripts\\python build.py           -> dist/Flashwatch.exe   (one file)
+    .venv\\Scripts\\python build.py --dir     -> dist/Flashwatch/      (a folder)
 
 One file is what you want for sending: the recipient downloads a single .exe and
 double-clicks it. The cost is start-up time -- Windows has to unpack the bundle
@@ -21,8 +21,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 ENTRY = ROOT / "src" / "main.py"
-ICON = ROOT / "build" / "loltimer.ico"
-NAME = "LoLTimer"
+ICON = ROOT / "build" / "flashwatch.ico"
+NAME = "Flashwatch"
 
 # Files PyInstaller collects that this application never opens. Excluding a
 # *module* is not enough for these: they are DLLs and data pulled in by the

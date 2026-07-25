@@ -67,14 +67,14 @@ def tr(key: str, **kwargs) -> str:
 # (french, english)
 STRINGS: dict[str, tuple[str, str]] = {
     # -- window titles ---------------------------------------------------
-    "app.title": ("LoL Enemy Summoner Timer", "LoL Enemy Summoner Timer"),
-    "app.tray_tooltip": ("LoL Enemy Summoner Timer",
-                         "LoL Enemy Summoner Timer"),
+    "app.title": ("Flashwatch", "Flashwatch"),
+    "app.tray_tooltip": ("Flashwatch",
+                         "Flashwatch"),
     "app.already_running": (
-        "LoL Timers est deja lance : cherchez son icone dans la zone de "
+        "Flashwatch est deja lance : cherchez son icone dans la zone de "
         "notification, en bas a droite (eventuellement sous la fleche). Deux "
         "copies se disputeraient l'overlay.",
-        "LoL Timers is already running: look for its icon in the notification "
+        "Flashwatch is already running: look for its icon in the notification "
         "area at the bottom right (possibly under the arrow). Two copies would "
         "fight over the overlay."),
 
@@ -110,8 +110,8 @@ STRINGS: dict[str, tuple[str, str]] = {
     # -- overlay ---------------------------------------------------------
     "overlay.enemy_spells": ("SORTS ENNEMIS", "ENEMY SPELLS"),
     "overlay.unlocked": ("deverrouille", "unlocked"),
-    "overlay.unlocked_hint": ("LoL Timers - deverrouille, glissez pour deplacer",
-                              "LoL Timers - unlocked, drag to move"),
+    "overlay.unlocked_hint": ("Flashwatch - deverrouille, glissez pour deplacer",
+                              "Flashwatch - unlocked, drag to move"),
     "overlay.waiting": ("En attente...", "Waiting..."),
     "overlay.nothing_yet": ("Aucun sort detecte pour le moment",
                             "No spell detected yet"),

@@ -1,4 +1,4 @@
-# LoL Enemy Summoner Timer
+# Flashwatch
 
 Overlay that tracks enemy summoner spell and ultimate cooldowns by reading the
 in-game chat with OCR. No key presses needed during a game.
@@ -111,21 +111,53 @@ Use **Masquer** instead if you want it to keep running in the tray. Starting it
 twice is not a problem: the second copy says so and stands down, rather than
 OCR'ing the same chat and drawing a second overlay.
 
+## Publishing a version
+
+Pushing to `main` publishes a release, on its own:
+
+1. the whole test suite runs on a Windows runner (`QT_QPA_PLATFORM=offscreen`,
+   which every suite was verified to pass under);
+2. the next version number is worked out from the newest `vX.Y.Z` tag;
+3. `src/version.py` is stamped, so the built copy knows what it is;
+4. `build.py` produces the executable and the release is published with it
+   attached, notes included.
+
+The version moves by a patch unless a commit message in the range says otherwise:
+write `[minor]` or `[major]` anywhere in one. `[skip release]` in the head commit
+skips the run entirely, and changes confined to `site/**`, `*.md` or `.github/**`
+never trigger it — documentation is not a new binary.
+
+The notes are the commit subjects since the previous tag, with the noise dropped
+(merges, `wip`, `typo`, formatting), followed by a fixed installation section.
+Edit them afterwards on the release page if you want to say more: **the site reads
+the releases live**, so an edit shows up without redeploying anything.
+
+Try the version arithmetic and the notes before pushing:
+
+```bash
+.venv\Scripts\python tools\release_meta.py            # prints, changes nothing
+.venv\Scripts\python tools\release_meta.py --bump minor
+```
+
+The workflow needs no secret — `GITHUB_TOKEN` is provided to it — but the
+repository must be **public** for the download page to list versions and for
+anyone to download without an account.
+
 ## Sending it to someone
 
 ```bash
 .venv\Scripts\python -m pip install pyinstaller
-.venv\Scripts\python build.py            # -> dist\LoLTimer.exe   (~99 MB)
-.venv\Scripts\python build.py --dir       # -> dist\LoLTimer\      (a folder)
-.venv\Scripts\python build.py --out DIR   # -> DIR\LoLTimer.exe
+.venv\Scripts\python build.py            # -> dist\Flashwatch.exe   (~99 MB)
+.venv\Scripts\python build.py --dir       # -> dist\Flashwatch\      (a folder)
+.venv\Scripts\python build.py --out DIR   # -> DIR\Flashwatch.exe
 .venv\Scripts\python build.py --console   # keeps a terminal, to see start-up errors
 ```
 
-Windows will not overwrite a running program, so close LoLTimer before rebuilding
+Windows will not overwrite a running program, so close Flashwatch before rebuilding
 (the script says so rather than failing a minute in) — or use `--out` to build a
 copy somewhere else.
 
-`dist\LoLTimer.exe` is the whole program: **no Python, no install, nothing else to
+`dist\Flashwatch.exe` is the whole program: **no Python, no install, nothing else to
 send**. The recipient double-clicks it and it appears in the system tray. Zipping it
 saves nothing (0.5%, it is already compressed) and is only worth doing for a channel
 that refuses `.exe` attachments.
@@ -139,9 +171,9 @@ What they should expect:
 - **First launch needs internet**, once, to fetch champion data and ~350 icons
   (9 MB). After that it runs offline.
 - **It creates an `assets` folder next to itself** — settings, the icon cache and
-  `loltimer.log`. Put the .exe in its own folder rather than straight on the
+  `flashwatch.log`. Put the .exe in its own folder rather than straight on the
   Desktop. If that location is read-only (Program Files, a network share), it
-  falls back to `%LOCALAPPDATA%\LoLTimer` instead of failing to save.
+  falls back to `%LOCALAPPDATA%\Flashwatch` instead of failing to save.
 - **A few seconds to start.** A one-file build unpacks itself into a temporary
   directory on every launch; measured at 2.7 s to the first log line here. The
   `--dir` build starts instantly but has to be zipped and extracted, and the .exe

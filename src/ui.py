@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout
 
 from chat_detector import ChatRegion
 from i18n import ENGLISH, FRENCH, locale_for, tr
+from version import __version__
 from zone_overlay import ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD
 
 log = logging.getLogger(__name__)
@@ -131,7 +132,7 @@ class ControlWindow(QWidget):
         self.assets = assets
         self._loading = True
 
-        self.setWindowTitle(tr("app.title"))
+        self.setWindowTitle(f"{tr('app.title')}  —  v{__version__}")
         self.resize(560, 660)
 
         tabs = QTabWidget(self)

@@ -10,12 +10,12 @@ your GitHub account in:
 
 ```js
 const GITHUB_USER = "ton-pseudo";
-const GITHUB_REPO = "lol-auto-timers";
-const FILE_NAME  = "LoLTimer.exe";
+const GITHUB_REPO = "flashwatch";
+const FILE_NAME  = "Flashwatch.exe";
 ```
 
 Every download button on the page is built from those three, and points at
-`releases/latest/download/LoLTimer.exe` — the URL GitHub keeps aimed at your newest
+`releases/latest/download/Flashwatch.exe` — the URL GitHub keeps aimed at your newest
 release. Publish a new release and the page needs no change.
 
 ## Where the 98 MB file goes: not here
@@ -26,7 +26,7 @@ deployment over 100 MB of source files and counts every download against 100 GB 
 monthly transfer.
 
 1. Push the repository to GitHub (the `.exe` is *not* committed).
-2. *Releases* → *Draft a new release* → drag `dist\LoLTimer.exe` in → publish.
+2. *Releases* → *Draft a new release* → drag `dist\Flashwatch.exe` in → publish.
 3. Deploy this folder. The page itself is a few tens of KB.
 
 ## Deploying

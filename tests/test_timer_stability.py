@@ -16,7 +16,7 @@ started a "new" session on the next poll.
 import sys, io, os, threading, time
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
 
 import game_detector
 from game_detector import GameDetector

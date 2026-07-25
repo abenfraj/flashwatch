@@ -39,6 +39,7 @@ from riot_assets import RiotAssets
 from settings import Settings
 from timer_manager import TimerManager
 from ui import ControlWindow, RegionPicker
+from version import __version__
 from zone_overlay import (ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD, ZONES,
                           ZoneFrame)
 
@@ -46,7 +47,7 @@ log = logging.getLogger(__name__)
 
 UI_REFRESH_MS = 100          # overlay countdown smoothness
 DRAIN_MS = 50                # how often the queue is emptied
-LOG_PATH = settings_module.ASSETS_DIR / "loltimer.log"
+LOG_PATH = settings_module.ASSETS_DIR / "flashwatch.log"
 
 # Where each hand-placed area is persisted.
 SETTING_FOR_ZONE = {
@@ -183,7 +184,9 @@ class Application:
 
     def _fill_tray_menu(self) -> None:
         """(Re)build the menu entries. Called again when the language changes."""
-        self.tray.setToolTip(tr("app.tray_tooltip"))
+        # The version is in the tooltip and the log rather than in a dialog: the
+        # first question when something misbehaves is which build it is.
+        self.tray.setToolTip(f"{tr('app.tray_tooltip')}  v{__version__}")
         self.tray_menu.clear()
 
         self.action_overlay = self.tray_menu.addAction(tr("tray.overlay"))
@@ -591,7 +594,7 @@ class Application:
                 self.worker.set_probe(zone, region)
         log.info("test mode: %s region validated %s", zone, region.describe())
         self.tray.showMessage(
-            "LoL Timers",
+            "Flashwatch",
             tr("notify.zone_saved", width=region.width, height=region.height),
             QSystemTrayIcon.Information, 3000)
 
@@ -654,7 +657,7 @@ class Application:
         self.overlay.refresh_visibility()
         if visible and not self.overlay.isVisible():
             # Enabling it outside a game looks like nothing happened; say why.
-            self.tray.showMessage("LoL Timers", tr("notify.bar_in_game_only"),
+            self.tray.showMessage("Flashwatch", tr("notify.bar_in_game_only"),
                                   QSystemTrayIcon.Information, 4000)
         self.action_overlay.setChecked(visible)
         self.control.sync_overlay_toggles(
@@ -680,7 +683,7 @@ class Application:
         count = self.timers.add_preview()
         self.overlay.set_timers(self.timers.snapshot())
         if count:
-            self.tray.showMessage("LoL Timers", tr("notify.preview"),
+            self.tray.showMessage("Flashwatch", tr("notify.preview"),
                                   QSystemTrayIcon.Information, 4000)
 
     # ------------------------------------------------------------------
@@ -696,7 +699,7 @@ class Application:
         """
         i18n.set_language(language)
         self._rebuild_interface()
-        self.tray.showMessage("LoL Timers", tr("ui.language_reloading"),
+        self.tray.showMessage("Flashwatch", tr("ui.language_reloading"),
                               QSystemTrayIcon.Information, 3000)
         threading.Thread(target=self._reload_assets, name="Locale",
                          daemon=True).start()
@@ -785,7 +788,7 @@ class Application:
         self.app.quit()
 
 
-SINGLE_INSTANCE_NAME = "LoLEnemySummonerTimer.instance"
+SINGLE_INSTANCE_NAME = "Flashwatch.instance"
 
 
 def acquire_single_instance(name: str = SINGLE_INSTANCE_NAME):
@@ -828,7 +831,7 @@ def _warn_already_running() -> None:
 
 def main() -> int:
     configure_logging()
-    log.info("starting LoL Enemy Summoner Timer")
+    log.info("starting Flashwatch v%s", __version__)
 
     # Before the guard, so its message is in the user's language.
     i18n.set_language(str(Settings().get("locale", "fr_FR")))

@@ -104,7 +104,7 @@ class RiotAssets:
         self.champions: dict[str, ChampionInfo] = {}     # champion_id -> info
         self.spells: dict[str, SpellInfo] = {}           # canonical -> info
         self._session = requests.Session()
-        self._session.headers["User-Agent"] = "lol-auto-timers/1.0"
+        self._session.headers["User-Agent"] = "flashwatch/1.0"
         self.ready = False
         self.icons_ready = False
 

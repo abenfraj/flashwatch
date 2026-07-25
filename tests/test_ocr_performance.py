@@ -7,8 +7,8 @@ recognise only what changed.
 """
 import sys, io, time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\tests")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
+sys.path.insert(0, r"C:\Users\ayoub\dev\flashwatch\tests")
 
 import cv2
 import numpy as np

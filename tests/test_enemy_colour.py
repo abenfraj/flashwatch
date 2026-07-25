@@ -20,7 +20,7 @@ retried on a later frame instead.
 import sys, io, os, queue
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
 
 from pathlib import Path
 
@@ -29,7 +29,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 import settings as settings_module
-tmp = Path(os.environ["TEMP"]) / "loltimer_colourtest"
+tmp = Path(os.environ["TEMP"]) / "flashwatch_colourtest"
 tmp.mkdir(parents=True, exist_ok=True)
 settings_module.CONFIG_PATH = tmp / "settings.json"
 

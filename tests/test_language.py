@@ -14,13 +14,13 @@ come out in English.
 import sys, io, os, re
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from pathlib import Path
 
 import settings as settings_module
-tmp = Path(os.environ["TEMP"]) / "loltimer_langtest"
+tmp = Path(os.environ["TEMP"]) / "flashwatch_langtest"
 tmp.mkdir(parents=True, exist_ok=True)
 settings_module.CONFIG_PATH = tmp / "settings.json"
 

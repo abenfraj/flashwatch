@@ -161,7 +161,7 @@ class Overlay(QWidget):
         self._drag_origin: QPoint | None = None
         self._resize_origin: tuple[QPoint, QSize] | None = None
 
-        self.setWindowTitle("LoL Timers")
+        self.setWindowTitle("Flashwatch")
         self.setWindowFlags(
             Qt.FramelessWindowHint
             | Qt.WindowStaysOnTopHint

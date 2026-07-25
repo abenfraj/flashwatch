@@ -15,8 +15,8 @@ Two separate defects were involved, both covered here:
 """
 import sys, io, os, time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\tests")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
+sys.path.insert(0, r"C:\Users\ayoub\dev\flashwatch\tests")
 
 import cv2
 
@@ -26,9 +26,8 @@ from message_parser import MessageParser, looks_like_chat_line
 from ocr import OcrEngine
 from synthetic_frames import make_frame
 
-OUT = (r"C:\Users\ayoub\AppData\Local\Temp\claude"
-       r"\C--Users-ayoub-dev-lol-auto-timers"
-       r"\24acedf8-9d33-495b-ab44-b102dc631275\scratchpad")
+OUT = os.path.join(os.environ.get("TEMP", "."), "flashwatch_debug")
+os.makedirs(OUT, exist_ok=True)        # debug images for a failing run
 
 results = []
 def check(name, cond, extra=""):

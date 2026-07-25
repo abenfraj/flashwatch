@@ -12,7 +12,7 @@ and accepting it as a system verb must not turn typed chat into timers.
 import sys, io, time
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
 
 from message_parser import MessageParser
 from riot_assets import RiotAssets

@@ -1,0 +1,112 @@
+name: Release
+
+# A push to main that touches the application produces a new version: tests run,
+# the version is bumped, the .exe is built on a Windows runner, and a GitHub
+# release is published with the notes and the binary attached.
+#
+# The download page reads the releases through the GitHub API at load time, so
+# there is nothing to redeploy afterwards -- publishing here *is* publishing on
+# the site, including for every older version.
+
+on:
+  push:
+    branches: [main]
+    # Documentation and the website are not the application. Changing them must
+    # not mint a version whose binary is identical to the previous one.
+    paths-ignore:
+      - 'site/**'
+      - '**/*.md'
+      - '.gitignore'
+      - '.github/**'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Taille de l''incrément'
+        type: choice
+        default: patch
+        options: [patch, minor, major]
+
+permissions:
+  contents: write        # to create the tag and the release
+
+# One release at a time: two runs racing would fight over the next tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # A Windows binary needs a Windows runner. This is also the only place the
+    # build is reproduced from a clean checkout, which is what catches a missing
+    # dependency long before a user does.
+    runs-on: windows-latest
+    if: "!contains(github.event.head_commit.message, '[skip release]')"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # tags and history: the version and the notes
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Tests
+        env:
+          # No desktop session on a runner; every suite was verified to pass with
+          # Qt's offscreen platform.
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $failed = @()
+          foreach ($test in Get-ChildItem tests/test_*.py | Sort-Object Name) {
+            # The performance suite asserts millisecond budgets measured on a
+            # developer machine; a shared runner cannot honour them and a slow
+            # runner must not block a release.
+            if ($test.Name -eq 'test_ocr_performance.py') {
+              Write-Host "SKIP $($test.Name) (timing assertions)"
+              continue
+            }
+            Write-Host "==== $($test.Name)"
+            python $test.FullName
+            if ($LASTEXITCODE -ne 0) { $failed += $test.Name }
+          }
+          if ($failed.Count -gt 0) {
+            Write-Host "::error::failing suites: $($failed -join ', ')"
+            exit 1
+          }
+
+      - name: Work out the version and the notes
+        id: meta
+        run: python tools/release_meta.py --write --bump ${{ inputs.bump || 'patch' }}
+
+      - name: Build the executable
+        run: python build.py
+
+      - name: Check what came out
+        run: |
+          $exe = 'dist/Flashwatch.exe'
+          if (-not (Test-Path $exe)) { throw 'no executable was produced' }
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          Write-Host "built $exe  ($mb MB)"
+          # A bundle missing the OCR models or Qt would come out far too small,
+          # and would fail only once a user ran it.
+          if ($mb -lt 60) { throw "suspiciously small: $mb MB" }
+          "size=$mb MB" >> $env:GITHUB_OUTPUT
+        id: artifact
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: dist/Flashwatch.exe
+          fail_on_unmatched_files: true
+          make_latest: true

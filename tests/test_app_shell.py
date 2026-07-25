@@ -10,13 +10,13 @@ the program. Only an assertion that survives a GC pass catches that.
 """
 import sys, io, os, gc, threading, traceback
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
 
 from pathlib import Path
 
 # Keep the test out of the user's real config file.
 import settings as settings_module
-tmp = Path(os.environ["TEMP"]) / "loltimer_shelltest"
+tmp = Path(os.environ["TEMP"]) / "flashwatch_shelltest"
 tmp.mkdir(parents=True, exist_ok=True)
 settings_module.CONFIG_PATH = tmp / "settings.json"
 
@@ -33,7 +33,7 @@ def check(name, cond, extra=""):
 # double-click is the natural thing to do; the second copy must stand down rather
 # than OCR the same chat and draw a second overlay. Checked under a test-only
 # name, so it passes whether or not the real app is running on this machine.
-TOKEN_NAME = "LoLTimerShellTest.instance"
+TOKEN_NAME = "FlashwatchShellTest.instance"
 token = app_main.acquire_single_instance(TOKEN_NAME)
 check("the first copy claims the instance token", token is not None)
 check("a second copy is refused",

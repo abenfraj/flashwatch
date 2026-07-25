@@ -9,7 +9,7 @@ region -- not just that it looks right.
 """
 import sys, io, os
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
 
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtWidgets import QApplication

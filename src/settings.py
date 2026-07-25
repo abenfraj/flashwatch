@@ -48,7 +48,7 @@ def _data_root() -> Path:
     beside_exe = Path(sys.executable).resolve().parent
     if _writable(beside_exe / "assets"):
         return beside_exe
-    fallback = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "LoLTimer"
+    fallback = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Flashwatch"
     log.info("%s is not writable, using %s", beside_exe, fallback)
     return fallback
 

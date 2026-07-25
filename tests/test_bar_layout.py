@@ -10,7 +10,7 @@ one visible marker per cooldown, all of them inside the bar.
 import sys, io, os
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\ayoub\dev\lol-auto-timers\src")
+import _bootstrap  # noqa: F401 -- puts src/ on the import path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import time
@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QApplication
 
 import settings as settings_module
 from pathlib import Path
-tmp = Path(os.environ["TEMP"]) / "loltimer_bartest"
+tmp = Path(os.environ["TEMP"]) / "flashwatch_bartest"
 tmp.mkdir(parents=True, exist_ok=True)
 settings_module.CONFIG_PATH = tmp / "settings.json"
 
