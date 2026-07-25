@@ -41,6 +41,18 @@ held to the game's exact phrasing -- no determiner ("son flash"), nothing but th
 name on the champion side, and the localised spell name rather than the English
 one. Glyph-level fuzziness stays, since OCR still has to be forgiven.
 
+A third form names a spell without claiming it was cast:
+
+    02:21 Nelo Angelo (Ambessa): Morgana Saut eclair
+
+There is no verb and no stated cooldown, so nothing in it can be verified, and it
+is indistinguishable in shape from a player typing the same two words. It is
+still worth having -- it is evidence, just not proof -- so it produces an event
+marked ``certain=False``. The timer that follows is shown with a question mark,
+and a later confirmed line for the same spell clears the mark without disturbing
+the countdown. Being wrong about one of these costs a question mark rather than a
+wrong timer presented as fact.
+
 Anything else -- ordinary player chat, emotes, the kill feed -- falls through and
 is discarded.
 """
@@ -277,6 +289,10 @@ class SpellEvent:
     game_time: int | None     # seconds on the game clock, from the timestamp
     raw_line: str
     signature: str            # stable dedupe key
+    # False for the bare "<Champion> <Sort>" form, which names a spell without
+    # ever saying it was cast. Such an event still starts a timer, shown with a
+    # question mark, and a later confirmed line clears the mark.
+    certain: bool = True
     # Set when the game stated the cooldown outright ("- 245 sec."). Exact, and
     # preferred over deriving a timer from a cast time.
     remaining_seconds: int | None = None
@@ -291,7 +307,7 @@ class SpellEvent:
 
 
 def _best_match(candidate: str, options: dict[str, str],
-                threshold: float) -> str | None:
+                threshold: float, *, allow_ratio: bool = True) -> str | None:
     """Fuzzy-match ``candidate`` against ``{folded_option: return_value}``.
 
     Accepts a match on either a similarity ratio or a length-aware edit budget,
@@ -325,7 +341,11 @@ def _best_match(candidate: str, options: dict[str, str],
         return None
 
     # Fall back to a ratio comparison, which catches transpositions and the
-    # longer multi-word names that blow the edit budget.
+    # longer multi-word names that blow the edit budget. Callers that must not
+    # tolerate an *extra word* switch it off: a ratio is a proportion, so it
+    # forgives a stray "son" on a long name the way it forgives a bad glyph.
+    if not allow_ratio:
+        return None
     best_ratio = threshold
     for folded, value in options.items():
         ratio = SequenceMatcher(None, candidate, folded).ratio()
@@ -402,6 +422,12 @@ class MessageParser:
         # is the only thing separating it from a teammate typing the same claim.
         split = self._split_on_verb(body)
         if split is None:
+            # Form 3: "<Champion> <Sort>" with no verb at all. Weaker evidence
+            # than the other two -- nothing in it says the spell was *cast* --
+            # so it yields an uncertain event rather than nothing.
+            event = self._parse_bare(body, text, game_time)
+            if event is not None:
+                return event
             if self._mentions_champion(body):
                 self._record_near_miss(text)
             return None
@@ -477,30 +503,77 @@ class MessageParser:
             remaining_seconds=remaining,
         )
 
-    def _split_target_and_spell(self, middle: str):
+    def _split_target_and_spell(self, middle: str, *, strict: bool = False):
         """Split "<champion> <spell>" by anchoring on the spell name.
 
-        Anchoring on the spell is what makes this reliable: there are only nine
+        Anchoring on the spell is what makes this reliable: there is a handful of
         summoner spells plus one ultimate per champion, so the trailing words are
         matched against a small closed set, and whatever precedes them is the
         champion.
+
+        ``strict`` selects the attributed-line resolvers. The "Attendez" form can
+        afford the lenient ones because its trailing "- N sec." verifies it; the
+        bare form has nothing to verify against, so it gets the strict pair.
         """
         words = middle.split()
         if len(words) < 2:
             return None
 
+        resolve_champion = (self._resolve_champion_strict if strict
+                            else self._resolve_champion)
+        resolve_spell = (self._resolve_spell_strict if strict
+                         else self._resolve_spell)
+
         for take in range(1, min(MAX_SPELL_WORDS, len(words) - 1) + 1):
             spell_text = " ".join(words[-take:])
             champion_text = " ".join(words[:-take])
-            champion = self._resolve_champion(champion_text)
+            champion = resolve_champion(champion_text)
             if champion is None:
                 continue
-            resolved = self._resolve_spell(spell_text, champion)
+            resolved = resolve_spell(spell_text, champion)
             if resolved is None:
                 continue
             kind, spell_key, spell_name = resolved
             return champion, kind, spell_key, spell_name
         return None
+
+    def _parse_bare(self, body: str, raw: str,
+                    game_time: int | None) -> SpellEvent | None:
+        """Parse a bare "<Champion> <Sort>" line into an *uncertain* event.
+
+        The game prints this when a spell is named without being announced as
+        cast. It is the weakest of the three forms -- no verb, no stated
+        cooldown, nothing to verify against -- and it is also exactly what a
+        player typing "Morgana Saut eclair" produces. Hence two defences:
+
+        * the strict resolvers, so the champion name must be the whole left side
+          and the spell must be the localised name, capitalised and undetermined;
+        * the resulting event is marked uncertain, and the overlay says so.
+
+        The second is the real one. Being wrong here costs a question mark, not a
+        wrong timer presented as fact.
+        """
+        resolved = self._split_target_and_spell(body, strict=True)
+        if resolved is None:
+            return None
+        champion, kind, spell_key, spell_name = resolved
+
+        stamp = "?" if game_time is None else f"{game_time // 60}:{game_time % 60:02d}"
+        # Deliberately distinct from the confirmed form's signature for the same
+        # cast. Sharing it would let the dedupe swallow the confirmation, which
+        # is the one thing this form exists to receive.
+        signature = f"{champion.champion_id}|{spell_key}|{stamp}|?"
+        return SpellEvent(
+            champion_id=champion.champion_id,
+            champion_name=champion.name,
+            kind=kind,
+            spell_key=spell_key,
+            spell_name=spell_name,
+            game_time=game_time,
+            raw_line=raw,
+            signature=signature,
+            certain=False,
+        )
 
     def parse_lines(self, lines: list[str]) -> list[SpellEvent]:
         events = []
@@ -601,7 +674,10 @@ class MessageParser:
         survive leftover HUD text. On an attributed line the champion's name is
         the entire left side, and the salvage path would otherwise happily find a
         champion buried inside a sentence somebody typed. Glyph-level fuzziness
-        is kept -- OCR still has to be forgiven.
+        is kept -- OCR still has to be forgiven -- but only as an edit budget,
+        never as a similarity ratio: "Morgana son" scores 0.82 against "Morgana"
+        and would otherwise sail through, taking the determiner in the middle of
+        "Morgana son Saut eclair" with it.
         """
         if not _starts_capitalised(candidate):
             return None
@@ -611,7 +687,7 @@ class MessageParser:
         champion_id = self._champion_index.get(folded)
         if champion_id is None:
             champion_id = _best_match(folded, self._champion_index,
-                                      MIN_CHAMPION_RATIO)
+                                      MIN_CHAMPION_RATIO, allow_ratio=False)
         if champion_id is None:
             return None
         return self.assets.champions.get(champion_id)

@@ -91,6 +91,10 @@ class ActiveTimer:
     # anything derived from a base cooldown, so nothing recomputed may overwrite
     # it while it runs.
     stated: bool = False
+    # True while the only evidence is a bare "<Champion> <Sort>" line, which
+    # names a spell without saying it was cast. Displayed with a leading "?",
+    # and cleared in place the moment a confirmed line names the same spell.
+    uncertain: bool = False
     role: str = ""
     warned: bool = False
     announced_ready: bool = False
@@ -108,8 +112,15 @@ class ActiveTimer:
 
     def display(self, now: float | None = None) -> str:
         text = format_remaining(self.remaining(now))
-        if self.approximate and text != "READY":
-            return f"~{text}"
+        # Neither mark is worn by READY: once the countdown is over, "it is up"
+        # is the safe reading whether or not the cast was ever confirmed, and a
+        # decorated READY reads as a state of its own.
+        if text == "READY":
+            return text
+        if self.approximate:
+            text = f"~{text}"
+        if self.uncertain:
+            text = f"?{text}"
         return text
 
     @property
@@ -133,7 +144,9 @@ class TimerManager:
         self.settings = settings
         self._timers: dict[tuple[str, str], ActiveTimer] = {}
         self._seen: set[str] = set()
-        self._last_blind: dict[tuple[str, str], float] = {}
+        # Keyed by certainty as well as by spell: an uncertain sighting must not
+        # sit in this window blocking the confirmed line that follows it.
+        self._last_blind: dict[tuple[str, str, bool], float] = {}
         self._roles: dict[str, str] = {}
         self._frames_seen = 0
         # (game_time, monotonic when observed) -- our estimate of the game clock.
@@ -298,10 +311,11 @@ class TimerManager:
         else:
             # Neither a timestamp nor a stated cooldown: fall back to a window.
             now = time.monotonic()
-            last = self._last_blind.get((event.champion_id, event.spell_key))
+            blind_key = (event.champion_id, event.spell_key, event.certain)
+            last = self._last_blind.get(blind_key)
             if last is not None and now - last < BLIND_DEDUPE_WINDOW:
                 return None
-            self._last_blind[(event.champion_id, event.spell_key)] = now
+            self._last_blind[blind_key] = now
 
         if self.priming:
             # Already-visible history: remembered, but never timed.
@@ -324,6 +338,21 @@ class TimerManager:
         key = (event.champion_id, event.spell_key)
         previous = self._timers.get(key)
         if previous is not None:
+            # A confirmed line naming a spell we had only inferred. Recasting is
+            # ruled out first: if this is genuinely a *later* cast it falls
+            # through and replaces the timer as usual. Otherwise the two lines
+            # describe one cast, so the countdown stays exactly where it is --
+            # the earlier line is the closer of the two to the moment of the
+            # cast -- and all this one contributes is certainty.
+            if (previous.uncertain and event.certain
+                    and not self._is_recast(previous, duration - age, None)):
+                previous.uncertain = False
+                log.info("confirmed %s %s (was uncertain) from %r",
+                         previous.champion_name, previous.spell_name,
+                         event.raw_line)
+                self.history.append((time.time(), event))
+                del self.history[:-100]
+                return previous
             if previous.stated and not previous.is_ready():
                 # A ping stated this cooldown outright; this line only implies one
                 # from a base cooldown plus assumptions about runes and boots.
@@ -346,6 +375,7 @@ class TimerManager:
             duration=duration,
             started_at=time.monotonic() - age,
             approximate=approximate,
+            uncertain=not event.certain,
             role=self._role_for(event),
         )
         self._timers[timer.key] = timer
@@ -389,8 +419,13 @@ class TimerManager:
 
         key = (event.champion_id, event.spell_key)
         previous = self._timers.get(key)
-        if previous is not None and not self._is_recast(previous, remaining,
-                                                       ready_at_game):
+        # An uncertain timer is deliberately not protected here. The rule below
+        # exists to stop a guessed cooldown overwriting a better one, but a
+        # stated number *is* the better one: it is exact, and the timer it would
+        # replace rests on a spell name and an assumption. So it always wins,
+        # even when it does not extend the countdown.
+        if (previous is not None and not previous.uncertain
+                and not self._is_recast(previous, remaining, ready_at_game)):
             # Leave the running timer completely alone. The first ping is the
             # closest to the real cast, so it stays the source of truth.
             #
