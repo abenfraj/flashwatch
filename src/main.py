@@ -22,13 +22,14 @@ from pathlib import Path
 # Allow "import overlay" etc. when launched as a script from any directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QPointF, QTimer, Qt
+from PySide6.QtGui import (QAction, QColor, QIcon, QPainter, QPen, QPixmap)
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import chat_detector
 import i18n
 import settings as settings_module
+import theme
 from audio import Notifier
 from chat_detector import ChatRegion
 from i18n import tr
@@ -78,20 +79,49 @@ def configure_logging() -> None:
     )
 
 
-def make_tray_icon() -> QIcon:
-    """A small drawn icon, so no image file needs shipping."""
-    pixmap = QPixmap(64, 64)
+def make_mark(size: int = 256) -> QPixmap:
+    """Draw the Flashwatch mark, the same one the download page uses.
+
+    Geometry comes from theme.py so this and the .ico drawn by build.py cannot
+    say different things -- they had, quietly: this one used to have hairline
+    strokes and no hub, which at 16px in the tray read as a smudged ring.
+
+    Drawn at 256 and let Qt downscale, rather than drawn at 16: a 3-unit stroke
+    on a 64-unit box is under one pixel at tray size, and rounding it up by hand
+    gives a different shape at every size.
+    """
+    scale = size / theme.MARK_BOX
+    pixmap = QPixmap(size, size)
     pixmap.fill(QColor(0, 0, 0, 0))
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing, True)
-    painter.setBrush(QColor(22, 26, 36))
-    painter.setPen(QColor(90, 200, 255))
-    painter.drawEllipse(4, 4, 56, 56)
-    painter.setPen(QColor(240, 248, 255))
-    painter.drawLine(32, 32, 32, 16)
-    painter.drawLine(32, 32, 44, 38)
+
+    cx, cy = (v * scale for v in theme.MARK_CENTRE)
+    radius = theme.MARK_DISC_R * scale
+    painter.setBrush(QColor(*theme.MARK_DISC_RGB))
+    painter.setPen(QPen(QColor(*theme.MARK_EDGE_RGB),
+                        theme.MARK_DISC_STROKE * scale))
+    painter.drawEllipse(QPointF(cx, cy), radius, radius)
+
+    hands = QPen(QColor(*theme.MARK_HAND_RGB), theme.MARK_HAND_STROKE * scale)
+    hands.setCapStyle(Qt.RoundCap)
+    painter.setPen(hands)
+    for (x1, y1), (x2, y2) in theme.MARK_HANDS:
+        painter.drawLine(QPointF(x1 * scale, y1 * scale),
+                         QPointF(x2 * scale, y2 * scale))
+
+    hub = theme.MARK_HUB_R * scale
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor(*theme.MARK_EDGE_RGB))
+    painter.drawEllipse(QPointF(cx, cy), hub, hub)
+
     painter.end()
-    return QIcon(pixmap)
+    return pixmap
+
+
+def make_tray_icon() -> QIcon:
+    """The mark as an icon, so no image file needs shipping."""
+    return QIcon(make_mark())
 
 
 class Application:
@@ -107,6 +137,11 @@ class Application:
 
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
+        # Set on the application, not on each window: it reaches the control
+        # panel, the taskbar button and Alt-Tab in one go. Without it those all
+        # fall back to Qt's own default icon, which is how the settings window
+        # ended up wearing somebody else's logo.
+        self.app.setWindowIcon(make_tray_icon())
 
         self.assets = RiotAssets(locale=str(self.settings.get("locale", "fr_FR")))
         self.notifier = Notifier(self.settings)

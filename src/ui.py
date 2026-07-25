@@ -14,10 +14,10 @@ import logging
 from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout,
-                               QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QListWidget, QPlainTextEdit, QPushButton,
-                               QSlider, QSpinBox, QTabWidget, QVBoxLayout,
-                               QWidget)
+                               QFrame, QGridLayout, QGroupBox, QHBoxLayout,
+                               QLabel, QListWidget, QPlainTextEdit, QPushButton,
+                               QScrollArea, QSlider, QSpinBox, QTabWidget,
+                               QVBoxLayout, QWidget)
 
 from chat_detector import ChatRegion
 from i18n import ENGLISH, FRENCH, locale_for, tr
@@ -134,17 +134,25 @@ class ControlWindow(QWidget):
         self._loading = True
 
         self.setWindowTitle(f"{tr('app.title')}  —  v{__version__}")
+        # Honoured now that the tabs scroll. It was not before: the settings tab
+        # reported a 914px minimum and Qt will not shrink a window past its
+        # children, so this asked for 660 and the window opened at about 1000.
         self.resize(560, 660)
+        self.setMinimumSize(430, 340)
         # Applied to the window rather than the application: the overlay paints
         # itself and the zone frames are deliberately bare, so a stylesheet set
         # on QApplication would reach two surfaces that do not want one.
         self.setStyleSheet(CONTROL_QSS)
 
         tabs = QTabWidget(self)
-        tabs.addTab(self._build_status_tab(), tr("ui.tab_status"))
-        tabs.addTab(self._build_settings_tab(), tr("ui.tab_settings"))
-        tabs.addTab(self._build_team_tab(), tr("ui.tab_team"))
-        tabs.addTab(self._build_debug_tab(), tr("ui.tab_debug"))
+        tabs.addTab(self._scrollable(self._build_status_tab()),
+                    tr("ui.tab_status"))
+        tabs.addTab(self._scrollable(self._build_settings_tab()),
+                    tr("ui.tab_settings"))
+        tabs.addTab(self._scrollable(self._build_team_tab()),
+                    tr("ui.tab_team"))
+        tabs.addTab(self._scrollable(self._build_debug_tab()),
+                    tr("ui.tab_debug"))
 
         layout = QVBoxLayout(self)
         layout.addWidget(tabs)
@@ -163,6 +171,32 @@ class ControlWindow(QWidget):
         self._loading = False
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _scrollable(page: QWidget) -> QScrollArea:
+        """Put a tab behind a scroll area, so its content stops sizing the window.
+
+        Qt will not shrink a window below the largest minimum its children
+        report, and the settings tab alone asked for 914px of height. The
+        ``resize()`` in the constructor was therefore being ignored outright --
+        the window opened around 1000px tall whatever it requested. A scroll
+        area breaks that chain: the tab keeps the height it needs, and the
+        window is free to be smaller than it and scroll.
+
+        ``setWidgetResizable`` matters as much as the scrolling: without it the
+        page keeps its own width and any window narrower than the widest tab
+        gets a horizontal scrollbar rather than wrapped text.
+        """
+        area = QScrollArea()
+        area.setWidget(page)
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.NoFrame)
+        # The stylesheet already paints the pane behind this; letting the
+        # viewport fill its own background would draw a lighter rectangle over
+        # it on some styles.
+        area.viewport().setAutoFillBackground(False)
+        page.setAutoFillBackground(False)
+        return area
+
     def _build_status_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)

@@ -187,8 +187,13 @@ def write_spec(one_file: bool, icon: Path | None,
 def make_icon() -> Path | None:
     """Draw the tray icon into an .ico, so the file has a face of its own.
 
-    Same shape as the tray icon drawn at runtime in main.py: an unbranded dark
-    disc with a clock hand. Deliberately nothing resembling Riot's artwork.
+    Reads its geometry from src/theme.py, the same numbers main.py draws the
+    tray icon from and the same ones the download page's favicon uses. This
+    function used to hold its own copy, and the two had already diverged --
+    identical docstrings, different shapes.
+
+    An unbranded dark disc with a clock hand. Deliberately nothing resembling
+    Riot's artwork.
     """
     try:
         from PIL import Image, ImageDraw
@@ -196,17 +201,28 @@ def make_icon() -> Path | None:
         print("Pillow missing, building without a custom icon")
         return None
 
+    sys.path.insert(0, str(ROOT / "src"))
+    import theme
+
     size = 256
+    scale = size / theme.MARK_BOX
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    draw.ellipse([8, 8, size - 8, size - 8], fill=(22, 26, 36, 255),
-                 outline=(90, 200, 255, 255), width=10)
-    centre = size // 2
-    draw.line([centre, centre, centre, 60], fill=(240, 248, 255, 255), width=14)
-    draw.line([centre, centre, centre + 58, centre + 30],
-              fill=(240, 248, 255, 255), width=14)
-    draw.ellipse([centre - 10, centre - 10, centre + 10, centre + 10],
-                 fill=(90, 200, 255, 255))
+
+    cx, cy = (v * scale for v in theme.MARK_CENTRE)
+    r = theme.MARK_DISC_R * scale
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r],
+                 fill=theme.MARK_DISC_RGB + (255,),
+                 outline=theme.MARK_EDGE_RGB + (255,),
+                 width=round(theme.MARK_DISC_STROKE * scale))
+    for (x1, y1), (x2, y2) in theme.MARK_HANDS:
+        draw.line([x1 * scale, y1 * scale, x2 * scale, y2 * scale],
+                  fill=theme.MARK_HAND_RGB + (255,),
+                  width=round(theme.MARK_HAND_STROKE * scale),
+                  joint="curve")
+    hub = theme.MARK_HUB_R * scale
+    draw.ellipse([cx - hub, cy - hub, cx + hub, cy + hub],
+                 fill=theme.MARK_EDGE_RGB + (255,))
 
     ICON.parent.mkdir(parents=True, exist_ok=True)
     image.save(ICON, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64),

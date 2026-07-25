@@ -45,6 +45,35 @@ FONT_BODY = '"Barlow", "Segoe UI", sans-serif'
 FONT_DISPLAY = '"Chakra Petch", "Segoe UI Semibold", "Segoe UI", sans-serif'
 FONT_MONO = '"JetBrains Mono", "Cascadia Mono", "Consolas", monospace'
 
+# ---------------------------------------------------------------------------
+# The mark, as geometry rather than as a picture.
+#
+# It is drawn three times -- Qt for the tray and the windows, Pillow for the
+# .ico that PyInstaller stamps on the executable -- and those two had already
+# drifted apart: the runtime one had thin strokes and no hub, while build.py
+# claimed in its docstring to be drawing "the same shape". Two renderers reading
+# one set of numbers cannot drift; two renderers holding their own cannot help
+# it.
+#
+# Coordinates are in the 64-unit box of the page's favicon, so the application
+# and the site wear the same face down to the proportions. Scale with
+# ``value * size / MARK_BOX``.
+# ---------------------------------------------------------------------------
+MARK_BOX = 64.0
+MARK_CENTRE = (32.0, 32.0)
+MARK_DISC_R = 27.0
+MARK_DISC_STROKE = 3.0
+# Two clock hands, long then short, as ((x1, y1), (x2, y2)).
+MARK_HANDS = (((32.0, 32.0), (32.0, 17.0)),
+              ((32.0, 32.0), (44.0, 38.0)))
+MARK_HAND_STROKE = 3.5
+MARK_HUB_R = 3.0
+
+# RGB, for the two drawing libraries. Same values as FIELD-family hexes above.
+MARK_DISC_RGB = (22, 26, 36)        # #161a24
+MARK_EDGE_RGB = (90, 200, 255)      # #5ac8ff, the signal blue
+MARK_HAND_RGB = (240, 248, 255)     # #f0f8ff
+
 # Tinted fills. Written out rather than computed: a stylesheet is read far more
 # often than it is changed, and the literal value is the thing you want to see.
 SIGNAL_WASH = "rgba(90, 200, 255, 0.07)"
