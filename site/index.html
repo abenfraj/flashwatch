@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoL Timers — les cooldowns ennemis, lus à l'écran</title>
+<meta name="description" content="Overlay Windows qui lit le chat de League of Legends et affiche les cooldowns des sorts d'invocateur ennemis. Aucune injection, aucune lecture mémoire : uniquement les pixels affichés.">
+<meta name="theme-color" content="#0a0c11">
+<meta property="og:title" content="LoL Timers">
+<meta property="og:description" content="Les cooldowns ennemis, lus à l'écran. Rien d'installé, rien d'injecté.">
+<meta property="og:type" content="website">
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     À MODIFIER AVANT DE PUBLIER : une seule ligne, chercher GITHUB_USER
+     dans le bloc de script en fin de page. Tous les boutons de
+     téléchargement en découlent.
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='27' fill='%23161a24' stroke='%235ac8ff' stroke-width='3'/%3E%3Cpath d='M32 32V17M32 32l12 6' stroke='%23f0f8ff' stroke-width='3.5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='3' fill='%235ac8ff'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ══ tokens ═══════════════════════════════════════════════════════════════
+   Taken from the overlay's own dark theme, so the page and the tool look
+   like the same object. Green and amber stay *functional* -- ready and
+   nearly-ready -- exactly as they are in the bar. */
+:root{
+  --field:#0a0c11;
+  --field-2:#0e1117;
+  --panel:rgba(16,19,27,.78);
+  --line:rgba(96,112,142,.28);
+  --line-strong:rgba(120,140,175,.5);
+  --ink:#e9eef8;
+  --ink-dim:#8d99b0;
+  --ink-faint:#5d6779;
+  --signal:#5ac8ff;
+  --ready:#6ee28e;
+  --soon:#ffb04a;
+  --danger:#ff6b6b;
+  --display:'Chakra Petch',system-ui,sans-serif;
+  --body:'Barlow',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --gutter:clamp(20px,5vw,80px);
+  --rule:1px solid var(--line);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{
+  margin:0;background:var(--field);color:var(--ink);
+  font-family:var(--body);font-size:16.5px;line-height:1.65;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+img,svg{display:block;max-width:100%}
+a{color:inherit}
+
+/* ══ atmosphere ═════════════════════════════════════════════════════════ */
+.veil{position:fixed;inset:0;pointer-events:none;z-index:60}
+.veil::before{ /* grain */
+  content:'';position:absolute;inset:-50%;opacity:.045;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.veil::after{ /* scanlines */
+  content:'';position:absolute;inset:0;opacity:.5;
+  background:repeating-linear-gradient(180deg,rgba(255,255,255,.014) 0 1px,transparent 1px 3px);
+}
+.glow{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.glow i{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5}
+.glow i:nth-child(1){width:60vw;height:44vw;left:-14vw;top:-22vw;background:radial-gradient(closest-side,rgba(90,200,255,.20),transparent)}
+.glow i:nth-child(2){width:46vw;height:36vw;right:-12vw;top:14vh;background:radial-gradient(closest-side,rgba(110,226,142,.10),transparent)}
+.glow i:nth-child(3){width:54vw;height:40vw;left:20vw;bottom:-18vw;background:radial-gradient(closest-side,rgba(90,200,255,.09),transparent)}
+
+/* ══ shared bits ════════════════════════════════════════════════════════ */
+.wrap{max-width:1240px;margin-inline:auto;padding-inline:var(--gutter);position:relative;z-index:1}
+.kicker{
+  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--signal);display:flex;align-items:center;gap:10px;
+}
+.kicker::before{content:'';width:22px;height:1px;background:var(--signal);opacity:.7}
+.kicker.dim{color:var(--ink-faint)}
+.kicker.dim::before{background:var(--ink-faint)}
+h1,h2,h3{font-family:var(--display);font-weight:700;line-height:1.02;margin:0;letter-spacing:-.01em}
+h2{font-size:clamp(28px,4.4vw,46px)}
+h3{font-size:19px;font-weight:600;letter-spacing:0}
+p{margin:0 0 1em}
+.lede{font-size:clamp(17px,1.5vw,19.5px);color:var(--ink-dim);max-width:62ch}
+.mono{font-family:var(--mono)}
+.brackets{position:relative}
+.brackets::before,.brackets::after{
+  content:'';position:absolute;width:11px;height:11px;pointer-events:none;
+  border-color:var(--signal);opacity:.55;
+}
+.brackets::before{left:-1px;top:-1px;border-left:1px solid;border-top:1px solid}
+.brackets::after{right:-1px;bottom:-1px;border-right:1px solid;border-bottom:1px solid}
+
+/* ══ top bar — a hairline strip, like the overlay itself ════════════════ */
+.topbar{
+  position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
+  background:linear-gradient(180deg,rgba(10,12,17,.92),rgba(10,12,17,.66));
+  border-bottom:var(--rule);
+}
+.topbar .wrap{display:flex;align-items:center;gap:18px;height:58px}
+.mark{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;letter-spacing:.04em}
+.mark svg{width:24px;height:24px;flex:none}
+.mark b{font-size:15.5px}
+.mark span{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--ink-faint);
+  border:var(--rule);padding:2px 6px;border-radius:3px}
+.topnav{margin-left:auto;display:flex;gap:26px;font-size:13.5px;font-weight:500}
+.topnav a{color:var(--ink-dim);text-decoration:none;position:relative;padding:4px 0;transition:color .18s}
+.topnav a::after{content:'';position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--signal);transition:right .24s ease}
+.topnav a:hover{color:var(--ink)}
+.topnav a:hover::after{right:0}
+.topbar .mini{
+  font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  text-decoration:none;color:var(--field);background:var(--signal);padding:8px 14px;border-radius:3px;
+  transition:transform .16s,box-shadow .16s;white-space:nowrap;
+}
+.topbar .mini:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(90,200,255,.32)}
+@media (max-width:880px){.topnav{display:none}}
+
+/* ══ hero ═══════════════════════════════════════════════════════════════ */
+.hero{padding:clamp(54px,9vh,110px) 0 0}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,.94fr);gap:clamp(28px,5vw,72px);align-items:end}
+.hero h1{font-size:clamp(40px,7.4vw,86px);margin:22px 0 20px}
+/* No `white-space:nowrap` here: it kept the phrase on one line, but on a phone
+   it widened the grid column past the viewport, and every block on the page was
+   then laid out on a canvas wider than the screen and clipped. */
+.hero h1 em{font-style:normal;color:var(--signal);position:relative}
+.hero h1 em::after{content:'';position:absolute;left:0;right:0;bottom:.1em;height:2px;background:var(--signal);opacity:.35}
+.hero-cta{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.readout{
+  margin-bottom:30px;padding:15px 17px;border:var(--rule);border-radius:6px;
+  background:rgba(9,11,16,.5);display:grid;gap:7px;
+}
+.readout div{display:flex;align-items:baseline;gap:12px;font-family:var(--mono);font-size:11.5px}
+.readout span{color:var(--ink-faint);letter-spacing:.13em;text-transform:uppercase;min-width:98px}
+.readout b{color:var(--ink-dim);font-weight:500;margin-left:auto;text-align:right}
+@media (max-width:980px){.readout{display:none}}
+.side-note{margin:22px 0 0;font-size:14.5px;color:var(--ink-faint);max-width:44ch}
+.specs{display:flex;flex-wrap:wrap;gap:0;margin-top:26px;border-top:var(--rule);border-bottom:var(--rule)}
+.specs div{padding:13px 20px 13px 0;margin-right:20px;border-right:var(--rule);flex:1 1 auto}
+.specs div:last-child{border-right:0;margin-right:0}
+.specs dt{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)}
+.specs dd{margin:3px 0 0;font-family:var(--display);font-size:17px;font-weight:600}
+
+/* the big button */
+.btn{
+  --accent:var(--signal);
+  position:relative;display:inline-flex;align-items:center;gap:16px;overflow:hidden;
+  padding:19px 30px;border-radius:5px;text-decoration:none;isolation:isolate;
+  background:linear-gradient(140deg,#7ad4ff,#3badf0 60%,#2b93d6);
+  color:#04141f;box-shadow:0 14px 40px -12px rgba(90,200,255,.6),inset 0 1px 0 rgba(255,255,255,.4);
+  transition:transform .18s cubic-bezier(.2,.8,.3,1),box-shadow .18s;
+}
+.btn:hover{transform:translateY(-2px);box-shadow:0 20px 52px -12px rgba(90,200,255,.72),inset 0 1px 0 rgba(255,255,255,.5)}
+.btn:active{transform:translateY(0)}
+.btn::after{ /* sweep */
+  content:'';position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);
+  transform:translateX(-120%);
+}
+.btn:hover::after{animation:sweep .8s ease}
+@keyframes sweep{to{transform:translateX(120%)}}
+.btn .ico{width:26px;height:26px;flex:none}
+.btn b{display:block;font-family:var(--display);font-size:19px;font-weight:700;letter-spacing:.01em;line-height:1.1}
+.btn small{display:block;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.11em;text-transform:uppercase;opacity:.72;margin-top:3px}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:9px;padding:18px 22px;border:1px solid var(--line-strong);
+  border-radius:5px;text-decoration:none;font-family:var(--display);font-weight:600;font-size:15px;
+  color:var(--ink);transition:border-color .18s,background .18s,transform .18s;
+}
+.btn-ghost:hover{border-color:var(--signal);background:rgba(90,200,255,.07);transform:translateY(-2px)}
+
+/* ══ the live bar — signature piece ════════════════════════════════════ */
+.demo{margin-top:clamp(46px,8vh,86px);position:relative}
+.demo-frame{
+  position:relative;border:var(--rule);border-radius:10px;overflow:hidden;
+  background:
+    linear-gradient(180deg,rgba(20,25,36,.9),rgba(9,11,16,.94)),
+    repeating-linear-gradient(90deg,rgba(255,255,255,.02) 0 1px,transparent 1px 42px);
+  box-shadow:0 40px 90px -50px rgba(0,0,0,.9);
+}
+.demo-chrome{
+  display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:var(--rule);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);
+}
+.demo-chrome i{width:7px;height:7px;border-radius:50%;background:var(--ink-faint);opacity:.5;flex:none}
+.demo-chrome i.on{background:var(--ready);opacity:1;box-shadow:0 0 9px var(--ready)}
+.demo-chrome span{margin-left:auto;color:var(--ink-faint)}
+.demo-stage{position:relative;height:clamp(190px,26vw,250px);padding:26px 22px 0;
+  background:radial-gradient(120% 130% at 50% 0%,rgba(90,200,255,.07),transparent 60%)}
+
+/* the bar as the app draws it: a hairline track with markers riding it */
+.bar{
+  position:relative;height:74px;border-radius:9px;
+  background:rgba(14,16,22,.5);border:1px solid rgba(120,140,175,.16);
+  backdrop-filter:blur(2px);
+}
+.bar-track{position:absolute;left:26px;right:26px;top:20px;height:1px;background:var(--line-strong)}
+.bar-track::before,.bar-track::after{content:'';position:absolute;top:-3px;width:1px;height:7px;background:var(--line-strong)}
+.bar-track::before{left:0}.bar-track::after{right:0}
+/* No transition on `left`: the position is recomputed every frame, and a
+   transition would fight each update instead of smoothing anything. */
+.marker{position:absolute;top:14px;transform:translateX(-50%);text-align:center;transition:opacity .5s ease}
+.token{position:relative;width:34px;height:34px;margin-inline:auto}
+.token .disc{
+  width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+  background:conic-gradient(from 210deg,#243044,#101620 55%,#2b3849);
+  border:1px solid rgba(140,160,195,.45);
+  font-family:var(--display);font-size:12.5px;font-weight:700;color:#cfe0f5;letter-spacing:.02em;
+}
+.token.ready .disc{border-color:var(--ready);box-shadow:0 0 0 1px rgba(110,226,142,.35),0 0 16px -4px var(--ready)}
+.token .badge{
+  position:absolute;right:-7px;bottom:-3px;width:17px;height:17px;border-radius:50%;
+  display:grid;place-items:center;background:#0d1119;border:1px solid rgba(140,160,195,.5);
+  font-family:var(--mono);font-size:8.5px;font-weight:700;color:var(--signal);
+}
+.marker .time{
+  display:block;margin-top:5px;font-family:var(--mono);font-size:12.5px;font-weight:700;
+  color:var(--ink);text-shadow:0 1px 2px #000;
+}
+.marker.soon .time{color:var(--soon)}
+.marker.rdy .time{color:var(--ready)}
+.demo-caption{
+  position:absolute;left:22px;right:22px;bottom:18px;display:flex;flex-wrap:wrap;gap:8px 18px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-faint);
+}
+.demo-caption b{color:var(--ink-dim);font-weight:500}
+.chatline{
+  margin:18px 0 0;padding:11px 14px;border:var(--rule);border-left:2px solid var(--signal);
+  border-radius:4px;background:rgba(9,11,16,.6);
+  font-family:var(--mono);font-size:12.5px;color:var(--ink-dim);overflow-x:auto;white-space:nowrap;
+}
+.chatline u{text-decoration:none;color:var(--danger);font-weight:700}
+.chatline b{color:var(--ink);font-weight:700}
+@media (max-width:980px){
+  .hero-grid{grid-template-columns:1fr;align-items:start;gap:34px}
+}
+/* Phones: the demo panel stops being a fixed-height stage with an absolutely
+   positioned caption -- both would overlap once the text wraps. */
+@media (max-width:760px){
+  .demo-stage{height:auto;padding:20px 14px 18px}
+  .chatline{white-space:normal;overflow-x:visible}
+  .demo-caption{position:static;left:auto;right:auto;bottom:auto;margin-top:14px;display:grid;gap:6px}
+  .demo-chrome em{display:none}
+  .bar{height:78px}
+  .marker .time{font-size:11.5px}
+}
+/* Long unbroken strings (paths, chat lines) must never widen the page. */
+body{overflow-wrap:break-word}
+pre,code,.mono{overflow-wrap:normal}
+
+/* ══ sections ═══════════════════════════════════════════════════════════ */
+section{position:relative;padding:clamp(58px,9vh,108px) 0}
+section+section{border-top:var(--rule)}
+.sec-head{display:grid;grid-template-columns:auto 1fr;gap:clamp(20px,4vw,58px);align-items:start;margin-bottom:clamp(32px,5vw,58px)}
+.sec-num{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.18em;color:var(--ink-faint);
+  padding-top:10px;border-top:2px solid var(--signal)}
+.sec-head p{margin-top:14px}
+
+/* feature triptych */
+.tri{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;background:var(--line)}
+.tri>div{background:var(--field);padding:clamp(22px,3vw,34px);position:relative}
+.tri .n{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--signal)}
+.tri h3{margin:14px 0 10px}
+.tri p{color:var(--ink-dim);font-size:15px;margin:0}
+.tri .glyph{width:30px;height:30px;margin-bottom:18px;stroke:var(--signal);stroke-width:1.4;fill:none}
+
+/* install steps */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:clamp(18px,2.4vw,26px);counter-reset:s}
+.step{position:relative;padding:26px 24px 24px;border:var(--rule);border-radius:8px;background:var(--panel)}
+.step::before{
+  counter-increment:s;content:counter(s,decimal-leading-zero);
+  font-family:var(--display);font-size:54px;font-weight:700;line-height:.8;
+  color:transparent;-webkit-text-stroke:1px rgba(120,140,175,.4);display:block;margin-bottom:16px;
+}
+.step h3{margin-bottom:9px}
+.step p{color:var(--ink-dim);font-size:15px;margin:0}
+.step p+p{margin-top:9px}
+.step kbd{
+  font-family:var(--mono);font-size:12px;background:rgba(90,200,255,.1);border:1px solid rgba(90,200,255,.3);
+  border-bottom-width:2px;border-radius:4px;padding:1px 6px;color:#bfe6ff;white-space:nowrap;
+}
+.note{
+  display:flex;gap:13px;margin-top:26px;padding:16px 18px;border-radius:6px;
+  border:1px solid rgba(255,176,74,.34);background:rgba(255,176,74,.06);font-size:14.5px;color:#f2dcbd;
+}
+.note svg{width:19px;height:19px;flex:none;margin-top:2px;stroke:var(--soon);stroke-width:1.6;fill:none}
+.note b{color:#ffd9a3}
+
+/* config: fake settings panel + prose */
+.cfg{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:clamp(26px,4vw,56px);align-items:start}
+@media (max-width:900px){.cfg{grid-template-columns:1fr}}
+.win{border:var(--rule);border-radius:9px;overflow:hidden;background:linear-gradient(180deg,#12161f,#0c0f15);
+  box-shadow:0 30px 70px -40px #000;position:sticky;top:82px}
+.win-bar{display:flex;align-items:center;gap:8px;padding:10px 13px;border-bottom:var(--rule);
+  font-family:var(--display);font-size:12.5px;font-weight:600;letter-spacing:.03em;color:var(--ink-dim)}
+.win-bar i{width:8px;height:8px;border-radius:2px;background:rgba(140,160,195,.35)}
+.win-tabs{display:flex;gap:2px;padding:9px 10px 0;border-bottom:var(--rule)}
+.win-tabs span{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  padding:7px 11px;color:var(--ink-faint);border:var(--rule);border-bottom:0;border-radius:4px 4px 0 0}
+.win-tabs span.on{color:var(--signal);border-color:var(--line-strong);background:rgba(90,200,255,.07)}
+.win-body{padding:16px 15px 18px;display:grid;gap:11px}
+.row{display:flex;align-items:center;gap:11px;font-size:14px;color:var(--ink-dim)}
+.row .sw{width:34px;height:18px;border-radius:9px;background:rgba(120,140,175,.22);position:relative;flex:none}
+.row .sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--ink-faint);transition:.2s}
+.row.on .sw{background:rgba(90,200,255,.32)}
+.row.on .sw::after{left:18px;background:var(--signal)}
+.row .val{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink)}
+.row .sel{margin-left:auto;font-family:var(--mono);font-size:11.5px;border:var(--rule);border-radius:4px;
+  padding:3px 9px;color:var(--ink);background:rgba(255,255,255,.03)}
+.win-foot{border-top:var(--rule);padding:10px 14px;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+.cfg dl{margin:0;display:grid;gap:0}
+.cfg dl>div{padding:20px 0;border-bottom:var(--rule)}
+.cfg dl>div:first-child{padding-top:0}
+.cfg dt{font-family:var(--display);font-size:17.5px;font-weight:600;display:flex;align-items:baseline;gap:11px}
+.cfg dt em{font-family:var(--mono);font-style:normal;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--signal);border:1px solid rgba(90,200,255,.3);border-radius:3px;padding:2px 7px}
+.cfg dt em.opt{color:var(--ink-faint);border-color:var(--line)}
+.cfg dd{margin:9px 0 0;color:var(--ink-dim);font-size:15.2px}
+
+/* anatomy diagram */
+.anatomy{border:var(--rule);border-radius:9px;background:rgba(9,11,16,.66);padding:clamp(20px,3vw,32px);overflow-x:auto}
+.anatomy pre{margin:0;font-family:var(--mono);font-size:13px;line-height:1.85;color:var(--ink-dim);white-space:pre}
+.anatomy pre b{color:var(--ink)}
+.anatomy pre u{text-decoration:none;color:var(--danger);font-weight:700}
+.anatomy pre i{font-style:normal;color:var(--signal)}
+.anatomy pre s{text-decoration:none;color:var(--ready)}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--line);margin-top:26px}
+.flow>div{background:var(--field);padding:16px 14px}
+.flow .t{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}
+.flow .v{font-family:var(--display);font-size:15.5px;font-weight:600;margin-top:5px}
+
+/* safety */
+.safe{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:clamp(20px,3vw,30px)}
+.safe ul{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.safe li{display:flex;gap:12px;font-size:15.2px;color:var(--ink-dim)}
+.safe li svg{width:17px;height:17px;flex:none;margin-top:4px;stroke-width:2;fill:none}
+.safe .no li svg{stroke:var(--danger)}
+.safe .yes li svg{stroke:var(--ready)}
+.safe h3{margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.safe h3 span{font-family:var(--mono);font-size:10px;letter-spacing:.14em;padding:3px 8px;border-radius:3px}
+.safe .no h3 span{color:var(--danger);background:rgba(255,107,107,.11);border:1px solid rgba(255,107,107,.3)}
+.safe .yes h3 span{color:var(--ready);background:rgba(110,226,142,.1);border:1px solid rgba(110,226,142,.3)}
+
+/* faq */
+.faq{border-top:var(--rule)}
+.faq details{border-bottom:var(--rule)}
+.faq summary{
+  cursor:pointer;list-style:none;padding:20px 0;display:flex;align-items:center;gap:16px;
+  font-family:var(--display);font-size:17.5px;font-weight:600;transition:color .16s;
+}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::before{
+  content:'+';font-family:var(--mono);font-size:16px;color:var(--signal);width:22px;height:22px;
+  border:1px solid rgba(90,200,255,.35);border-radius:3px;display:grid;place-items:center;flex:none;
+  transition:transform .22s,background .22s;
+}
+.faq details[open] summary::before{content:'−';background:rgba(90,200,255,.12)}
+.faq summary:hover{color:var(--signal)}
+.faq .a{padding:0 0 22px 38px;color:var(--ink-dim);font-size:15.2px;max-width:78ch}
+.faq .a code{font-family:var(--mono);font-size:13px;color:#bfe6ff}
+
+/* closing call */
+.close-cta{text-align:center;padding:clamp(70px,12vh,140px) 0}
+.close-cta h2{margin-bottom:18px}
+.close-cta .lede{margin-inline:auto;margin-bottom:34px}
+.close-cta .hero-cta{justify-content:center}
+footer{border-top:var(--rule);padding:30px 0 42px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:14px 26px;align-items:center;
+  font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint)}
+footer a{color:var(--ink-dim);text-decoration:none}
+footer a:hover{color:var(--signal)}
+footer .sep{margin-left:auto}
+
+/* ══ reveals ════════════════════════════════════════════════════════════ */
+.rise{opacity:0;transform:translateY(18px)}
+.rise.in{animation:rise .72s cubic-bezier(.16,.84,.3,1) forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+.hero .rise:nth-child(1){animation-delay:.04s}
+.hero h1.rise{animation-delay:.1s}
+.hero .lede.rise{animation-delay:.18s}
+.hero .hero-cta.rise{animation-delay:.26s}
+.hero .specs.rise{animation-delay:.34s}
+.hero-side.rise{animation-delay:.2s}
+.demo.rise{animation-delay:.4s}
+@media (prefers-reduced-motion:reduce){
+  .rise{opacity:1;transform:none;animation:none!important}
+  .marker{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="glow"><i></i><i></i><i></i></div>
+<div class="veil"></div>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="mark" href="#top" style="text-decoration:none">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="#161a24" stroke="#5ac8ff" stroke-width="3"/><path d="M32 32V17M32 32l12 6" stroke="#f0f8ff" stroke-width="3.5" stroke-linecap="round"/><circle cx="32" cy="32" r="3" fill="#5ac8ff"/></svg>
+      <b>LoL&nbsp;Timers</b><span>Windows</span>
+    </a>
+    <nav class="topnav">
+      <a href="#install">Installation</a>
+      <a href="#config">Configuration</a>
+      <a href="#fonctionnement">Fonctionnement</a>
+      <a href="#securite">Sécurité</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="mini" data-dl href="#install">Télécharger</a>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ══════════════════════════════ HERO ══════════════════════════════ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="kicker rise">Overlay · League of Legends · Windows</div>
+        <h1 class="rise">Les cooldowns<br>ennemis, <em>lus à l'écran</em>.</h1>
+        <p class="lede rise">Le programme lit le chat de la partie, reconnaît les sorts d'invocateur utilisés en face, et affiche une barre discrète en haut de ton écran. Aucune touche à presser, rien à configurer pendant la partie.</p>
+      </div>
+
+      <div class="hero-side rise">
+        <!-- A readout in the same language as the app's own status tab: it fills
+             the column with something true rather than decoration. -->
+        <div class="readout brackets" aria-hidden="true">
+          <div><span>jeu</span><b>En jeu (1920×1080)</b></div>
+          <div><span>zone de chat</span><b>806×190 @ 140,439</b></div>
+          <div><span>ocr</span><b>1,4 ms · 94 % ignorées</b></div>
+          <div><span>timers actifs</span><b>4</b></div>
+        </div>
+        <div class="hero-cta">
+          <a class="btn" data-dl href="#install">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            <span><b>Télécharger</b><small>Windows · 98 Mo · gratuit</small></span>
+          </a>
+          <a class="btn-ghost" href="#install">Comment ça s'installe →</a>
+        </div>
+        <dl class="specs">
+          <div><dt>Installation</dt><dd>Aucune</dd></div>
+          <div><dt>Processeur</dt><dd>≈ 0,2 %</dd></div>
+          <div><dt>Langues</dt><dd>FR / EN</dd></div>
+        </dl>
+        <p class="side-note">Verrouillée, la barre laisse passer les clics : elle ne peut pas te voler le focus en pleine partie.</p>
+      </div>
+    </div>
+
+    <!-- signature: the actual bar, alive -->
+    <div class="demo rise">
+      <div class="demo-frame brackets">
+        <div class="demo-chrome">
+          <i class="on"></i><i></i><i></i>
+          <em style="font-style:normal;letter-spacing:.13em">aperçu de l'overlay — en direct</em>
+          <span id="clock" class="mono">12:34</span>
+        </div>
+        <div class="demo-stage">
+          <div class="bar" id="bar">
+            <div class="bar-track"></div>
+          </div>
+          <p class="chatline">(12:31) <u>Darius</u> a utilisé Saut éclair<span style="color:var(--ink-faint)">   ← la ligne que le jeu écrit</span></p>
+          <div class="demo-caption">
+            <span><b>Un portrait par sort en recharge</b> — il entre à gauche au cast, arrive à droite quand le sort revient</span>
+            <span><b>READY</b> reste 5 s, puis la ligne disparaît</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ WHAT IT DOES ═════════════════════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">01</div>
+      <div>
+        <h2>Trois choses, faites toutes seules</h2>
+        <p class="lede">Tu lances le programme avant de jouer et tu l'oublies. Il détecte la partie, trouve le chat, et se cache quand tu n'es plus en jeu.</p>
+      </div>
+    </div>
+    <div class="tri">
+      <div>
+        <svg class="glyph" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="14" rx="2"/><path d="M6 21h12M12 18v3M6 9h5M6 13h8"/></svg>
+        <div class="n">01 · LECTURE</div>
+        <h3>Il lit ton écran, rien d'autre</h3>
+        <p>Une capture de la zone du chat toutes les 200 ms, puis de la reconnaissance de texte. Aucun accès au jeu : uniquement les pixels que tu vois déjà.</p>
+      </div>
+      <div>
+        <svg class="glyph" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>
+        <div class="n">02 · TIMERS</div>
+        <h3>Il part de l'annonce du jeu</h3>
+        <p>« Darius a utilisé Saut éclair » : cette ligne, le jeu ne l'écrit que pour l'équipe d'en face. Le cooldown est calculé à partir de là, en français comme en anglais.</p>
+      </div>
+      <div>
+        <svg class="glyph" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7"/><path d="M8 12h8"/></svg>
+        <div class="n">03 · AFFICHAGE</div>
+        <h3>Invisible hors partie</h3>
+        <p>La barre n'existe pas sur le bureau ni dans le client : elle apparaît avec l'écran de jeu et repart avec lui. Clics traversants, position et taille libres.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ INSTALL ═════════════════════════════ -->
+<section id="install">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">02</div>
+      <div>
+        <h2>Installation en trois minutes</h2>
+        <p class="lede">Un seul fichier, rien à installer, aucun droit administrateur. Windows 10 ou 11 en 64 bits.</p>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <h3>Télécharge le fichier</h3>
+        <p>Un seul <code class="mono">.exe</code> de 98 Mo — pas de Python, pas d'installeur, pas de dépendances.</p>
+        <p><b>Mets-le dans son propre dossier</b> (par exemple <span class="mono" style="color:var(--ink)">Documents\LoLTimer\</span>) : il crée un dossier <span class="mono" style="color:var(--ink)">assets</span> à côté de lui pour ses réglages.</p>
+      </div>
+      <div class="step">
+        <h3>Passe l'avertissement Windows</h3>
+        <p>Double-clic. Windows affiche « <b>Windows a protégé votre PC</b> » parce que le programme n'est pas signé.</p>
+        <p>Clique <kbd>Informations complémentaires</kbd> puis <kbd>Exécuter quand même</kbd>. C'est le prix d'un certificat de signature, pas un signe que le fichier est douteux.</p>
+      </div>
+      <div class="step">
+        <h3>Cherche l'icône, pas une fenêtre</h3>
+        <p>Rien ne s'ouvre à l'écran : le programme vit dans la <b>zone de notification</b>, en bas à droite de la barre des tâches, parfois sous la flèche <kbd>^</kbd>.</p>
+        <p>Double-clic sur l'icône pour ouvrir les réglages. Clic droit → <kbd>Quitter</kbd> pour le fermer.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 9v5M12 17.5v.5"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      <div><b>Internet est nécessaire au premier lancement</b> — le programme télécharge les portraits des champions et les icônes de sorts (environ 9 Mo) depuis les serveurs de données publics de Riot. Ensuite il fonctionne hors ligne.</div>
+    </div>
+
+    <div style="margin-top:34px" class="hero-cta">
+      <a class="btn" data-dl href="#">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <span><b>Télécharger LoLTimer.exe</b><small>98 Mo · Windows 10/11 64 bits</small></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ CONFIG ══════════════════════════════ -->
+<section id="config">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">03</div>
+      <div>
+        <h2>Configuration : deux choses obligatoires</h2>
+        <p class="lede">Le reste marche par défaut. Ces deux-là, non — et sans elles tu ne verras rien.</p>
+      </div>
+    </div>
+
+    <div class="cfg">
+      <div class="win brackets" aria-hidden="true">
+        <div class="win-bar"><i></i> LoL Enemy Summoner Timer</div>
+        <div class="win-tabs"><span>Statut</span><span class="on">Réglages</span><span>Équipe</span><span>Debug</span></div>
+        <div class="win-body">
+          <div class="row">Langue / Language <span class="sel">Français ▾</span></div>
+          <div class="row">Disposition <span class="sel">Barre en haut ▾</span></div>
+          <div class="row on"><span class="sw"></span> Masquer hors partie</div>
+          <div class="row on"><span class="sw"></span> Trier par rôle</div>
+          <div class="row">Garder READY affiché <span class="val">5 s</span></div>
+          <div class="row">Échelle <span class="val">1,00</span></div>
+          <div class="row on"><span class="sw"></span> Activer le son</div>
+        </div>
+        <div class="win-foot">Réglages enregistrés automatiquement</div>
+      </div>
+
+      <dl>
+        <div>
+          <dt>Langue du client <em>obligatoire</em></dt>
+          <dd><b style="color:var(--ink)">Si ton League est en anglais</b>, ouvre <span class="mono">Réglages → Langue / Language</span> et choisis <span class="mono">English</span>. Le programme cherche les phrases du chat dans cette langue : réglé sur français avec un client anglais, il ne détectera rien du tout. Le changement s'applique tout de suite.</dd>
+        </div>
+        <div>
+          <dt>Fenêtré sans bordure <em>obligatoire</em></dt>
+          <dd>Dans les options vidéo de League, mets <span class="mono">Fenêtré sans bordure</span>. En plein écran exclusif, Windows interdit à n'importe quel overlay de s'afficher — ce n'est pas une limite du programme.</dd>
+        </div>
+        <div>
+          <dt>Zone du chat <em class="opt">si rien ne s'affiche</em></dt>
+          <dd>Le chat est trouvé automatiquement, quelle que soit ta résolution. Si les timers ne démarrent pas, ouvre <span class="mono">Statut → Mode test : zone du chat</span> : un cadre apparaît autour de la zone lue, tu le déplaces sur ton chat et tu vois <b style="color:var(--ink)">en direct ce qu'il lit</b> sous le cadre. <span class="mono">Valider</span> l'enregistre.</dd>
+        </div>
+        <div>
+          <dt>Zone du temps de partie <em class="opt">recommandé</em></dt>
+          <dd>Même principe, cadré sur le chronomètre en haut de l'écran. Une fois validé, le programme lit l'heure du jeu directement : une annonce lue deux secondes trop tard ne coûte plus rien en précision.</dd>
+        </div>
+        <div>
+          <dt>Confort <em class="opt">au goût</em></dt>
+          <dd>Barre compacte en haut ou liste verticale, thème sombre / clair / néon, opacité, échelle, tri par rôle, sons quand un sort revient, alerte quelques secondes avant. Déverrouille l'overlay pour le déplacer ou le redimensionner, reverrouille pour retrouver les clics traversants.</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════ HOW IT WORKS ══════════════════════════ -->
+<section id="fonctionnement">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">04</div>
+      <div>
+        <h2>D'où viennent les timers</h2>
+        <p class="lede">D'une phrase que le jeu écrit lui-même, et qu'il n'écrit que pour l'équipe adverse. Rien n'est deviné : sans annonce, la barre reste vide.</p>
+      </div>
+    </div>
+
+    <div class="anatomy">
+<pre>En partie, la ligne à lire est celle-ci — et le jeu ne l'affiche
+jamais pour ta propre équipe :
+
+  (12:04) <u>Darius</u> a utilisé <i>Saut éclair</i>
+  <b>│</b>       <b>│</b>                <b>│</b>
+  <b>│</b>       <b>│</b>                <b>└─ le sort</b>
+  <b>│</b>       <b>└─ le champion, ennemi par construction</b>
+  <b>└─ l'horloge de la partie</b>
+
+  Client anglais : <u>Darius</u> used <i>Flash</i>   ·   <u>Darius</u> has used <i>Flash</i>
+
+Le cooldown vient de la table du jeu (Saut éclair : 300 s, <s>246 s</s>
+avec Perspicacité cosmique, supposée par défaut). L'horloge de la
+partie sert à corriger le retard de lecture : une ligne lue deux
+secondes trop tard ne coûte rien.
+
+Pour vérifier que l'OCR lit bien ton chat, tape simplement :
+
+  Attendez Darius Saut éclair - 245 sec.
+
+Le jeu n'écrit pas cette phrase en partie ; le programme l'accepte
+parce qu'elle porte un temps restant, ce qui en fait un test net.</pre>
+    </div>
+
+    <div class="flow">
+      <div><div class="t">Capture</div><div class="v">200 ms</div></div>
+      <div><div class="t">Reconnaissance</div><div class="v">Zone du chat</div></div>
+      <div><div class="t">Une fois posé</div><div class="v">Plus touché</div></div>
+      <div><div class="t">Nouvelle partie</div><div class="v">Remise à zéro</div></div>
+    </div>
+
+    <p class="lede" style="margin-top:26px">Un timer posé n'est plus modifié : la même ligne relue, une ligne révélée en remontant le chat, ou un horodatage mal lu ne peuvent plus décaler un compte à rebours en cours. Seule une annonce impliquant nettement plus de temps est traitée comme un nouveau cast.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ SAFETY ══════════════════════════════ -->
+<section id="securite">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">05</div>
+      <div>
+        <h2>Ce qu'il fait, ce qu'il ne fait pas</h2>
+        <p class="lede">Le programme se comporte comme quelqu'un qui regarde ton écran par-dessus ton épaule et compte dans sa tête.</p>
+      </div>
+    </div>
+    <div class="safe">
+      <div class="no">
+        <h3><span>Jamais</span></h3>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucune injection dans League of Legends</li>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucune lecture de la mémoire du jeu</li>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucun fichier du jeu modifié</li>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucune action clavier ou souris automatisée</li>
+          <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg> Aucune connexion aux serveurs de jeu</li>
+        </ul>
+      </div>
+      <div class="yes">
+        <h3><span>Uniquement</span></h3>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Une capture d'écran de la zone du chat</li>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> De la reconnaissance de texte, en local</li>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Des comptes à rebours calculés sur ta machine</li>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Une fenêtre transparente par-dessus le jeu</li>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Le téléchargement des icônes publiques, une fois</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════ FAQ ══════════════════════════════ -->
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">06</div>
+      <div><h2>Questions fréquentes</h2></div>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>Windows dit que le fichier est dangereux, c'est normal ?</summary>
+        <div class="a">Oui. Un exécutable sans certificat de signature déclenche SmartScreen (« Windows a protégé votre PC ») et parfois un avertissement du navigateur au téléchargement. Certains antivirus signalent aussi par principe les programmes empaquetés de cette façon : si le tien supprime le fichier, il faut l'autoriser explicitement. Signer le programme coûterait un certificat payant.</div>
+      </details>
+      <details>
+        <summary>Rien ne s'affiche pendant ma partie.</summary>
+        <div class="a">Dans l'ordre : League est-il en <b>fenêtré sans bordure</b> ? La <b>langue</b> du programme correspond-elle à celle de ton client ? Un ennemi a-t-il utilisé un sort d'invocateur depuis le début de la partie — sans annonce, la barre reste volontairement vide. Si tout est bon, tape <span class="mono">Attendez Darius Saut éclair - 245 sec.</span> dans le chat : un timer doit apparaître immédiatement. Sinon, ouvre <span class="mono">Statut → Mode test : zone du chat</span> et regarde ce que la zone lit réellement.</div>
+      </details>
+      <details>
+        <summary>Ça consomme beaucoup ?</summary>
+        <div class="a">Non. Au repos la boucle coûte environ <b>0,2 % d'un cœur</b> : l'image de la zone du chat est comparée d'une capture à l'autre et la reconnaissance de texte ne tourne que si quelque chose a changé. Quelques pourcents pendant une lecture active, sur un seul cœur.</div>
+      </details>
+      <details>
+        <summary>Est-ce que je peux le lancer deux fois ?</summary>
+        <div class="a">Le programme s'en charge : la seconde copie te le dit et se retire, plutôt que de lire le même chat en double et de dessiner deux barres. Comme rien ne s'affiche pendant les deux ou trois premières secondes, un double-clic de trop est vite arrivé.</div>
+      </details>
+      <details>
+        <summary>Où sont mes réglages ?</summary>
+        <div class="a">Dans un dossier <code>assets</code> créé <b>à côté de l'exécutable</b> : réglages, icônes en cache et journal <code>loltimer.log</code>. Le programme est portable — déplace le dossier, tu gardes tout. Si l'emplacement est en lecture seule, il se rabat sur <code>%LOCALAPPDATA%\LoLTimer</code>.</div>
+      </details>
+      <details>
+        <summary>Et les ultimes ennemis ?</summary>
+        <div class="a">Suivis aussi, mais marqués d'un <span class="mono">~</span> : leur cooldown dépend du rang et de l'accélération de compétences, invisibles à l'écran. Le rang est déduit de l'horloge de la partie, et l'estimation est remplacée par la valeur exacte si une ligne donne un temps restant.</div>
+      </details>
+      <details>
+        <summary>Ça marche en 1440p, en 4K, sur deux écrans ?</summary>
+        <div class="a">Oui. Aucune coordonnée n'est codée en dur : la zone du chat est reconnue à son contenu, pas à sa position, ce qui couvre les résolutions, les échelles d'interface et le mode fenêtré. La barre se place où tu veux sur n'importe quel écran.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="close-cta">
+  <div class="wrap">
+    <div class="kicker" style="justify-content:center">Prêt</div>
+    <h2 style="margin-top:18px">Un fichier. Trois minutes.</h2>
+    <p class="lede">Windows 10/11 64 bits · aucune installation · gratuit</p>
+    <div class="hero-cta">
+      <a class="btn" data-dl href="#">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <span><b>Télécharger LoLTimer.exe</b><small>98 Mo</small></span>
+      </a>
+      <a class="btn-ghost" href="#install">Relire l'installation</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>LoL Timers</span>
+    <span>Non affilié à Riot Games</span>
+    <a class="sep" data-dl href="#">Téléchargement</a>
+    <a href="#faq">FAQ</a>
+  </div>
+</footer>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   1. LE LIEN DE TÉLÉCHARGEMENT — la seule ligne à changer.
+   Remplace GITHUB_USER (et le nom du dépôt si besoin). L'URL
+   "releases/latest/download" pointe toujours sur la dernière version
+   publiée : tu publies une release, le site n'a pas à bouger.
+   ═══════════════════════════════════════════════════════════════════ */
+const GITHUB_USER = "GITHUB_USER";
+const GITHUB_REPO = "lol-auto-timers";
+const FILE_NAME  = "LoLTimer.exe";
+
+const RELEASES = `https://github.com/${GITHUB_USER}/${GITHUB_REPO}/releases`;
+const DOWNLOAD = `${RELEASES}/latest/download/${FILE_NAME}`;
+for (const a of document.querySelectorAll("[data-dl]")) {
+  a.href = DOWNLOAD;
+  a.setAttribute("rel", "noopener");
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   2. LA BARRE VIVANTE. Reproduit ce que fait l'overlay : chaque marqueur
+   avance de gauche à droite à mesure que son cooldown s'écoule, affiche
+   READY cinq secondes en arrivant, puis disparaît — et repart plus tard,
+   comme un nouveau cast.
+   ═══════════════════════════════════════════════════════════════════ */
+const SPELLS = [
+  { who:"DA", name:"Darius",  spell:"F",  cd:245, start:-96 },
+  { who:"AH", name:"Ahri",    spell:"F",  cd:245, start:-172 },
+  { who:"JX", name:"Jinx",    spell:"H",  cd:196, start:-188 },
+  { who:"LX", name:"Lux",     spell:"TP", cd:295, start:-40 },
+  { who:"VG", name:"Viego",   spell:"S",  cd:74,  start:-70 },
+];
+const LINGER = 5;      // READY stays this long, then the entry goes
+const RESPAWN = 26;    // ...and comes back later, as a fresh cast
+
+const bar = document.getElementById("bar");
+const clockEl = document.getElementById("clock");
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const nodes = SPELLS.map(s => {
+  const el = document.createElement("div");
+  el.className = "marker";
+  el.innerHTML =
+    `<div class="token"><div class="disc">${s.who}</div><div class="badge">${s.spell}</div></div>` +
+    `<span class="time"></span>`;
+  bar.appendChild(el);
+  return { ...s, el, time: el.querySelector(".time"), token: el.querySelector(".token") };
+});
+
+const t0 = performance.now() / 1000;
+let clockBase = 12 * 60 + 34;
+
+function frame() {
+  const now = performance.now() / 1000 - t0;
+
+  const clock = clockBase + now;
+  clockEl.textContent = `${Math.floor(clock / 60)}:${String(Math.floor(clock % 60)).padStart(2, "0")}`;
+
+  // Positions first, then spacing: two spells used in the same second land on
+  // the same point of the track, so the row is laid out as a group -- the same
+  // reason the real bar nudges its markers apart.
+  const shown = [];
+  for (const m of nodes) {
+    const cycle = m.cd + LINGER + RESPAWN;
+    let elapsed = (now - m.start) % cycle;
+    if (elapsed < 0) elapsed += cycle;
+
+    if (elapsed > m.cd + LINGER) {          // between two casts: not shown
+      m.el.style.opacity = 0;
+      continue;
+    }
+    const left = Math.max(0, m.cd - elapsed);
+    m.el.style.opacity = 1;
+    shown.push({ m, left, progress: Math.min(1, elapsed / m.cd) });
+
+    if (left <= 0) {
+      m.time.textContent = "READY";
+      m.el.className = "marker rdy";
+      m.token.className = "token ready";
+    } else {
+      m.time.textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}`;
+      m.el.className = left <= 30 ? "marker soon" : "marker";
+      m.token.className = "token";
+    }
+  }
+
+  const span = bar.clientWidth - 52;            // usable track, in pixels
+  const gap = 46;                               // marker width plus a little air
+  shown.sort((a, b) => a.progress - b.progress);
+
+  let cursor = 26;                              // forward: clear the previous one
+  for (const s of shown) {
+    s.x = Math.max(26 + s.progress * span, cursor);
+    cursor = s.x + gap;
+  }
+  cursor = 26 + span;                           // backward: stay inside the edge
+  for (let i = shown.length - 1; i >= 0; i--) {
+    shown[i].x = Math.max(26, Math.min(shown[i].x, cursor));
+    cursor = shown[i].x - gap;
+  }
+  for (const s of shown) s.m.el.style.left = `${s.x}px`;
+  if (!reduced) requestAnimationFrame(frame);
+}
+frame();
+
+/* ══ 3. Reveals on scroll ═════════════════════════════════════════════ */
+if (!reduced) {
+  const seen = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) { e.target.classList.add("in"); seen.unobserve(e.target); }
+    }
+  }, { rootMargin: "-40px 0px -80px" });
+
+  document.querySelectorAll(
+    "section .sec-head, .tri > div, .step, .note, .win, .cfg dl > div, .anatomy, .flow, .safe > div, .faq details, .close-cta > .wrap > *"
+  ).forEach((el, i) => {
+    el.classList.add("rise");
+    el.style.animationDelay = `${Math.min(i % 6, 5) * 60}ms`;
+    seen.observe(el);
+  });
+  document.querySelectorAll(".hero .rise, .hero-side.rise, .demo.rise")
+    .forEach(el => el.classList.add("in"));
+} else {
+  document.querySelectorAll(".rise").forEach(el => el.classList.add("in"));
+}
+</script>
+</body>
+</html>

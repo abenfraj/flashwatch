@@ -1,0 +1,851 @@
+"""Application entry point.
+
+Threading model: the capture/OCR loop owns its own thread and never touches Qt.
+It pushes results into a queue, and the Qt side drains that queue on a timer.
+Passing plain data across one queue avoids the cross-thread signal and painting
+hazards that a shared-widget design would invite.
+
+    CaptureWorker thread            Qt main thread
+    ------------------              --------------
+    grab -> diff -> OCR      queue   drain -> TimerManager -> Overlay
+    -> parse -> events      ------>  -> notifications -> audio
+"""
+
+from __future__ import annotations
+
+import logging
+import queue
+import sys
+import threading
+from pathlib import Path
+
+# Allow "import overlay" etc. when launched as a script from any directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+
+import chat_detector
+import i18n
+import settings as settings_module
+from audio import Notifier
+from chat_detector import ChatRegion
+from i18n import tr
+from message_parser import MessageParser
+from ocr import CaptureWorker
+from overlay import Overlay
+from riot_assets import RiotAssets
+from settings import Settings
+from timer_manager import TimerManager
+from ui import ControlWindow, RegionPicker
+from zone_overlay import (ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD, ZONES,
+                          ZoneFrame)
+
+log = logging.getLogger(__name__)
+
+UI_REFRESH_MS = 100          # overlay countdown smoothness
+DRAIN_MS = 50                # how often the queue is emptied
+LOG_PATH = settings_module.ASSETS_DIR / "loltimer.log"
+
+# Where each hand-placed area is persisted.
+SETTING_FOR_ZONE = {
+    ZONE_CHAT: "chat_region",
+    ZONE_CLOCK: "clock_region",
+    ZONE_SCOREBOARD: "scoreboard_region",
+}
+
+# Labels for the tray entries that open each frame.
+TRAY_TEST_KEYS = {
+    ZONE_CHAT: "tray.test_mode",
+    ZONE_CLOCK: "ui.test_mode_clock",
+    ZONE_SCOREBOARD: "ui.test_mode_scoreboard",
+}
+
+
+def configure_logging() -> None:
+    settings_module.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    try:
+        handlers.append(logging.FileHandler(LOG_PATH, encoding="utf-8"))
+    except OSError:
+        pass
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)-7s %(name)-16s %(message)s",
+        handlers=handlers,
+    )
+
+
+def make_tray_icon() -> QIcon:
+    """A small drawn icon, so no image file needs shipping."""
+    pixmap = QPixmap(64, 64)
+    pixmap.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setBrush(QColor(22, 26, 36))
+    painter.setPen(QColor(90, 200, 255))
+    painter.drawEllipse(4, 4, 56, 56)
+    painter.setPen(QColor(240, 248, 255))
+    painter.drawLine(32, 32, 32, 16)
+    painter.drawLine(32, 32, 44, 38)
+    painter.end()
+    return QIcon(pixmap)
+
+
+class Application:
+    """Owns every component and the wiring between them."""
+
+    def __init__(self) -> None:
+        self.settings = Settings()
+        settings_module.ensure_dirs()
+
+        # Before anything with a label is built: the interface follows the League
+        # client language chosen in the settings.
+        i18n.set_language(str(self.settings.get("locale", "fr_FR")))
+
+        self.app = QApplication(sys.argv)
+        self.app.setQuitOnLastWindowClosed(False)
+
+        self.assets = RiotAssets(locale=str(self.settings.get("locale", "fr_FR")))
+        self.notifier = Notifier(self.settings)
+
+        # Built after assets load, since both need champion data.
+        self.parser: MessageParser | None = None
+        self.timers: TimerManager | None = None
+        self.worker: CaptureWorker | None = None
+
+        self.results: queue.Queue = queue.Queue(maxsize=64)
+        self.overlay = Overlay(self.settings, self.assets)
+        self.control = ControlWindow(self.settings, self.assets)
+        self.picker: RegionPicker | None = None
+        # One test-mode frame per area being placed, keyed by zone.
+        self.zone_frames: dict[str, ZoneFrame] = {}
+        # What to put back if the chat test mode is cancelled.
+        self._region_before_test: tuple[list[int] | None, bool] | None = None
+        self._known_champions: set[str] = set()
+        self._boot_message = tr("boot.loading")
+
+        self._connect_ui()
+        self._build_tray()
+        self._install_hotkeys()
+
+        self.overlay.set_status(self._boot_message)
+        # Not shown unconditionally: with the auto-hide on, the bar only appears
+        # once League's in-game window is up.
+        self.overlay.refresh_visibility()
+
+        # Riot data needs the network; load it off the UI thread so the window
+        # appears immediately.
+        threading.Thread(target=self._bootstrap_assets, name="Bootstrap",
+                         daemon=True).start()
+
+        self.ui_timer = QTimer()
+        self.ui_timer.setInterval(UI_REFRESH_MS)
+        self.ui_timer.timeout.connect(self._refresh_ui)
+        self.ui_timer.start()
+
+        self.drain_timer = QTimer()
+        self.drain_timer.setInterval(DRAIN_MS)
+        self.drain_timer.timeout.connect(self._drain_results)
+        self.drain_timer.start()
+
+    # ------------------------------------------------------------------
+    def _connect_ui(self) -> None:
+        self.control.redetect_requested.connect(self._on_redetect)
+        self.control.manual_region_requested.connect(self._on_pick_region)
+        self.control.test_mode_toggled.connect(self._on_test_mode)
+        self.control.region_cleared.connect(self._on_clear_region)
+        self.control.reset_requested.connect(self._on_reset)
+        self.control.overlay_visibility_toggled.connect(self._on_overlay_visible)
+        self.control.overlay_lock_toggled.connect(self._on_overlay_locked)
+        self.control.settings_changed.connect(self._on_settings_changed)
+        self.control.recentre_requested.connect(self._on_recentre)
+        self.control.preview_requested.connect(self._on_preview)
+        self.control.language_changed.connect(self._on_language_changed)
+        self.control.quit_requested.connect(self.quit)
+
+    def _build_tray(self) -> None:
+        """Build the tray icon and its menu.
+
+        Every action is created through ``menu.addAction(...)`` so the menu owns
+        it, and the menu itself is stored on the instance. Creating QActions as
+        locals and passing them to ``addAction`` does *not* transfer ownership in
+        PySide6, so they get garbage-collected the moment this method returns --
+        which silently emptied most of this menu, including Quitter.
+        """
+        self.tray = QSystemTrayIcon(make_tray_icon(), self.app)
+        self.tray_menu = QMenu()
+        self._fill_tray_menu()
+        self.tray.setContextMenu(self.tray_menu)
+        self.tray.activated.connect(self._on_tray_activated)
+        self.tray.show()
+
+    def _fill_tray_menu(self) -> None:
+        """(Re)build the menu entries. Called again when the language changes."""
+        self.tray.setToolTip(tr("app.tray_tooltip"))
+        self.tray_menu.clear()
+
+        self.action_overlay = self.tray_menu.addAction(tr("tray.overlay"))
+        self.action_overlay.setCheckable(True)
+        self.action_overlay.setChecked(bool(self.settings.get("overlay_visible")))
+        self.action_overlay.toggled.connect(self._on_overlay_visible)
+
+        self.action_lock = self.tray_menu.addAction(tr("tray.lock"))
+        self.action_lock.setCheckable(True)
+        self.action_lock.setChecked(bool(self.settings.get("overlay_locked")))
+        self.action_lock.toggled.connect(self._on_overlay_locked)
+
+        self.actions_test: dict[str, QAction] = {}
+        for zone in ZONES:
+            action = self.tray_menu.addAction(tr(TRAY_TEST_KEYS[zone]))
+            action.setCheckable(True)
+            action.setChecked(zone in self.zone_frames)
+            action.toggled.connect(
+                lambda checked, z=zone: self._on_test_mode_from_tray(z, checked))
+            self.actions_test[zone] = action
+
+        self.tray_menu.addSeparator()
+        self.tray_menu.addAction(tr("tray.settings")).triggered.connect(
+            self._show_control)
+        self.tray_menu.addAction(tr("tray.recentre")).triggered.connect(
+            self._on_recentre)
+        self.tray_menu.addAction(tr("tray.preview")).triggered.connect(
+            self._on_preview)
+        self.tray_menu.addAction(tr("tray.redetect")).triggered.connect(
+            self._on_redetect)
+        self.tray_menu.addAction(tr("tray.reset")).triggered.connect(
+            self._on_reset)
+
+        self.tray_menu.addSeparator()
+        self.tray_menu.addAction(tr("tray.quit")).triggered.connect(self.quit)
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason == QSystemTrayIcon.DoubleClick:
+            self._show_control()
+
+    def _show_control(self) -> None:
+        self.control.show()
+        self.control.raise_()
+        self.control.activateWindow()
+
+    # ------------------------------------------------------------------
+    def _install_hotkeys(self) -> None:
+        """Optional global shortcuts.
+
+        Off by default and never required: the application is designed to need
+        no key presses during a game. This only *listens* -- it never sends any
+        input, so it cannot affect gameplay.
+        """
+        if not self.settings.get("hotkeys_enabled"):
+            return
+        try:
+            import keyboard
+        except ImportError:
+            log.info("keyboard library unavailable, hotkeys disabled")
+            return
+        try:
+            keyboard.add_hotkey(
+                "f8", lambda: self._invoke_on_ui(
+                    lambda: self._on_overlay_locked(
+                        not bool(self.settings.get("overlay_locked")))))
+            keyboard.add_hotkey(
+                "f9", lambda: self._invoke_on_ui(self._on_reset))
+            log.info("hotkeys active: F8 verrouillage, F9 reinitialisation")
+        except Exception as exc:                      # noqa: BLE001
+            # Registering global hooks can fail without elevation.
+            log.warning("could not register hotkeys (%s)", exc)
+
+    def _invoke_on_ui(self, callback) -> None:
+        """Hop from the keyboard hook's thread onto the Qt thread."""
+        QTimer.singleShot(0, callback)
+
+    # ------------------------------------------------------------------
+    def _bootstrap_assets(self) -> None:
+        """Load Riot data, then start the capture worker."""
+        try:
+            self.assets.bootstrap(progress=self._set_boot_message)
+        except Exception as exc:                      # noqa: BLE001
+            log.exception("asset bootstrap failed")
+            self._set_boot_message(tr("boot.error", error=exc))
+            return
+
+        self.parser = MessageParser(self.assets)
+        self.timers = TimerManager(self.assets, self.settings)
+        self.worker = CaptureWorker(self.settings, self.parser, self.results)
+
+        saved = self.settings.get("chat_region")
+        if self.settings.get("chat_region_locked") and saved:
+            try:
+                x, y, w, h = (int(v) for v in saved)
+                self.worker.set_manual_region(
+                    ChatRegion(x, y, w, h, source="manual", confirmed=True))
+            except (TypeError, ValueError):
+                pass
+
+        clock_region = self._saved_region("clock_region")
+        if clock_region is not None:
+            # A validated clock area is read from the start: its value is used, so
+            # there is nothing to wait for.
+            self.worker.set_probe(ZONE_CLOCK, clock_region)
+
+        if self.zone_frames:
+            # A frame was opened while the assets were still loading. Reading it
+            # touches Qt, so hop back to the UI thread for that.
+            QTimer.singleShot(0, self._resync_test_mode)
+
+        self.worker.start()
+        self._set_boot_message(tr("boot.waiting"))
+
+        # Icons are only needed for display, so fetch them after capture starts.
+        try:
+            self.assets.download_icons(progress=self._set_boot_message)
+        except Exception as exc:                      # noqa: BLE001
+            log.warning("icon download failed (%s)", exc)
+        self._set_boot_message(tr("boot.waiting"))
+
+    def _set_boot_message(self, message: str) -> None:
+        self._boot_message = message
+        log.info("%s", message)
+
+    # ------------------------------------------------------------------
+    def _drain_results(self) -> None:
+        if self.timers is None:
+            return
+        latest_status = None
+        while True:
+            try:
+                payload = self.results.get_nowait()
+            except queue.Empty:
+                break
+
+            if payload.get("session_changed"):
+                self.timers.reset(reason="session changed")
+                self._known_champions.clear()
+                self.control.clear_team()
+
+            if payload.get("frame_counted"):
+                self.timers.note_frame()
+
+            events = payload.get("events") or []
+            if events:
+                started = self.timers.handle_events(events)
+                for timer in started:
+                    self.control.add_event(
+                        f"{timer.champion_name} - {timer.spell_name} "
+                        f"({timer.display()})")
+                self._sync_team()
+            latest_status = payload.get("status") or latest_status
+
+        if latest_status is not None:
+            self._latest_status = latest_status
+
+    def _sync_team(self) -> None:
+        if self.timers is None:
+            return
+        ids = [t.champion_id for t in self.timers.snapshot()]
+        fresh = [cid for cid in ids if cid not in self._known_champions]
+        if fresh:
+            self._known_champions.update(fresh)
+            self.control.sync_team(fresh, self._on_role_changed)
+        # Reflect roles the manager inferred, e.g. Smite implies jungle.
+        for timer in self.timers.snapshot():
+            if timer.role:
+                self.control.set_role_display(timer.champion_id, timer.role)
+
+    def _on_role_changed(self, champion_id: str, role: str) -> None:
+        if self.timers is not None:
+            self.timers.set_role(champion_id, role)
+
+    # ------------------------------------------------------------------
+    def _refresh_ui(self) -> None:
+        if self.timers is None:
+            self.overlay.set_status(self._boot_message)
+            return
+
+        for note in self.timers.tick():
+            if note.kind == "warning":
+                self.notifier.warning()
+            else:
+                self.notifier.ready()
+
+        snapshot = self.timers.snapshot()
+        self.overlay.set_timers(snapshot)
+
+        status = getattr(self, "_latest_status", None)
+        if status is None:
+            self.overlay.set_status(self._boot_message)
+            return
+
+        self.overlay.set_game_active(bool(status.in_game))
+
+        if status.game_clock is not None:
+            # The clock area was validated and reads cleanly: that is the game
+            # time itself, so it outranks anything inferred from chat timestamps.
+            self.timers.note_clock(status.game_clock)
+
+        for zone, frame in self.zone_frames.items():
+            if not frame.isVisible():
+                continue
+            rows = (status.rows if zone == ZONE_CHAT
+                    else status.probe_rows.get(zone, []))
+            frame.set_feedback(rows, exploring=status.exploring,
+                               note=f"{status.last_ocr_ms:.0f} ms")
+
+        if snapshot:
+            # Timers take over the display; a stale status line must not linger
+            # on top of them.
+            self.overlay.set_status("")
+        elif not status.in_game:
+            self.overlay.set_status(status.error or status.game)
+        else:
+            self.overlay.set_status(tr("overlay.nothing_yet"))
+
+        if self.control.isVisible():
+            clock = self.timers.estimated_game_time()
+            clock_text = ("-" if clock is None
+                          else f"{int(clock) // 60}:{int(clock) % 60:02d}")
+            ocr_text = tr("ui.ocr_summary", runs=status.ocr_runs,
+                          ms=status.last_ocr_ms,
+                          skipped=status.skip_ratio * 100)
+            self.control.update_status(
+                game=status.error or status.game,
+                region=status.region,
+                ocr=ocr_text,
+                timers=self.timers.active_count(),
+                clock=clock_text,
+            )
+            self.control.update_debug(status.lines, status.near_misses,
+                                      status.colour_rejected)
+
+    # ------------------------------------------------------------------
+    def _on_redetect(self) -> None:
+        if self.worker is not None:
+            self.settings.set("chat_region_locked", False)
+            self.settings.set("chat_region", None)
+            self.worker.set_manual_region(None)
+            self.worker.request_redetect()
+
+    def _on_clear_region(self) -> None:
+        self.settings.set("chat_region", None)
+        self.settings.set("chat_region_locked", False)
+        if self.worker is not None:
+            self.worker.set_manual_region(None)
+            self.worker.request_redetect()
+
+    def _on_pick_region(self) -> None:
+        self.picker = RegionPicker()
+        self.picker.region_selected.connect(self._on_region_selected)
+        self.picker.start()
+
+    def _on_region_selected(self, region: ChatRegion) -> None:
+        self.settings.update({
+            "chat_region": region.as_list(),
+            "chat_region_locked": True,
+        })
+        if self.worker is not None:
+            self.worker.set_manual_region(region)
+        log.info("manual chat region set: %s", region.describe())
+
+    # ------------------------------------------------------------------
+    # Test mode: live frames the user drags onto the areas to read
+    # ------------------------------------------------------------------
+    # Three areas, one frame each, all placed the same way. Only the chat is
+    # detected automatically; the game clock and the scoreboard have no reliable
+    # signature to search for, so being able to point at them by hand *is* the
+    # feature rather than a fallback.
+    def _on_test_mode_from_tray(self, zone: str, enabled: bool) -> None:
+        """Route the tray entry through the button, so both stay in step."""
+        self.control.sync_test_mode(zone, enabled)
+        self._on_test_mode(zone, enabled)
+
+    def _on_test_mode(self, zone: str, enabled: bool) -> None:
+        self._sync_test_action(zone, enabled)
+
+        if zone == ZONE_CHAT and self.worker is not None:
+            self.worker.set_test_mode(enabled)
+
+        existing = self.zone_frames.get(zone)
+        if not enabled:
+            if existing is not None:
+                # Closing routes through the frame's cancel path, which restores
+                # whatever the region was before the test started.
+                existing.cancelled.emit()
+                existing.close()
+            return
+        if existing is not None:
+            return
+
+        if zone == ZONE_CHAT:
+            self._region_before_test = (
+                self.settings.get("chat_region"),
+                bool(self.settings.get("chat_region_locked")))
+
+        frame = ZoneFrame(zone)
+        frame.region_changed.connect(
+            lambda region, z=zone: self._on_test_region_changed(z, region))
+        frame.applied.connect(
+            lambda region, z=zone: self._on_test_applied(z, region))
+        frame.cancelled.connect(lambda z=zone: self._on_test_cancelled(z))
+        frame.closed.connect(lambda z=zone: self._on_test_frame_closed(z))
+        self.zone_frames[zone] = frame
+        frame.start(self._starting_region(zone))
+        # The frame owns the region while it is up, so nothing else may move it
+        # underneath the user.
+        self._on_test_region_changed(zone, frame.region())
+
+    def _sync_test_action(self, zone: str, enabled: bool) -> None:
+        action = self.actions_test.get(zone)
+        if action is None:
+            return
+        action.blockSignals(True)
+        action.setChecked(enabled)
+        action.blockSignals(False)
+
+    def _saved_region(self, key: str) -> ChatRegion | None:
+        saved = self.settings.get(key)
+        if not isinstance(saved, (list, tuple)) or len(saved) != 4:
+            return None
+        try:
+            x, y, w, h = (int(v) for v in saved)
+        except (TypeError, ValueError):
+            return None
+        return ChatRegion(x, y, w, h, source="manual", confirmed=True)
+
+    def _starting_region(self, zone: str) -> ChatRegion:
+        """Where to put a frame when it opens.
+
+        Always the saved rectangle when there is one -- reopening a zone must
+        land where the user left it. Otherwise a guess based on where that thing
+        normally sits in the client area, which is only ever a starting point:
+        the frame exists precisely because the app cannot know.
+        """
+        saved = self._saved_region(SETTING_FOR_ZONE[zone])
+        if saved is not None:
+            return saved
+
+        status = getattr(self, "_latest_status", None)
+        window = status.window_rect if status is not None else None
+        if window is None:
+            screen = self.app.primaryScreen()
+            area = screen.geometry() if screen is not None else None
+            ratio = float(screen.devicePixelRatio()) if screen is not None else 1.0
+            if area is None:
+                window = (0, 0, 1920, 1080)
+            else:
+                window = (int(area.x() * ratio), int(area.y() * ratio),
+                          int(area.width() * ratio), int(area.height() * ratio))
+        left, top, width, height = window
+
+        if zone == ZONE_CLOCK:
+            # Top centre: the match timer sits in the middle of the top bar.
+            box_w, box_h = int(width * 0.07), int(height * 0.035)
+            return ChatRegion(left + (width - box_w) // 2, top + int(height * 0.01),
+                              box_w, box_h, source="manual", confirmed=True)
+        if zone == ZONE_SCOREBOARD:
+            # The Tab panel covers the middle of the screen.
+            box_w, box_h = int(width * 0.66), int(height * 0.5)
+            return ChatRegion(left + (width - box_w) // 2,
+                              top + int(height * 0.22), box_w, box_h,
+                              source="manual", confirmed=True)
+
+        # Chat: what is being read right now beats any guess.
+        if status is not None and status.region_rect:
+            x, y, w, h = status.region_rect
+            return ChatRegion(x, y, w, h, source="manual", confirmed=True)
+        x, y, w, h = chat_detector.search_band(window)
+        return ChatRegion(x, y, w, h, source="manual", confirmed=True)
+
+    def _resync_test_mode(self) -> None:
+        """Re-apply the open frames to a worker that only appeared afterwards."""
+        if self.worker is None:
+            return
+        for zone, frame in self.zone_frames.items():
+            if zone == ZONE_CHAT:
+                self.worker.set_test_mode(True)
+                self.worker.set_manual_region(frame.region())
+            else:
+                self.worker.set_probe(zone, frame.region())
+
+    def _on_test_region_changed(self, zone: str, region: ChatRegion) -> None:
+        """Point the worker at the frame, without persisting anything yet."""
+        if self.worker is None:
+            return
+        if zone == ZONE_CHAT:
+            self.worker.set_manual_region(region)
+        else:
+            self.worker.set_probe(zone, region)
+
+    def _on_test_applied(self, zone: str, region: ChatRegion) -> None:
+        if zone == ZONE_CHAT:
+            self.settings.update({
+                "chat_region": region.as_list(),
+                "chat_region_locked": True,
+            })
+            if self.worker is not None:
+                self.worker.set_manual_region(region)
+            self._region_before_test = None
+        else:
+            self.settings.set(SETTING_FOR_ZONE[zone], region.as_list())
+            if self.worker is not None:
+                self.worker.set_probe(zone, region)
+        log.info("test mode: %s region validated %s", zone, region.describe())
+        self.tray.showMessage(
+            "LoL Timers",
+            tr("notify.zone_saved", width=region.width, height=region.height),
+            QSystemTrayIcon.Information, 3000)
+
+    def _on_test_cancelled(self, zone: str) -> None:
+        """Put back whatever was in use before the frame appeared."""
+        if zone != ZONE_CHAT:
+            # Nothing was persisted while dragging, so restoring is just a matter
+            # of pointing the worker back at the saved rectangle, if any.
+            if self.worker is not None:
+                self.worker.set_probe(zone, self._probe_after_close(zone))
+            log.info("test mode: %s cancelled", zone)
+            return
+
+        previous = self._region_before_test
+        self._region_before_test = None
+        if previous is None:
+            return
+        saved, locked = previous
+        self.settings.update({"chat_region": saved, "chat_region_locked": locked})
+        if self.worker is None:
+            return
+        if locked and isinstance(saved, (list, tuple)) and len(saved) == 4:
+            x, y, w, h = (int(v) for v in saved)
+            self.worker.set_manual_region(
+                ChatRegion(x, y, w, h, source="manual", confirmed=True))
+        else:
+            self.worker.set_manual_region(None)
+            self.worker.request_redetect()
+        log.info("test mode: cancelled, previous region restored")
+
+    def _probe_after_close(self, zone: str) -> ChatRegion | None:
+        """What the worker should keep reading once a frame is closed.
+
+        The clock keeps being read, because its value is used. The scoreboard is
+        stored but has no consumer yet, so reading it after the user has finished
+        placing it would be pure cost.
+        """
+        if zone != ZONE_CLOCK:
+            return None
+        return self._saved_region("clock_region")
+
+    def _on_test_frame_closed(self, zone: str) -> None:
+        self.zone_frames.pop(zone, None)
+        if self.worker is not None:
+            if zone == ZONE_CHAT:
+                self.worker.set_test_mode(False)
+            else:
+                self.worker.set_probe(zone, self._probe_after_close(zone))
+        self.control.sync_test_mode(zone, False)
+        self._sync_test_action(zone, False)
+
+    def _on_reset(self) -> None:
+        if self.timers is not None:
+            self.timers.reset(reason="manual reset")
+        self._known_champions.clear()
+        self.control.clear_team()
+
+    def _on_overlay_visible(self, visible: bool) -> None:
+        self.settings.set("overlay_visible", visible)
+        self.overlay.refresh_visibility()
+        if visible and not self.overlay.isVisible():
+            # Enabling it outside a game looks like nothing happened; say why.
+            self.tray.showMessage("LoL Timers", tr("notify.bar_in_game_only"),
+                                  QSystemTrayIcon.Information, 4000)
+        self.action_overlay.setChecked(visible)
+        self.control.sync_overlay_toggles(
+            visible=visible, locked=bool(self.settings.get("overlay_locked")))
+
+    def _on_overlay_locked(self, locked: bool) -> None:
+        self.settings.set("overlay_locked", locked)
+        self.overlay.apply_lock(locked)
+        self.action_lock.setChecked(locked)
+        self.control.sync_overlay_toggles(
+            visible=bool(self.settings.get("overlay_visible")), locked=locked)
+
+    def _on_recentre(self) -> None:
+        self.overlay.centre_at_top()
+        self.overlay.update()
+
+    def _on_preview(self) -> None:
+        """Show fake timers briefly, so the overlay can be checked without a game."""
+        if self.timers is None:
+            return
+        if not self.settings.get("overlay_visible"):
+            self._on_overlay_visible(True)
+        count = self.timers.add_preview()
+        self.overlay.set_timers(self.timers.snapshot())
+        if count:
+            self.tray.showMessage("LoL Timers", tr("notify.preview"),
+                                  QSystemTrayIcon.Information, 4000)
+
+    # ------------------------------------------------------------------
+    # Language
+    # ------------------------------------------------------------------
+    def _on_language_changed(self, language: str) -> None:
+        """Apply a new language: rebuild the interface, reload Riot's data.
+
+        Qt cannot re-translate labels in place, so the windows carrying them are
+        rebuilt. The champion and spell names come from a different Data Dragon
+        locale, which needs the network, so that part happens on a thread and is
+        adopted when it lands -- the interface is already readable by then.
+        """
+        i18n.set_language(language)
+        self._rebuild_interface()
+        self.tray.showMessage("LoL Timers", tr("ui.language_reloading"),
+                              QSystemTrayIcon.Information, 3000)
+        threading.Thread(target=self._reload_assets, name="Locale",
+                         daemon=True).start()
+
+    def _rebuild_interface(self) -> None:
+        """Replace the control window and tray menu with ones in the new language."""
+        previous = self.control
+        was_visible = previous.isVisible()
+        # Silence it first: its close event asks the application to quit, and a
+        # window being replaced must not be able to do that. Blocking its signals
+        # covers every route out of it, including that one.
+        previous.blockSignals(True)
+        previous.hide()
+        previous.deleteLater()
+
+        self.control = ControlWindow(self.settings, self.assets)
+        self._connect_ui()
+        # The team tab starts empty again, so let the next sync refill it.
+        self._known_champions.clear()
+        self._sync_team()
+        if was_visible:
+            self._show_control()
+
+        self._fill_tray_menu()
+        self.overlay.icons.clear()
+        self.overlay.update()
+
+    def _reload_assets(self) -> None:
+        """Fetch Riot's data in the new locale, off the UI thread."""
+        locale = str(self.settings.get("locale", "fr_FR"))
+        assets = RiotAssets(locale=locale)
+        try:
+            assets.bootstrap(progress=self._set_boot_message)
+            assets.download_icons(progress=self._set_boot_message)
+        except Exception as exc:                      # noqa: BLE001
+            log.exception("could not reload assets for %s", locale)
+            self._set_boot_message(tr("boot.error", error=exc))
+            return
+        QTimer.singleShot(0, lambda: self._adopt_assets(assets))
+
+    def _adopt_assets(self, assets: RiotAssets) -> None:
+        """Swap in freshly loaded data. Runs on the UI thread."""
+        self.assets = assets
+        if self.parser is not None:
+            # A whole new parser rather than reindexing the live one: the capture
+            # thread reads that index continuously, and swapping the reference is
+            # atomic where rebuilding it in place would be read half-empty.
+            self.parser = MessageParser(assets)
+            if self.worker is not None:
+                self.worker.parser = self.parser
+        if self.timers is not None:
+            self.timers.assets = assets
+        self.overlay.assets = assets
+        self.overlay.icons.clear()
+        # Champion and spell names live on the timers themselves, so anything on
+        # screen still carries the old language until it is re-read. Clearing is
+        # honest: a stale name next to a live countdown looks like a bug.
+        if self.timers is not None:
+            self.timers.reset(reason="language changed")
+        self._known_champions.clear()
+        self._rebuild_interface()
+        self._set_boot_message(tr("boot.waiting"))
+        log.info("assets reloaded for %s", assets.locale)
+
+    def _on_settings_changed(self) -> None:
+        self.overlay.setWindowOpacity(float(self.settings.get("overlay_opacity", 0.92)))
+        self.overlay.refresh_visibility()
+        if (self.settings.get("overlay_layout") == "bar"
+                and not self.settings.get("bar_placed")):
+            # Switched to the bar for the first time: give it sensible geometry
+            # rather than the vertical panel's.
+            self.overlay.centre_at_top()
+        self.overlay.update()
+
+    # ------------------------------------------------------------------
+    def run(self) -> int:
+        return self.app.exec()
+
+    def quit(self) -> None:
+        log.info("shutting down")
+        if self.worker is not None:
+            self.worker.stop()
+        self.overlay.save_geometry()
+        self.settings.save()
+        self.tray.hide()
+        self.app.quit()
+
+
+SINGLE_INSTANCE_NAME = "LoLEnemySummonerTimer.instance"
+
+
+def acquire_single_instance(name: str = SINGLE_INSTANCE_NAME):
+    """Claim the "only one running" token, or return None if it is taken.
+
+    Two copies would both OCR the same chat and both draw an overlay, and the
+    second one is easy to start by accident: packaged as a single .exe there is
+    no window and no cursor feedback for the first few seconds, so a second
+    double-click while waiting is the obvious thing to do.
+
+    A named mutex in the session namespace, so it disappears with the process
+    however it dies -- a lock file would survive a crash and lock the user out.
+    """
+    try:
+        import win32api
+        import win32event
+        import winerror
+    except ImportError:                               # pragma: no cover
+        return object()                               # cannot check; allow it
+    handle = win32event.CreateMutex(None, False, name)
+    if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+        # A handle comes back even when the mutex already existed; closing it
+        # keeps the refused copy from holding a reference to the token.
+        if handle:
+            win32api.CloseHandle(handle)
+        return None
+    return handle
+
+
+def _warn_already_running() -> None:
+    """Say why nothing happened. Silence would just get double-clicked again."""
+    try:
+        import win32api
+        import win32con
+        win32api.MessageBox(0, tr("app.already_running"), tr("app.title"),
+                            win32con.MB_OK | win32con.MB_ICONINFORMATION)
+    except Exception as exc:                          # noqa: BLE001
+        log.debug("could not show the already-running notice (%s)", exc)
+
+
+def main() -> int:
+    configure_logging()
+    log.info("starting LoL Enemy Summoner Timer")
+
+    # Before the guard, so its message is in the user's language.
+    i18n.set_language(str(Settings().get("locale", "fr_FR")))
+    guard = acquire_single_instance()
+    if guard is None:
+        log.warning("another instance is already running, exiting")
+        _warn_already_running()
+        return 0
+
+    application = Application()
+    try:
+        return application.run()
+    finally:
+        # Named to make it obvious the handle is held on purpose: releasing it
+        # early would let a second copy start while this one is still up.
+        del guard
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,17 @@
+# Virtual environment and Python leftovers
+.venv/
+__pycache__/
+*.py[cod]
+
+# Build output. build/ also holds the spec that build.py generates, and dist/
+# holds a 98 MB executable -- that one belongs in a GitHub release, never in git
+# (GitHub blocks files over 100 MB and the history would keep every copy).
+build/
+dist/
+
+# Everything the program creates at runtime next to itself: settings, the
+# downloaded icon cache, the log. Machine-specific, and the icons are Riot's.
+assets/
+
+# Local tooling state.
+.claude/
