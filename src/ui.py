@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout
 
 from chat_detector import ChatRegion
 from i18n import ENGLISH, FRENCH, locale_for, tr
+from theme import CONTROL_QSS
 from version import __version__
 from zone_overlay import ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD
 
@@ -134,6 +135,10 @@ class ControlWindow(QWidget):
 
         self.setWindowTitle(f"{tr('app.title')}  —  v{__version__}")
         self.resize(560, 660)
+        # Applied to the window rather than the application: the overlay paints
+        # itself and the zone frames are deliberately bare, so a stylesheet set
+        # on QApplication would reach two surfaces that do not want one.
+        self.setStyleSheet(CONTROL_QSS)
 
         tabs = QTabWidget(self)
         tabs.addTab(self._build_status_tab(), tr("ui.tab_status"))
@@ -148,6 +153,7 @@ class ControlWindow(QWidget):
         hide_button = QPushButton(tr("ui.hide_window"))
         hide_button.clicked.connect(self.hide)
         quit_button = QPushButton(tr("ui.quit"))
+        quit_button.setProperty("role", "danger")
         quit_button.clicked.connect(self.quit_requested.emit)
         buttons.addWidget(hide_button)
         buttons.addStretch(1)
@@ -168,6 +174,11 @@ class ControlWindow(QWidget):
         self.label_ocr = QLabel("-")
         self.label_timers = QLabel("0")
         self.label_clock = QLabel("-")
+        # These five are the page's .readout block: live values, so monospaced
+        # and in full-strength ink against the dimmer labels naming them.
+        for readout in (self.label_game, self.label_region, self.label_ocr,
+                        self.label_timers, self.label_clock):
+            readout.setProperty("role", "value")
         form.addRow(tr("ui.state_game"), self.label_game)
         form.addRow(tr("ui.state_region"), self.label_region)
         form.addRow(tr("ui.state_ocr"), self.label_ocr)
@@ -224,7 +235,7 @@ class ControlWindow(QWidget):
 
         note = QLabel(tr("ui.borderless_tip"))
         note.setWordWrap(True)
-        note.setStyleSheet("color: #888;")
+        note.setProperty("role", "hint")
         layout.addWidget(note)
         layout.addStretch(1)
         return page
@@ -356,7 +367,7 @@ class ControlWindow(QWidget):
 
         note = QLabel(tr("ui.ultimate_note"))
         note.setWordWrap(True)
-        note.setStyleSheet("color: #888;")
+        note.setProperty("role", "hint")
         tracking_form.addRow(note)
         layout.addWidget(tracking)
 
