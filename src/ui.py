@@ -592,12 +592,19 @@ class ControlWindow(QWidget):
             widget.blockSignals(False)
 
     def closeEvent(self, event) -> None:
-        """Closing this window quits the application.
+        """Closing this window hides it; the program keeps running.
 
-        This window carries the taskbar entry, so its close button (and the
-        taskbar's right-click "Close window") are the routes a user will reach
-        for to stop the program. Use "Masquer cette fenetre" to keep it running
-        in the tray instead.
+        It used to quit outright, on the reasoning that this window carries the
+        taskbar entry and its close button is what someone reaches for to stop
+        the program. That gets the cost backwards. Flashwatch is meant to be
+        started before a game and forgotten, so the close button is far more
+        often "I am done reading this" than "I am done playing" -- and the two
+        mistakes are not equal: hiding a window you meant to close costs one
+        click in the tray, while quitting a session you meant to keep going
+        loses every timer in the running game.
+
+        Safe to reverse because quitting is not hidden: the tray menu and the
+        button below both say "Quitter (fermer le programme)" in as many words.
         """
         event.ignore()
-        self.quit_requested.emit()
+        self.hide()

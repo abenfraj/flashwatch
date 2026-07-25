@@ -78,16 +78,27 @@ asked = {"count": 0}
 application.control.quit_requested.connect(
     lambda: asked.__setitem__("count", asked["count"] + 1))
 
-# The settings window carries the taskbar entry, so its close button must quit
-# rather than silently leave the process running with no visible window.
-application.control.close()
-check("closing the settings window requests a quit", asked["count"] == 1,
-      f"{asked['count']} requests")
-
-# Hiding must NOT quit; that is what the Masquer button is for.
+# The close button hides the window and leaves the program running. Flashwatch
+# is started before a game and forgotten, so that button is far more often "done
+# reading this" than "done playing" -- and quitting a session by accident loses
+# every timer in the running game, where hiding one by accident costs a click in
+# the tray. Quitting stays reachable: the tray entry checked above says so in as
+# many words, and so does the button in the window.
 application.control.show()
+application.control.close()
+check("closing the settings window does not quit", asked["count"] == 0,
+      f"{asked['count']} requests")
+check("closing the settings window hides it",
+      not application.control.isVisible())
+
+# ...and the window must come back, or hiding it would be indistinguishable
+# from losing it.
+application.control.show()
+check("the window can be reopened after closing",
+      application.control.isVisible())
+
 application.control.hide()
-check("hiding the window does not quit", asked["count"] == 1,
+check("hiding the window does not quit either", asked["count"] == 0,
       f"{asked['count']} requests")
 
 # ------------------------------------------------------------- overlay
