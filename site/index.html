@@ -275,6 +275,25 @@ section+section{border-top:var(--rule)}
   padding-top:10px;border-top:2px solid var(--signal)}
 .sec-head p{margin-top:14px}
 
+/* ══ rules band ═════════════════════════════════════════════════════════
+   Sits immediately under the hero, because "will this get me banned" is the
+   first question a player has and the last thing they should have to hunt
+   for. Tinted rather than boxed: a warning-coloured panel would create the
+   alarm it is there to remove. */
+.rules{background:linear-gradient(180deg,rgba(90,200,255,.05),transparent 72%)}
+.rules-head{display:flex;gap:15px;align-items:flex-start}
+.rules-head>svg{width:27px;height:27px;flex:none;margin-top:6px;
+  stroke:var(--signal);stroke-width:1.4;fill:none}
+.rules h2{font-size:clamp(25px,3.4vw,37px)}
+.rules .lede{margin:14px 0 0}
+.rules-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));
+  gap:1px;background:var(--line);margin-top:clamp(28px,4vw,42px)}
+.rules-grid>div{background:var(--field);padding:clamp(19px,2.4vw,26px)}
+.rules-grid h3{margin:0 0 9px;color:var(--ink)}
+.rules-grid p{margin:0;color:var(--ink-dim);font-size:14.8px}
+.rules-foot{margin:26px 0 0;font-size:14px;color:var(--ink-faint);max-width:86ch}
+.rules-foot a{color:var(--signal)}
+
 /* feature triptych */
 .tri{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;background:var(--line)}
 .tri>div{background:var(--field);padding:clamp(22px,3vw,34px);position:relative}
@@ -541,6 +560,37 @@ footer .sep{margin-left:auto}
         </div>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ RULES ══════════════════════════════ -->
+<section class="rules" id="rules">
+  <div class="wrap">
+    <div class="rules-head">
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8 4.6 5.9v5.4c0 4.6 3.1 8.4 7.4 9.9 4.3-1.5 7.4-5.3 7.4-9.9V5.9Z"/><path d="M9 12.2l2.1 2.1L15.4 10"/></svg>
+      <div>
+        <div class="kicker" data-i18n="rules.kicker">Fair play</div>
+        <h2 data-i18n="rules.h2">It reads your screen. That is the whole trick.</h2>
+        <p class="lede" data-i18n="rules.lede">Flashwatch never touches League of Legends. It watches the same pixels you are looking at and does the arithmetic you would otherwise do in your head — which is the entire reason it can be built this way at all.</p>
+      </div>
+    </div>
+
+    <div class="rules-grid">
+      <div>
+        <h3 data-i18n="rules.1.h">No contact with the game</h3>
+        <p data-i18n="rules.1.p">No injection, no memory reading, no game file touched, no keystroke or click sent, no connection to the game servers. The program and League never meet.</p>
+      </div>
+      <div>
+        <h3 data-i18n="rules.2.h">No information you did not have</h3>
+        <p data-i18n="rules.2.p">Every timer starts from a line the game itself printed in your own chat. Nothing is revealed, nothing is guessed — it counts down what you could have counted yourself.</p>
+      </div>
+      <div>
+        <h3 data-i18n="rules.3.h">Nothing you cannot check</h3>
+        <p data-i18n="rules.3.p">The source is public and the executable is built from it by an automated workflow you can inspect. The debug tab shows every line it read, as it read it.</p>
+      </div>
+    </div>
+
+    <p class="rules-foot" data-i18n="rules.foot">Flashwatch is an independent project, not affiliated with or endorsed by Riot Games, and nothing here is a statement on Riot's behalf. What is described above is what the program does — and you can verify all of it in the source. The exhaustive list is in <a href="#securite">what it does, what it does not</a>.</p>
   </div>
 </section>
 
@@ -894,6 +944,17 @@ const FR = {
   "demo.chatline": "(12:31) <u>Darius</u> a utilisé Saut éclair<span style=\"color:var(--ink-faint)\">   ← la ligne que le jeu écrit</span>",
   "demo.cap1": "<b>Un portrait par sort en recharge</b> — il entre à gauche au cast, arrive à droite quand le sort revient",
   "demo.cap2": "<b>READY</b> reste 5 s, puis la ligne disparaît",
+
+  "rules.kicker": "Jeu réglo",
+  "rules.h2": "Il lit ton écran. C'est tout le truc.",
+  "rules.lede": "Flashwatch ne touche jamais à League of Legends. Il regarde les pixels que tu regardes déjà et fait le calcul que tu ferais de tête — ce qui est précisément la raison pour laquelle il peut être construit ainsi.",
+  "rules.1.h": "Aucun contact avec le jeu",
+  "rules.1.p": "Aucune injection, aucune lecture mémoire, aucun fichier du jeu touché, aucune touche ni aucun clic envoyé, aucune connexion aux serveurs de jeu. Le programme et League ne se rencontrent jamais.",
+  "rules.2.h": "Aucune information que tu n'avais pas",
+  "rules.2.p": "Chaque timer part d'une ligne que le jeu a lui-même écrite dans ton propre chat. Rien n'est révélé, rien n'est deviné : il décompte ce que tu aurais pu décompter toi-même.",
+  "rules.3.h": "Rien que tu ne puisses vérifier",
+  "rules.3.p": "Le code source est public et l'exécutable en est construit par un workflow automatisé que tu peux inspecter. L'onglet debug montre chaque ligne lue, telle qu'elle a été lue.",
+  "rules.foot": "Flashwatch est un projet indépendant, sans affiliation avec Riot Games ni approbation de leur part, et rien ici ne parle en leur nom. Ce qui est décrit ci-dessus est ce que le programme fait — et tout est vérifiable dans le code source. La liste exhaustive est dans <a href=\"#securite\">ce qu'il fait, ce qu'il ne fait pas</a>.",
 
   "what.h2": "Trois choses, faites toutes seules",
   "what.lede": "Tu lances le programme avant de jouer et tu l'oublies. Il détecte la partie, trouve le chat, et se cache quand tu n'es plus en jeu.",
