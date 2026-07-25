@@ -23,8 +23,26 @@ A second form, announcing the cast itself, is also accepted:
 
     (14:23) Ahri a utilise Saut eclair
 
-Anything else -- ordinary player chat, pings, emotes, the kill feed -- falls
-through and is discarded.
+This one *also* arrives attributed, and that cost us the feature for a while.
+Pinging a spell that is off cooldown produces the cast wording rather than the
+"Attendez" wording, so what the game actually prints is:
+
+    02:21 Nelo Angelo (Ambessa): Morgana a utilise Saut eclair
+
+An earlier version rejected the cast form outright whenever it carried an author
+prefix, on the grounds that a teammate could type "Ahri a utilise son flash".
+Since every ping is attributed, that rejected every ping -- the same mistake the
+"Attendez" form had already been fixed for.
+
+The prefix is therefore not what separates the two. The *wording* is: the game
+prints the champion's name and the spell's localised name, on their own and
+spelled out in full, while a player types loosely. So an attributed cast line is
+held to the game's exact phrasing -- no determiner ("son flash"), nothing but the
+name on the champion side, and the localised spell name rather than the English
+one. Glyph-level fuzziness stays, since OCR still has to be forgiven.
+
+Anything else -- ordinary player chat, emotes, the kill feed -- falls through and
+is discarded.
 """
 
 from __future__ import annotations
@@ -156,6 +174,20 @@ def parse_clock(text: str) -> int | None:
 
 def _letter_count(text: str) -> int:
     return sum(1 for char in text if char.isalpha())
+
+
+def _starts_capitalised(text: str) -> bool:
+    """Whether the first letter of ``text`` is upper case.
+
+    The discriminator of last resort on an attributed line, and the only one left
+    on an English client: there the localised spell name *is* the English one, so
+    the game's "Ahri used Flash" and a player's "ahri used flash" differ in
+    nothing else. The game always writes both names out properly capitalised.
+    """
+    for char in text:
+        if char.isalpha():
+            return char.isupper()
+    return False
 
 
 def looks_like_chat_line(text: str) -> bool:
@@ -309,6 +341,10 @@ class MessageParser:
         self.assets = assets
         self._champion_index: dict[str, str] = {}
         self._summoner_index: dict[str, str] = {}
+        # Localised spell names only. An attributed line is matched against this
+        # rather than the full index: "Saut eclair" is the game's wording, while
+        # the bare English "flash" is what a French-client player types.
+        self._summoner_localised: dict[str, str] = {}
         self._ult_index: dict[str, str] = {}
         self.rebuild_index()
         # Lines that named a champion but failed to parse. Surfaced in the
@@ -320,6 +356,7 @@ class MessageParser:
         """Build folded lookup tables from the loaded Riot data."""
         self._champion_index.clear()
         self._summoner_index.clear()
+        self._summoner_localised.clear()
         self._ult_index.clear()
 
         for champion in self.assets.champions.values():
@@ -334,6 +371,7 @@ class MessageParser:
 
         for spell in self.assets.spells.values():
             self._summoner_index[fold(spell.name)] = spell.canonical
+            self._summoner_localised[fold(spell.name)] = spell.canonical
             # Accept the English name too; some players run an EN client while
             # the rest of the UI is localised.
             self._summoner_index[fold(spell.canonical)] = spell.canonical
@@ -358,13 +396,10 @@ class MessageParser:
         if event is not None:
             return event
 
-        # Form 2: a cast announcement. Only trusted *without* an author prefix.
-        # "Ahri a utilise son flash" is something a teammate might plausibly
-        # type, and unlike form 1 there is nothing in it to verify against, so an
-        # attributed version of this wording is not good enough to start a timer.
-        if had_author:
-            return None
-
+        # Form 2: a cast announcement. Accepted attributed or not -- pinging an
+        # available spell produces this wording, carrying the pinger's name --
+        # but an attributed one is held to the game's exact phrasing, since that
+        # is the only thing separating it from a teammate typing the same claim.
         split = self._split_on_verb(body)
         if split is None:
             if self._mentions_champion(body):
@@ -372,13 +407,16 @@ class MessageParser:
             return None
         left, right = split
 
-        champion = self._resolve_champion(left)
-        if champion is None:
-            self._record_near_miss(text)
-            return None
+        if had_author:
+            champion = self._resolve_champion_strict(left)
+            resolved = (None if champion is None
+                        else self._resolve_spell_strict(right, champion))
+        else:
+            champion = self._resolve_champion(left)
+            resolved = (None if champion is None
+                        else self._resolve_spell(right, champion))
 
-        resolved = self._resolve_spell(right, champion)
-        if resolved is None:
+        if champion is None or resolved is None:
             self._record_near_miss(text)
             return None
         kind, spell_key, spell_name = resolved
@@ -556,6 +594,28 @@ class MessageParser:
             return None
         return self.assets.champions.get(champion_id)
 
+    def _resolve_champion_strict(self, candidate: str) -> ChampionInfo | None:
+        """Champion half of an attributed line: the whole side, or nothing.
+
+        Drops the trailing-words salvage that :meth:`_resolve_champion` uses to
+        survive leftover HUD text. On an attributed line the champion's name is
+        the entire left side, and the salvage path would otherwise happily find a
+        champion buried inside a sentence somebody typed. Glyph-level fuzziness
+        is kept -- OCR still has to be forgiven.
+        """
+        if not _starts_capitalised(candidate):
+            return None
+        folded = fold(candidate)
+        if not folded:
+            return None
+        champion_id = self._champion_index.get(folded)
+        if champion_id is None:
+            champion_id = _best_match(folded, self._champion_index,
+                                      MIN_CHAMPION_RATIO)
+        if champion_id is None:
+            return None
+        return self.assets.champions.get(champion_id)
+
     @staticmethod
     def _strip_determiners(text: str) -> str:
         """Drop leading articles/possessives: "son Saut eclair" -> "Saut eclair"."""
@@ -593,6 +653,53 @@ class MessageParser:
             # Some clients announce the generic word rather than the ability
             # name; accept that too and let the champion identify the ult.
             if folded in {"ultime", "ultimate", "sonultime", "ult"}:
+                return "ultimate", "ULT", ult.name
+
+        return None
+
+    def _resolve_spell_strict(self, candidate: str,
+                              champion: ChampionInfo) -> tuple[str, str, str] | None:
+        """Spell half of an attributed line: the game's own wording, verbatim.
+
+        Two restrictions relative to :meth:`_resolve_spell`, and they are what
+        make an attributed line trustworthy:
+
+        * a leading determiner is fatal rather than stripped. The game writes
+          "a utilise Saut eclair"; "a utilise *son* flash" is a human;
+        * only the localised name is accepted. On a French client the game never
+          prints "Flash", so a line that does was typed;
+        * the name must be capitalised, which on an English client -- where the
+          localised name and the English one coincide -- is the only thing left
+          that separates "used Flash" from "used flash".
+
+        The generic "son ultime" wording is likewise refused here: the game names
+        the ability, so an unnamed ult on an attributed line is not evidence.
+        """
+        words = candidate.replace("'", " ").split()
+        if not words or fold(words[0]) in DETERMINERS:
+            return None
+        if not _starts_capitalised(candidate):
+            return None
+        folded = fold(candidate)
+        if not folded:
+            return None
+
+        canonical = self._summoner_localised.get(folded)
+        if canonical is None:
+            canonical = _best_match(folded, self._summoner_localised,
+                                    MIN_SPELL_RATIO)
+        if canonical is not None:
+            spell = self.assets.spells.get(canonical)
+            return "summoner", canonical, spell.name if spell else canonical
+
+        ult = champion.ultimate
+        if ult is not None and ult.name:
+            ult_folded = fold(ult.name)
+            budget = _edit_budget(len(ult_folded))
+            ratio = SequenceMatcher(None, folded, ult_folded).ratio()
+            if (folded == ult_folded
+                    or _edit_distance(folded, ult_folded, budget) <= budget
+                    or ratio >= MIN_SPELL_RATIO):
                 return "ultimate", "ULT", ult.name
 
         return None

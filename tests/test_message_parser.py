@@ -36,6 +36,17 @@ CASES = [
     ("(31:02) Ahri a utilisé son ultime", True, 1862),         # generic wording
     ("(7:00) Ahri has used Flash", True, 420),                 # EN client
     ("(7:00) Ahri a utilisé son Saut éclair", True, 420),
+    # --- pings. The game composes these but attributes them to the pinger, so
+    #     they arrive with an author prefix. Rejecting that prefix rejected every
+    #     ping, which is the whole feature. ---
+    ("02:21 Nelo Angelo (Ambessa): Morgana a utilisé Saut éclair", True, 141),
+    ("02:22 Nelo Angelo (Ambessa): Morgana a utilisé Boule de neige", True, 142),
+    ("14:03 Bob (Jinx): Darius a utilisé Téléportation", True, 843),
+    # ...but an attributed line is held to the game's exact wording, which is
+    # what still separates it from a teammate typing the same claim.
+    ("02:21 Nelo (Ambessa): Morgana a utilisé son Saut éclair", False, None),
+    ("02:21 Nelo (Ambessa): Morgana a utilisé flash", False, None),
+    ("02:21 Nelo (Ambessa): jsp morgana a utilisé un truc", False, None),
     # --- must be rejected ---
     ("Bob (Ahri) : ahri a utilisé son flash", False, None),    # player typing
     ("Bob : darius flash top", False, None),
@@ -68,6 +79,9 @@ EXPECT_KEYS = {
     "(l4:23) Ahri a utilise Saut eclair": ("Ahri", "Flash"),
     "(14:23)  Ahrl  a  utilisé  Saut  éclalr": ("Ahri", "Flash"),
     "(l4:2S) Ahri a utilisé Saut éclair": ("Ahri", "Flash"),
+    "02:21 Nelo Angelo (Ambessa): Morgana a utilisé Saut éclair": ("Morgana", "Flash"),
+    "02:22 Nelo Angelo (Ambessa): Morgana a utilisé Boule de neige": ("Morgana", "Snowball"),
+    "14:03 Bob (Jinx): Darius a utilisé Téléportation": ("Darius", "Teleport"),
 }
 
 ok = 0

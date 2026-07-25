@@ -19,6 +19,12 @@ COOLDOWNS: dict[str, int] = {
     "Cleanse": 210,
     "Exhaust": 240,
     "Smite": 90,
+    # ARAM-only spells. They never appear on Summoner's Rift, but the scoreboard
+    # ping announces them with exactly the same wording as the others, so a
+    # missing entry here is a line the parser reads correctly and then has to
+    # throw away for want of a cooldown.
+    "Snowball": 80,
+    "Clarity": 240,
 }
 
 SPELL_NAMES: tuple[str, ...] = tuple(COOLDOWNS)
@@ -34,6 +40,8 @@ DDRAGON_SPELL_IDS: dict[str, str] = {
     "Cleanse": "SummonerBoost",
     "Exhaust": "SummonerExhaust",
     "Smite": "SummonerSmite",
+    "Snowball": "SummonerSnowball",
+    "Clarity": "SummonerMana",
 }
 
 # Aliases and common OCR mangles. Keys are lower-case, stripped of spaces.
@@ -63,6 +71,13 @@ ALIASES: dict[str, str] = {
     "exh": "Exhaust",
     # Smite
     "smite": "Smite", "5mite": "Smite", "smit": "Smite",
+    # Snowball -- "Boule de neige" in French, "Mark" in English.
+    "snowball": "Snowball", "5nowball": "Snowball", "snowbal": "Snowball",
+    "bouledeneige": "Snowball", "bouledeneig": "Snowball",
+    "mark": "Snowball", "marque": "Snowball",
+    # Clarity
+    "clarity": "Clarity", "c1arity": "Clarity", "clarte": "Clarity",
+    "clart": "Clarity",
 }
 
 # --------------------------------------------------------------------------
