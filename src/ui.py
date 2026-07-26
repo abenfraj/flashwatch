@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout
                                QScrollArea, QSlider, QSpinBox, QTabWidget,
                                QVBoxLayout, QWidget)
 
+import autostart
 from chat_detector import ChatRegion
 from i18n import ENGLISH, FRENCH, locale_for, tr
 from theme import CONTROL_QSS
@@ -126,6 +127,7 @@ class ControlWindow(QWidget):
     preview_requested = Signal()
     quit_requested = Signal()
     language_changed = Signal(str)
+    hidden_to_tray = Signal()
 
     def __init__(self, settings, assets) -> None:
         super().__init__(None)
@@ -423,6 +425,21 @@ class ControlWindow(QWidget):
         audio_form.addRow(tr("ui.audio_warn"), self.spin_warn)
         layout.addWidget(audio)
 
+        startup = QGroupBox(tr("ui.startup"))
+        startup_form = QFormLayout(startup)
+        self.check_autostart = QCheckBox(tr("ui.autostart"))
+        # Checked from the registry rather than from settings.json. The user can
+        # remove the entry from Task Manager's Startup tab without telling us,
+        # and a box reading its own stored answer would then be wrong.
+        self.check_autostart.setChecked(autostart.is_enabled())
+        self.check_autostart.toggled.connect(self._on_autostart_toggled)
+        self.label_autostart = QLabel(tr("ui.autostart_note"))
+        self.label_autostart.setWordWrap(True)
+        self.label_autostart.setProperty("role", "hint")
+        startup_form.addRow(self.check_autostart)
+        startup_form.addRow(self.label_autostart)
+        layout.addWidget(startup)
+
         capture = QGroupBox(tr("ui.capture"))
         capture_form = QFormLayout(capture)
         self.spin_interval = QSpinBox()
@@ -550,6 +567,26 @@ class ControlWindow(QWidget):
         self.settings.set("locale", locale_for(language))
         self.language_changed.emit(language)
 
+    def _on_autostart_toggled(self, checked: bool) -> None:
+        """Write the Run entry, then show what the registry actually did.
+
+        Not routed through _on_settings_changed: this one lives in the registry,
+        not in settings.json, and it can fail -- a machine under policy can
+        refuse the write. Rather than leaving a box ticked over a change that
+        never happened, the state is read back and the box corrected.
+        """
+        if autostart.set_enabled(checked):
+            self.label_autostart.setText(tr("ui.autostart_note"))
+            return
+
+        log.warning("autostart could not be set to %s", checked)
+        self.label_autostart.setText(tr("ui.autostart_failed"))
+        actual = autostart.is_enabled()
+        if actual != checked:
+            blocked = self.check_autostart.blockSignals(True)
+            self.check_autostart.setChecked(actual)
+            self.check_autostart.blockSignals(blocked)
+
     def _on_settings_changed(self, *_args) -> None:
         if self._loading:
             return
@@ -608,3 +645,4 @@ class ControlWindow(QWidget):
         """
         event.ignore()
         self.hide()
+        self.hidden_to_tray.emit()

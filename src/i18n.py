@@ -136,6 +136,12 @@ STRINGS: dict[str, tuple[str, str]] = {
     "notify.preview": (
         "Apercu affiche pendant 20 secondes en haut de l'ecran.",
         "Preview shown for 20 seconds at the top of the screen."),
+    "notify.hidden_to_tray": (
+        "Flashwatch continue de tourner ici. Double-cliquez sur l'icone pour "
+        "rouvrir les reglages, ou clic droit puis Quitter pour fermer le "
+        "programme.",
+        "Flashwatch is still running here. Double-click the icon to reopen the "
+        "settings, or right-click then Quit to close the program."),
 
     # -- control window: tabs and footer ---------------------------------
     "ui.tab_status": ("Statut", "Status"),
@@ -278,6 +284,25 @@ STRINGS: dict[str, tuple[str, str]] = {
     "ui.audio_warn": ("Alerte avant :", "Warn before:"),
     "ui.capture": ("Capture", "Capture"),
     "ui.interval": ("Intervalle :", "Interval:"),
+
+    "ui.startup": ("Demarrage", "Startup"),
+    "ui.autostart": ("Lancer Flashwatch au demarrage de Windows",
+                     "Start Flashwatch when Windows starts"),
+    "ui.autostart_note": (
+        "Le programme doit tourner avant le debut de la partie : il ne peut "
+        "pas rattraper les annonces ecrites avant son lancement. Il demarre "
+        "dans la zone de notification, sans fenetre. Windows laisse aussi "
+        "desactiver cette entree dans le Gestionnaire des taches, onglet "
+        "Demarrage.",
+        "The program has to be running before the game starts: it cannot "
+        "recover announcements printed before it launched. It starts in the "
+        "notification area, with no window. Windows also lets you switch this "
+        "entry off from Task Manager's Startup tab."),
+    "ui.autostart_failed": (
+        "Windows a refuse la modification (strategie de securite ?). "
+        "L'entree de demarrage n'a pas ete changee.",
+        "Windows refused the change (security policy?). The startup entry was "
+        "not modified."),
 
     # -- team tab --------------------------------------------------------
     "ui.team_help": (

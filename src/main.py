@@ -26,6 +26,7 @@ from PySide6.QtCore import QPointF, QTimer, Qt
 from PySide6.QtGui import (QAction, QColor, QIcon, QPainter, QPen, QPixmap)
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+import autostart
 import chat_detector
 import i18n
 import settings as settings_module
@@ -142,6 +143,10 @@ class Application:
         # fall back to Qt's own default icon, which is how the settings window
         # ended up wearing somebody else's logo.
         self.app.setWindowIcon(make_tray_icon())
+        # Flashwatch is portable and people are told they can move the folder,
+        # which would leave a startup entry booting a path that no longer
+        # exists. Only rewrites an entry that is already there.
+        autostart.refresh_if_moved()
 
         self.assets = RiotAssets(locale=str(self.settings.get("locale", "fr_FR")))
         self.notifier = Notifier(self.settings)
@@ -196,6 +201,7 @@ class Application:
         self.control.overlay_visibility_toggled.connect(self._on_overlay_visible)
         self.control.overlay_lock_toggled.connect(self._on_overlay_locked)
         self.control.settings_changed.connect(self._on_settings_changed)
+        self.control.hidden_to_tray.connect(self._on_hidden_to_tray)
         self.control.recentre_requested.connect(self._on_recentre)
         self.control.preview_requested.connect(self._on_preview)
         self.control.language_changed.connect(self._on_language_changed)
@@ -257,6 +263,19 @@ class Application:
 
         self.tray_menu.addSeparator()
         self.tray_menu.addAction(tr("tray.quit")).triggered.connect(self.quit)
+
+    def _on_hidden_to_tray(self) -> None:
+        """Say where the window went, once.
+
+        The close button hides rather than quits, which is only obvious if you
+        already know the program lives in the tray. Shown a single time: after
+        that the user knows, and a balloon on every close is nagging.
+        """
+        if self.settings.get("tray_hint_shown"):
+            return
+        self.settings.set("tray_hint_shown", True)
+        self.tray.showMessage("Flashwatch", tr("notify.hidden_to_tray"),
+                              self.tray.icon(), 6000)
 
     def _on_tray_activated(self, reason) -> None:
         if reason == QSystemTrayIcon.DoubleClick:

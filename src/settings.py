@@ -178,6 +178,10 @@ DEFAULTS: dict[str, Any] = {
     "audio_warn_seconds": 5,
     "audio_on_ready": True,
 
+    # Shown once, the first time the close button hides the window instead of
+    # quitting, so the disappearance is not mistaken for a crash.
+    "tray_hint_shown": False,
+
     # --- misc -----------------------------------------------------------
     # Global hotkeys are opt-in: the `keyboard` library installs a system-wide
     # listener, which is unnecessary for normal use since the app needs no key
