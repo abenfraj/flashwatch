@@ -42,6 +42,14 @@ jobs:
     runs-on: windows-latest
     if: "!contains(github.event.head_commit.message, '[skip release]')"
 
+    env:
+      # Code signing is opt-in and inert until a certificate exists. Both
+      # secrets unset -- which is the state today, and the state in any fork --
+      # means the signing step below skips itself and the build is byte for byte
+      # what it was before. Nothing here has to be undone to build unsigned.
+      SIGN_CERT: ${{ secrets.WINDOWS_CERT_BASE64 }}
+      SIGN_PASS: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,6 +96,47 @@ jobs:
 
       - name: Build the executable
         run: python build.py
+
+      # ── Authenticode signature ─────────────────────────────────────────
+      # This is the only thing that removes "Windows protected your PC". The
+      # warning is not about what the program does; it is about the executable
+      # carrying no verified publisher, and nothing in the build can substitute
+      # for one.
+      #
+      # Two routes, depending on the certificate:
+      #
+      #   * a .pfx file, which is what this step expects -- base64 it into
+      #     WINDOWS_CERT_BASE64 and put its password in WINDOWS_CERT_PASSWORD.
+      #     Only possible for certificate types whose private key may leave a
+      #     token, which since the 2023 storage rules is a shrinking set;
+      #   * a cloud signing service (Azure Trusted Signing and similar), where
+      #     the key never exists as a file and signing is an action rather than
+      #     a signtool invocation. That replaces this step rather than
+      #     configuring it.
+      #
+      # Timestamped deliberately: without /tr the signature dies with the
+      # certificate, and every already-downloaded copy starts warning again on
+      # the day it expires.
+      - name: Sign the executable
+        if: env.SIGN_CERT != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_CERT))
+          $tool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' `
+                    -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+                  Where-Object { $_.FullName -match 'x64' } |
+                  Select-Object -First 1 -ExpandProperty FullName
+          if (-not $tool) { throw 'signtool.exe not found on the runner' }
+          & $tool sign /f $pfx /p $env:SIGN_PASS /fd SHA256 `
+                  /tr http://timestamp.digicert.com /td SHA256 `
+                  /d 'Flashwatch' dist/Flashwatch.exe
+          if ($LASTEXITCODE -ne 0) { throw "signing failed ($LASTEXITCODE)" }
+          # Removed rather than left for the job to clean up: the runner is
+          # disposable, but the file is a private key and the log is public.
+          Remove-Item $pfx -Force
+          & $tool verify /pa /v dist/Flashwatch.exe
+          if ($LASTEXITCODE -ne 0) { throw 'the signature did not verify' }
 
       - name: Check what came out
         run: |
