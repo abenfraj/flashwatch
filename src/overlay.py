@@ -97,6 +97,23 @@ THEMES: dict[str, dict[str, tuple[int, int, int, int]]] = {
 
 SOON_THRESHOLD = 30.0
 
+# Size of the "?" chip, as a fraction of the spell icon it sits on. Large enough
+# for the glyph to survive being 9 pixels across at the default scale, small
+# enough that the spell stays identifiable behind it.
+CHIP_FRACTION = 0.68
+CHIP_MIN = 8
+
+
+def uncertain_chip_rect(icon: QRect, scale: float) -> QRect:
+    """Where the "?" chip goes on a spell icon: its bottom-right corner, inside.
+
+    Separate from the painting for the same reason the bar's marker placement is:
+    "the chip never leaves the icon it belongs to" is a geometry property, and it
+    is the one that decides whether the mark lands on the countdown underneath.
+    """
+    size = max(int(CHIP_MIN * scale), int(icon.width() * CHIP_FRACTION))
+    return QRect(icon.right() - size + 1, icon.bottom() - size + 1, size, size)
+
 
 class BarMarker(NamedTuple):
     """One cooldown placed on the bar's track.
@@ -631,12 +648,13 @@ class Overlay(QWidget):
         painter.setBrush(Qt.NoBrush)
         painter.drawEllipse(icon_x, icon_y, icon_size, icon_size)
 
+        # Clear of the portrait apart from a small overlap, so the champion stays
+        # fully readable. Computed whether or not the icon loaded, since the "?"
+        # chip below belongs to the spell rather than to its artwork.
+        bx = icon_x + icon_size - overlap
+        by = icon_y + icon_size - badge
         spell_icon = self.icons.get(self._spell_icon_path(timer), badge)
         if spell_icon is not None:
-            # Clear of the portrait apart from a small overlap, so the champion
-            # stays fully readable.
-            bx = icon_x + icon_size - overlap
-            by = icon_y + icon_size - badge
             # Opaque disc behind it: the panel is see-through, and the badge
             # needs to read against whatever the game is drawing.
             backing = QColor(_colour(theme, "panel"))
@@ -650,6 +668,44 @@ class Overlay(QWidget):
             painter.setClipPath(clip)
             painter.drawPixmap(bx, by, spell_icon)
             painter.restore()
+
+        if timer.uncertain:
+            self._paint_uncertain_mark(painter, theme,
+                                       QRect(bx, by, badge, badge), scale)
+
+    def _paint_uncertain_mark(self, painter: QPainter, theme: dict,
+                              icon: QRect, scale: float) -> None:
+        """A "?" chip on the bottom-right corner of a spell icon.
+
+        This used to be a "?" in front of the countdown, and that is the wrong
+        place for it: "?4:23" reads as part of the time, and the time is the one
+        thing on the bar that has to be legible at a glance. What is uncertain is
+        *which spell was used*, so the mark goes on the spell.
+
+        Kept inside the icon rather than straddling its corner. The badge's bottom
+        edge is the bottom of the portrait row, with the countdown a pixel below
+        it, so anything overhanging would sit on the numbers this is meant to stop
+        interfering with.
+        """
+        rect = uncertain_chip_rect(icon, scale)
+
+        # Neutral ink on the panel colour rather than a status colour: "soon" and
+        # "ready" already mean something on this bar, and a third meaning in the
+        # same palette would be read as one of them.
+        disc = QColor(_colour(theme, "panel"))
+        disc.setAlpha(245)
+        painter.setBrush(disc)
+        painter.setPen(QPen(_colour(theme, "border"), max(1.0, 0.9 * scale)))
+        painter.drawEllipse(rect)
+
+        # In pixels, not points, unlike the rest of the overlay: the chip is
+        # already proportional to the icon, and a glyph sized independently of it
+        # outgrows it at some scales.
+        font = QFont("Segoe UI", 1, QFont.Bold)
+        font.setPixelSize(max(6, int(rect.width() * 0.8)))
+        painter.setFont(font)
+        painter.setPen(_colour(theme, "name"))
+        painter.drawText(rect, Qt.AlignCenter, "?")
 
     # ------------------------------------------------------------------
     def _paint_list(self, painter: QPainter, theme: dict, scale: float,
@@ -727,10 +783,13 @@ class Overlay(QWidget):
                                    champion_icon)
             x += icon_size + int(6 * scale)
 
+            spell_rect = QRect(x, y + (row_height - spell_size) // 2,
+                               spell_size, spell_size)
             spell_icon = self.icons.get(self._spell_icon_path(timer), spell_size)
             if spell_icon is not None:
-                painter.drawPixmap(x, y + (row_height - spell_size) // 2,
-                                   spell_icon)
+                painter.drawPixmap(spell_rect.x(), spell_rect.y(), spell_icon)
+            if timer.uncertain:
+                self._paint_uncertain_mark(painter, theme, spell_rect, scale)
             x += spell_size + int(6 * scale)
 
             remaining = timer.remaining()

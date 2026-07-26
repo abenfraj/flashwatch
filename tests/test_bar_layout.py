@@ -141,5 +141,40 @@ check("every marker is inside the bar",
       all(r.left() >= 0 and r.right() <= overlay.width() for r in placed),
       str([(r.left(), r.right()) for r in placed]))
 
+
+# ------------------------------------------------------- the uncertainty chip
+# It marks the spell, so it has to stay on the spell. The countdown sits one pixel
+# under the icon's bottom edge, which is exactly what a chip straddling the corner
+# would land on -- and covering the time is what moving the mark here was meant to
+# stop doing.
+from PySide6.QtCore import QRect                        # noqa: E402
+from overlay import uncertain_chip_rect                 # noqa: E402
+
+for size, scale in ((14, 1.0), (17, 1.0), (28, 2.0), (9, 0.6)):
+    icon = QRect(100, 50, size, size)
+    chip = uncertain_chip_rect(icon, scale)
+    check(f"the chip stays inside a {size}px icon at scale {scale}",
+          icon.contains(chip),
+          f"icon={icon.getRect()} chip={chip.getRect()}")
+    check(f"  and hugs its bottom-right corner ({size}px)",
+          chip.right() == icon.right() and chip.bottom() == icon.bottom(),
+          f"chip={chip.getRect()}")
+    check(f"  and is big enough to read ({size}px)", chip.width() >= 5,
+          f"{chip.width()}px")
+
+# Painting one must work with no icons loaded at all: FakeAssets returns None for
+# every path, which is also what a first run before the icon download looks like.
+overlay.set_timers([
+    timer("Ahri", "SummonerFlash", 300, 10.0),
+    ActiveTimer(champion_id="Lux", champion_name="Lux", kind="summoner",
+                spell_key="SummonerBarrier", spell_name="Barriere",
+                duration=180, started_at=now - 20.0, uncertain=True),
+])
+overlay.render(overlay.grab())            # no exception is the assertion
+check("an uncertain marker paints without its icons", True)
+check("and its countdown carries no question mark",
+      not overlay._timers[-1].display().startswith("?"),
+      overlay._timers[-1].display())
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

@@ -92,9 +92,10 @@ class ActiveTimer:
     # it while it runs.
     stated: bool = False
     # True while the only evidence is a bare "<Champion> <Sort>" line, which
-    # names a spell without saying it was cast. Displayed with a leading "?".
-    # A confirmed line naming the same spell clears the mark *and* re-anchors
-    # the countdown, since the guess covered the timing as much as the identity.
+    # names a spell without saying it was cast. Marked with a "?" chip on the
+    # spell icon. A confirmed line naming the same spell clears the mark *and*
+    # re-anchors the countdown, since the guess covered the timing as much as
+    # the identity.
     uncertain: bool = False
     role: str = ""
     warned: bool = False
@@ -112,16 +113,21 @@ class ActiveTimer:
         return self.remaining(now) <= 0
 
     def display(self, now: float | None = None) -> str:
+        """The countdown as the overlay shows it.
+
+        Carries the ``~`` for an approximate duration but *not* a mark for
+        uncertainty: "?4:23" reads as part of the time, and the time is the one
+        thing on the bar that has to be read at a glance. Uncertainty belongs to
+        the spell, so the overlay draws it on the spell icon instead.
+        """
         text = format_remaining(self.remaining(now))
-        # Neither mark is worn by READY: once the countdown is over, "it is up"
-        # is the safe reading whether or not the cast was ever confirmed, and a
-        # decorated READY reads as a state of its own.
+        # READY is undecorated: once the countdown is over, "it is up" is the safe
+        # reading whether or not the cast was ever confirmed, and a decorated
+        # READY reads as a state of its own.
         if text == "READY":
             return text
         if self.approximate:
             text = f"~{text}"
-        if self.uncertain:
-            text = f"?{text}"
         return text
 
     @property

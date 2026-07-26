@@ -96,8 +96,11 @@ started = feed(tm, BARE)
 check("bare line starts a timer", len(started) == 1, f"{len(started)} started")
 timer = tm._timers.get(("Morgana", "Flash"))
 check("timer is uncertain", timer is not None and timer.uncertain)
-check("displayed with a question mark",
-      timer is not None and timer.display().startswith("?"),
+# The mark is a chip the overlay paints on the spell icon, not a prefix on the
+# countdown: "?4:23" reads as part of the time, and the time is what has to be
+# legible at a glance. So the flag is the contract here, and the text stays clean.
+check("the countdown is not decorated with it",
+      timer is not None and not timer.display().startswith("?"),
       timer.display() if timer else "")
 
 before = timer.remaining()
@@ -107,9 +110,6 @@ check("confirmation is not swallowed by the dedupe", len(started) == 1,
       f"{len(started)} returned")
 check("same timer object, promoted in place", timer_after is timer)
 check("question mark gone", timer_after is not None and not timer_after.uncertain)
-check("no leading ? in the display",
-      timer_after is not None and not timer_after.display().startswith("?"),
-      timer_after.display() if timer_after else "")
 check("countdown not restarted", timer_after is not None
       and abs(timer_after.remaining() - before) < 2.0,
       f"{before:.0f}s -> {timer_after.remaining():.0f}s" if timer_after else "")

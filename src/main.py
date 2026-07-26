@@ -589,9 +589,14 @@ class Application:
             if events:
                 started = self.timers.handle_events(events)
                 for timer in started:
+                    # The "?" is spelled out here. The overlay draws it as a chip
+                    # on the spell icon, which this list has no room for, and a
+                    # plain text log of events should still say which ones were
+                    # only inferred.
+                    mark = "?" if timer.uncertain else ""
                     self.control.add_event(
                         f"{timer.champion_name} - {timer.spell_name} "
-                        f"({timer.display()})")
+                        f"({mark}{timer.display()})")
                 self._sync_team()
             latest_status = payload.get("status") or latest_status
 

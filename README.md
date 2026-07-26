@@ -64,6 +64,15 @@ is worse than a missing one:
 | materially more time (15 s+) | treated as a recast, timer restarts |
 | a cooldown recomputed from a base value over one whose seconds were *stated* | ignored — a stated number outranks any estimate |
 | nothing left of the cooldown (read far too late) | ignored; it can no longer delete the entry |
+| a **confirmed** cast over a timer that was only inferred | takes over — duration and start both recomputed |
+
+That last row is the one exception, and it is not really one. A bare
+`<Champion> <Sort>` line never says the spell was *cast*, so the timer built on it
+guesses *when* as much as *what*: a line that does say so is better evidence on
+both counts. It is marked with a **`?` chip on the bottom-right of the spell
+icon** — on the icon rather than in front of the countdown, since `?4:23` reads as
+part of the time and the time is what has to be legible at a glance. Pinging the
+spell once you are sure clears the chip and corrects the number.
 
 The same caution applies to clearing the board. A game ending is read from the game
 *process*, not from the window answering: alt-tab, a loading screen or one unlucky
