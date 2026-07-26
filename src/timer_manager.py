@@ -92,8 +92,9 @@ class ActiveTimer:
     # it while it runs.
     stated: bool = False
     # True while the only evidence is a bare "<Champion> <Sort>" line, which
-    # names a spell without saying it was cast. Displayed with a leading "?",
-    # and cleared in place the moment a confirmed line names the same spell.
+    # names a spell without saying it was cast. Displayed with a leading "?".
+    # A confirmed line naming the same spell clears the mark *and* re-anchors
+    # the countdown, since the guess covered the timing as much as the identity.
     uncertain: bool = False
     role: str = ""
     warned: bool = False
@@ -338,18 +339,19 @@ class TimerManager:
         key = (event.champion_id, event.spell_key)
         previous = self._timers.get(key)
         if previous is not None:
-            # A confirmed line naming a spell we had only inferred. Recasting is
-            # ruled out first: if this is genuinely a *later* cast it falls
-            # through and replaces the timer as usual. Otherwise the two lines
-            # describe one cast, so the countdown stays exactly where it is --
-            # the earlier line is the closer of the two to the moment of the
-            # cast -- and all this one contributes is certainty.
-            if (previous.uncertain and event.certain
-                    and not self._is_recast(previous, duration - age, None)):
-                previous.uncertain = False
-                log.info("confirmed %s %s (was uncertain) from %r",
-                         previous.champion_name, previous.spell_name,
-                         event.raw_line)
+            # A confirmed line naming a spell we had only inferred. The
+            # uncertain timer rests on a line that never said the spell was
+            # cast, so the guess covered *when* as much as *what*: this line is
+            # better evidence on both counts and takes over the countdown
+            # outright. Merely stripping the question mark left a wrong timer
+            # wrong -- re-pinging a bad "?" entry has to be able to fix it.
+            #
+            # Both lines usually carry the same timestamp, being one ping the
+            # game announced twice; the age then works out the same and the
+            # countdown does not visibly move. It is when they *differ* that
+            # this matters.
+            if previous.uncertain and event.certain:
+                self._reanchor(previous, event, duration, approximate, age)
                 self.history.append((time.time(), event))
                 del self.history[:-100]
                 return previous
@@ -362,8 +364,13 @@ class TimerManager:
                          event.champion_name, event.spell_name, event.raw_line)
                 return None
             if not self._is_recast(previous, duration - age, None):
-                log.debug("%s %s: %r does not extend the running timer",
-                          event.champion_name, event.spell_name, event.raw_line)
+                # Logged at INFO, not debug: "why did my ping not change the
+                # timer?" is answerable from the log only if the decision to
+                # ignore a line is in it. Deduping upstream keeps this rare.
+                log.info("%s %s: %r does not extend the running timer "
+                         "(%.0fs vs %.0fs)", event.champion_name,
+                         event.spell_name, event.raw_line, duration - age,
+                         previous.remaining())
                 return None
 
         timer = ActiveTimer(
@@ -381,10 +388,35 @@ class TimerManager:
         self._timers[timer.key] = timer
         self.history.append((time.time(), event))
         del self.history[:-100]
-        log.info("timer: %s %s for %.0fs (age %.1fs%s)", timer.champion_name,
-                 timer.spell_name, duration, age,
-                 ", approx" if approximate else "")
+        log.info("timer: %s %s for %.0fs (age %.1fs%s%s) from %r",
+                 timer.champion_name, timer.spell_name, duration, age,
+                 ", approx" if approximate else "",
+                 ", uncertain" if timer.uncertain else "", event.raw_line)
         return timer
+
+    def _reanchor(self, timer: ActiveTimer, event: SpellEvent, duration: float,
+                  approximate: bool, age: float) -> None:
+        """Rebuild an uncertain timer's countdown from a confirmed line.
+
+        In place rather than replaced, so the overlay keeps the same row and the
+        entry does not blink; the promotion is meant to look like the question
+        mark going away, not like a new timer appearing.
+        """
+        before = timer.remaining()
+        timer.duration = duration
+        timer.started_at = time.monotonic() - age
+        timer.approximate = approximate
+        timer.uncertain = False
+        timer.role = timer.role or self._role_for(event)
+        after = timer.remaining()
+        if after > before + 1.0:
+            # The guess had it coming back up sooner than it really does, so the
+            # cues for this cooldown have not happened yet after all.
+            timer.warned = False
+            timer.announced_ready = False
+        log.info("confirmed %s %s (was uncertain): %.0fs -> %.0fs from %r",
+                 timer.champion_name, timer.spell_name, before, after,
+                 event.raw_line)
 
     def _apply_stated_cooldown(self, event: SpellEvent,
                                estimate_before: float | None) -> ActiveTimer | None:
@@ -435,9 +467,9 @@ class TimerManager:
             # negative remaining. Acting on that used to delete a perfectly good
             # running timer -- the reported "timers sometimes vanish". A report
             # that does not extend the countdown can now only be ignored.
-            log.debug("ignoring repeat/stale ping for %s %s (%.0fs vs %.0fs)",
-                      event.champion_name, event.spell_name, remaining,
-                      previous.remaining())
+            log.info("ignoring repeat/stale ping for %s %s (%.0fs vs %.0fs) "
+                     "from %r", event.champion_name, event.spell_name, remaining,
+                     previous.remaining(), event.raw_line)
             return None
 
         if remaining <= 0:

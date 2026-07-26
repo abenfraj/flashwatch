@@ -128,6 +128,51 @@ check("stated line wins over the guess even though it is shorter",
       f"{timer.remaining():.0f}s left, stated={timer.stated}" if timer else "")
 
 
+# ------------------------------- a confirmation re-anchors a wrong "?" timer
+# The reported bug: an uncertain timer showing the wrong time, and pinging the
+# spell once it was certain left that wrong time on screen. Promoting in place
+# used to keep the countdown and only drop the question mark, on the grounds
+# that the earlier line sits closer to the cast. That reasoning does not hold
+# for a bare line: it never said the spell was cast, so its *timing* is as much
+# a guess as its identity, and the confirmed line replaces both.
+tm = fresh_manager()
+feed(tm, "(20:00) Jinx a utilisé Soins")        # put the clock at 20:00
+feed(tm, "20:00 Nelo Angelo (Ambessa): Morgana Saut éclair")
+timer = tm._timers.get(("Morgana", "Flash"))
+check("bare line at the current clock starts a full timer",
+      timer is not None and timer.remaining() > 290,
+      f"{timer.remaining():.0f}s" if timer else "")
+
+# The real cast was a minute ago, so only ~240s can be left.
+started = feed(tm, "19:00 Nelo Angelo (Ambessa): Morgana a utilisé Saut éclair")
+after = tm._timers.get(("Morgana", "Flash"))
+check("the confirmation is reported", len(started) == 1, f"{len(started)}")
+check("still the same row", after is timer)
+check("question mark gone", after is not None and not after.uncertain)
+check("countdown corrected to the confirmed cast, not left at the guess",
+      after is not None and abs(after.remaining() - 240) < 3,
+      f"{after.remaining():.0f}s left, want ~240" if after else "")
+
+# And the other direction: a guess that ran too short must be extended, with the
+# cues re-armed since the spell is not actually coming up when we thought.
+tm = fresh_manager()
+feed(tm, "(20:00) Jinx a utilisé Soins")
+feed(tm, "17:00 Nelo Angelo (Ambessa): Morgana Saut éclair")   # 3 min old
+timer = tm._timers.get(("Morgana", "Flash"))
+check("a stale bare line starts a partly-elapsed timer",
+      timer is not None and timer.remaining() < 130,
+      f"{timer.remaining():.0f}s" if timer else "")
+if timer:
+    timer.warned = True                    # as tick() would have left it
+feed(tm, "20:00 Nelo Angelo (Ambessa): Morgana a utilisé Saut éclair")
+after = tm._timers.get(("Morgana", "Flash"))
+check("a fresh confirmation extends the guess",
+      after is not None and after.remaining() > 290,
+      f"{after.remaining():.0f}s" if after else "")
+check("and the warning cue is re-armed for the corrected countdown",
+      after is not None and not after.warned)
+
+
 # ------------------------------------------- evidence must not weaken
 tm = fresh_manager()
 feed(tm, "02:21 Nelo Angelo (Ambessa): Morgana a utilisé Saut éclair")
