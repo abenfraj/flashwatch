@@ -21,7 +21,10 @@ or it did not. If the second one fails the first is undone, and the user is left
 with exactly what they started with.
 
 Settings and the icon cache live in ``assets`` beside the executable rather than
-inside it, so replacing the file keeps everything the user has configured.
+inside it, so replacing the file keeps everything the user has configured. The
+other way people update -- downloading the .exe and running it from a new folder
+-- has nothing to do with this module and is handled at start-up by
+:func:`settings.carry_config_forward`.
 
 Deliberately Qt-free: the network and the file swap are the parts worth testing,
 and they are testable only if importing this does not need a running application.

@@ -131,7 +131,10 @@ def format_notes(version: str, commits: list[str], previous: str | None) -> str:
         "lancement (téléchargement des icônes de champions).",
         "",
         "Vos réglages sont conservés : ils vivent dans le dossier `assets` créé à "
-        "côté de l'exécutable, pas dans le fichier lui-même.",
+        "côté de l'exécutable, pas dans le fichier lui-même. Et si vous "
+        "retéléchargez l'exécutable ailleurs plutôt que de le mettre à jour "
+        "depuis l'application, il récupère tout seul la configuration de "
+        "l'installation précédente.",
     ]
     if previous:
         lines += ["", "---", "",

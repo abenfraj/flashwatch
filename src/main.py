@@ -168,6 +168,17 @@ class Application:
     """Owns every component and the wiring between them."""
 
     def __init__(self) -> None:
+        # Before the settings are read, since it is what may put them there: a
+        # copy started for the first time in a new folder -- which is what a
+        # manually downloaded update is -- takes over the previous install's
+        # configuration instead of coming up as a fresh one.
+        #
+        # Packaged builds only. From source the data root is the checkout, and a
+        # checkout adopting the settings of the .exe on the same machine (or the
+        # other way round) is surprising in both directions.
+        if getattr(sys, "frozen", False):
+            settings_module.carry_config_forward()
+
         self.settings = Settings()
         settings_module.ensure_dirs()
 

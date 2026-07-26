@@ -182,6 +182,36 @@ Two things this deliberately does not do: it never installs without being asked,
 and it never runs while a game is on — the button is in a window, and that window
 is not where anyone is looking mid-match.
 
+### Keeping the configuration when the update is done by hand
+
+Not everyone updates from inside the program: plenty of people take the .exe from
+the releases page and run it from wherever the browser dropped it. That is a new
+folder, so it is a new `assets` — and a copy that had been positioned, themed,
+switched to English and pointed at the right chat area would come up as a fresh
+install.
+
+So every run leaves a note of where its data lives, in
+`%LOCALAPPDATA%\Flashwatch\last-data-root.txt` — outside every folder an update
+can change. A start-up that finds no settings of its own reads that note and
+copies the previous ones in:
+
+```text
+Downloads\Flashwatch.exe        first start, no assets\settings.json
+        ↓                        reads the note
+C:\Tools\Flashwatch\assets\settings.json    copied in, the old copy left as it was
+```
+
+Only ever a gap being filled — an existing `settings.json` is never overwritten,
+so this cannot reach across and clobber the copy being used. The icon cache is
+not copied: 20 MB of files the first run downloads by itself, against a slow first
+start, is not a trade worth making.
+
+Settings written by a *newer* version survive too. Keys this build does not know
+are not loaded — nothing unknown reaches the running program — but they are
+written back out untouched, so going back to an older .exe does not quietly strip
+the file of everything the newer one had added. A `Réinitialiser` is the one thing
+that clears them, which is what being asked for a clean slate means.
+
 `updater.py` holds all of it and imports no Qt, which is why `test_updater.py` can
 drive the whole swap — including both failure paths — against a temporary
 directory and a fake HTTP session.
@@ -534,6 +564,8 @@ Each file is a standalone script that exits non-zero on failure:
 .venv\Scripts\python tests\test_language.py           # the catalogue and the switch
 .venv\Scripts\python tests\test_timer_stability.py    # nothing may move a set timer
 .venv\Scripts\python tests\test_extra_zones.py        # clock and scoreboard areas
+.venv\Scripts\python tests\test_updater.py            # version maths, download guards, the swap
+.venv\Scripts\python tests\test_settings_carry.py     # the config survives an update
 ```
 
 `test_capture_pipeline.py` and `test_ocr_performance.py` render synthetic

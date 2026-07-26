@@ -3,6 +3,10 @@
 Backed by a plain JSON file next to the assets cache so the config is easy to
 inspect and delete. Everything the user can tweak lives here, including the
 overlay geometry so it survives a restart.
+
+It also has to survive an update, which for a portable .exe means surviving the
+program moving house; :func:`carry_config_forward` at the bottom is what makes
+that true whichever way the user updates.
 """
 
 from __future__ import annotations
@@ -60,6 +64,12 @@ CHAMPION_ICON_DIR = CACHE_DIR / "champions"
 SPELL_ICON_DIR = CACHE_DIR / "spells"
 SFX_DIR = CACHE_DIR / "sfx"
 CONFIG_PATH = ASSETS_DIR / "settings.json"
+
+# A note of where the last run kept its data, written outside every candidate
+# data root so it survives the one thing an update can change: which directory
+# the program runs from. See :func:`carry_config_forward`.
+BREADCRUMB_PATH = (Path(os.environ.get("LOCALAPPDATA", Path.home()))
+                   / "Flashwatch" / "last-data-root.txt")
 
 DEFAULTS: dict[str, Any] = {
     # --- overlay -------------------------------------------------------
@@ -212,6 +222,9 @@ class Settings:
         self._path = path if path is not None else CONFIG_PATH
         self._lock = threading.RLock()
         self._data: dict[str, Any] = dict(DEFAULTS)
+        # Keys on disk that this version knows nothing about. Kept aside and
+        # written back untouched; see load().
+        self._foreign: dict[str, Any] = {}
         self.load()
 
     # -- persistence ----------------------------------------------------
@@ -225,14 +238,24 @@ class Settings:
             return
         if isinstance(raw, dict):
             with self._lock:
-                # Only accept known keys so a stale file cannot inject junk.
+                # Only known keys become settings, so a stale file cannot inject
+                # junk into the running program. The rest is not discarded
+                # though: it is written back out on save, so a settings file that
+                # has been through a newer version -- one that renamed a key, or
+                # added one -- is not quietly stripped of it by an older one.
+                # Whichever version the user ends up on keeps what it understands.
+                self._foreign = {}
                 for key, value in raw.items():
                     if key in DEFAULTS:
                         self._data[key] = value
+                    else:
+                        self._foreign[key] = value
 
     def save(self) -> None:
         with self._lock:
-            snapshot = dict(self._data)
+            # Known keys last: if a future version turns one of these into a real
+            # setting, the live value is the one that wins.
+            snapshot = {**self._foreign, **self._data}
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self._path.with_suffix(".json.tmp")
@@ -261,8 +284,12 @@ class Settings:
             self.save()
 
     def reset(self) -> None:
+        # Foreign keys go too: this is the user asking for a clean slate, and
+        # leaving behind values from a version they are no longer running would
+        # not be one.
         with self._lock:
             self._data = dict(DEFAULTS)
+            self._foreign = {}
         self.save()
 
     def as_dict(self) -> dict[str, Any]:
@@ -278,3 +305,99 @@ class Settings:
 def ensure_dirs() -> None:
     for directory in (CACHE_DIR, CHAMPION_ICON_DIR, SPELL_ICON_DIR, SFX_DIR):
         directory.mkdir(parents=True, exist_ok=True)
+
+
+# --------------------------------------------------------------- updates
+#
+# Settings live in ``assets`` beside the executable, so the in-app update -- which
+# renames a new .exe over the old one in the same directory -- keeps them without
+# anything having to be done about it.
+#
+# What loses them is the *other* way people update: downloading the .exe from the
+# releases page and running it from wherever the browser put it. That is a new
+# data root with no settings.json in it, so a copy that had been positioned,
+# themed and pointed at the right chat area comes up as a fresh install.
+#
+# So each run leaves a note of where its data lives, in a fixed place no update
+# can move, and a start-up that finds no settings of its own reads that note and
+# copies the previous ones in. Copies rather than moves: the old install stays
+# exactly as it was, which matters when the "new" copy turns out to be the one
+# the user throws away.
+
+
+def remember_data_root(root: Path, breadcrumb: Path) -> bool:
+    """Record ``root`` as where this run keeps its data. Never raises."""
+    try:
+        breadcrumb.parent.mkdir(parents=True, exist_ok=True)
+        breadcrumb.write_text(str(root), "utf-8")
+        return True
+    except OSError as exc:
+        log.info("could not write %s (%s)", breadcrumb, exc)
+        return False
+
+
+def previous_config(current: Path, breadcrumb: Path) -> Path | None:
+    """A usable settings file left by an earlier install, or None.
+
+    None whenever there is nothing to do: no note, the note points at where we
+    already are, the file is gone (an install that was deleted), or it does not
+    parse. That last check is what stops a truncated or hand-mangled file being
+    carried forward and taking out the new copy as well.
+    """
+    try:
+        recorded = breadcrumb.read_text("utf-8").strip()
+    except (OSError, ValueError):
+        return None
+    if not recorded:
+        return None
+
+    candidate = Path(recorded) / "assets" / "settings.json"
+    try:
+        if candidate.resolve() == current.resolve():
+            return None
+        if not candidate.is_file():
+            return None
+        if not isinstance(json.loads(candidate.read_text("utf-8")), dict):
+            return None
+    except (OSError, ValueError) as exc:
+        log.info("ignoring the settings at %s (%s)", candidate, exc)
+        return None
+    return candidate
+
+
+def carry_config_forward(current: Path | None = None,
+                         breadcrumb: Path | None = None,
+                         root: Path | None = None) -> bool:
+    """Adopt an earlier install's settings, then note where this one keeps its own.
+
+    Returns whether anything was adopted. Called once at start-up, before the
+    settings are read.
+
+    Only ever fills a *gap*: an existing settings.json is never overwritten, so
+    this cannot reach across and clobber a copy the user is actively configuring.
+    The icon cache is deliberately not copied -- it is 20 MB of files that the
+    first run downloads by itself, and a slow first start is a much smaller loss
+    than a wrong one.
+
+    Paths are arguments rather than module-level defaults because binding them at
+    import time is what once had the tests reading the real configuration.
+    """
+    current = current if current is not None else CONFIG_PATH
+    breadcrumb = breadcrumb if breadcrumb is not None else BREADCRUMB_PATH
+    root = root if root is not None else ROOT
+
+    adopted = False
+    if not current.exists():
+        source = previous_config(current, breadcrumb)
+        if source is not None:
+            try:
+                current.parent.mkdir(parents=True, exist_ok=True)
+                current.write_bytes(source.read_bytes())
+                log.info("carried settings forward from %s", source)
+                adopted = True
+            except OSError as exc:
+                log.warning("could not carry settings forward from %s (%s)",
+                            source, exc)
+
+    remember_data_root(root, breadcrumb)
+    return adopted
