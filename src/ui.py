@@ -128,6 +128,10 @@ class ControlWindow(QWidget):
     quit_requested = Signal()
     language_changed = Signal(str)
     hidden_to_tray = Signal()
+    update_requested = Signal()               # install the offered version
+    update_notes_requested = Signal()         # open the release page
+    update_skipped = Signal()                 # do not offer this one again
+    update_check_requested = Signal()         # look now, from the settings tab
 
     def __init__(self, settings, assets) -> None:
         super().__init__(None)
@@ -157,6 +161,10 @@ class ControlWindow(QWidget):
                     tr("ui.tab_debug"))
 
         layout = QVBoxLayout(self)
+        # Above the tabs, not inside one: an update the user has not seen yet is
+        # the one thing in this window worth reading before whatever they opened
+        # it for. It occupies no space at all until there is something to say.
+        layout.addWidget(self._build_update_banner())
         layout.addWidget(tabs)
 
         buttons = QHBoxLayout()
@@ -199,6 +207,77 @@ class ControlWindow(QWidget):
         page.setAutoFillBackground(False)
         return area
 
+    def _build_update_banner(self) -> QWidget:
+        """The strip that offers a newer version. Hidden until there is one."""
+        self.update_banner = QFrame()
+        self.update_banner.setProperty("role", "update")
+        self.update_banner.setVisible(False)
+
+        layout = QVBoxLayout(self.update_banner)
+        self.label_update = QLabel("")
+        self.label_update.setWordWrap(True)
+        layout.addWidget(self.label_update)
+
+        # Said up front rather than in a dialog afterwards: "will this lose my
+        # settings?" is the question that stops someone pressing the button.
+        self.label_update_hint = QLabel(tr("update.keeps_settings"))
+        self.label_update_hint.setWordWrap(True)
+        self.label_update_hint.setProperty("role", "hint")
+        layout.addWidget(self.label_update_hint)
+
+        buttons = QHBoxLayout()
+        self.button_update = QPushButton(tr("update.install"))
+        self.button_update.setProperty("role", "primary")
+        self.button_update.clicked.connect(self.update_requested.emit)
+        self.button_update_notes = QPushButton(tr("update.notes"))
+        self.button_update_notes.clicked.connect(self.update_notes_requested.emit)
+        self.button_update_skip = QPushButton(tr("update.skip"))
+        self.button_update_skip.clicked.connect(self.update_skipped.emit)
+        buttons.addWidget(self.button_update)
+        buttons.addWidget(self.button_update_notes)
+        buttons.addStretch(1)
+        buttons.addWidget(self.button_update_skip)
+        layout.addLayout(buttons)
+        return self.update_banner
+
+    def show_update(self, version: str, current: str) -> None:
+        """Offer ``version``. Called from the check, which runs off the UI thread."""
+        self.label_update.setText(tr("update.banner", version=version,
+                                     current=current))
+        self.label_update_hint.setVisible(True)
+        self.button_update.setText(tr("update.install"))
+        for button in (self.button_update, self.button_update_notes,
+                       self.button_update_skip):
+            button.setEnabled(True)
+            button.setVisible(True)
+        self.update_banner.setVisible(True)
+
+    def set_update_progress(self, percent: int) -> None:
+        """Report progress on the button itself, so the banner does not resize."""
+        self.button_update.setText(tr("update.downloading", percent=percent))
+        for button in (self.button_update, self.button_update_skip):
+            button.setEnabled(False)
+
+    def set_update_message(self, message: str, *, offer: bool = False) -> None:
+        """Replace the banner's text -- installing, installed, or failed.
+
+        ``offer`` puts the buttons back, which is what a failure wants: the
+        update did not happen, so the thing to do about it is still available.
+        """
+        self.label_update.setText(message)
+        self.label_update_hint.setVisible(False)
+        self.button_update.setText(tr("update.install"))
+        self.button_update.setVisible(offer)
+        self.button_update.setEnabled(offer)
+        self.button_update_notes.setVisible(offer)
+        self.button_update_skip.setVisible(offer)
+        self.button_update_skip.setEnabled(offer)
+        self.update_banner.setVisible(True)
+
+    def hide_update(self) -> None:
+        self.update_banner.setVisible(False)
+
+    # ------------------------------------------------------------------
     def _build_status_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -440,6 +519,26 @@ class ControlWindow(QWidget):
         startup_form.addRow(self.label_autostart)
         layout.addWidget(startup)
 
+        updates = QGroupBox(tr("ui.updates"))
+        updates_form = QFormLayout(updates)
+        self.check_updates = QCheckBox(tr("ui.update_check"))
+        self.check_updates.setToolTip(tr("ui.update_check_tip"))
+        self.check_updates.setChecked(bool(self.settings.get("update_check_enabled")))
+        self.check_updates.toggled.connect(self._on_settings_changed)
+        updates_form.addRow(self.check_updates)
+        installed = QLabel(__version__)
+        installed.setProperty("role", "value")
+        updates_form.addRow(tr("ui.update_installed"), installed)
+        check_now = QPushButton(tr("ui.update_check_now"))
+        check_now.clicked.connect(self._on_check_now)
+        updates_form.addRow(check_now)
+        self.button_check_now = check_now
+        self.label_update_state = QLabel("")
+        self.label_update_state.setWordWrap(True)
+        self.label_update_state.setProperty("role", "hint")
+        updates_form.addRow(self.label_update_state)
+        layout.addWidget(updates)
+
         capture = QGroupBox(tr("ui.capture"))
         capture_form = QFormLayout(capture)
         self.spin_interval = QSpinBox()
@@ -567,6 +666,17 @@ class ControlWindow(QWidget):
         self.settings.set("locale", locale_for(language))
         self.language_changed.emit(language)
 
+    def _on_check_now(self) -> None:
+        """Look for an update on demand, and say so while it happens."""
+        self.button_check_now.setEnabled(False)
+        self.label_update_state.setText(tr("ui.update_checking"))
+        self.update_check_requested.emit()
+
+    def set_check_result(self, message: str) -> None:
+        """Report what the on-demand check found, and re-arm the button."""
+        self.label_update_state.setText(message)
+        self.button_check_now.setEnabled(True)
+
     def _on_autostart_toggled(self, checked: bool) -> None:
         """Write the Run entry, then show what the registry actually did.
 
@@ -609,6 +719,7 @@ class ControlWindow(QWidget):
             "audio_on_ready": self.check_audio_ready.isChecked(),
             "audio_warn_seconds": self.spin_warn.value(),
             "capture_interval_ms": self.spin_interval.value(),
+            "update_check_enabled": self.check_updates.isChecked(),
         })
         self.settings_changed.emit()
 

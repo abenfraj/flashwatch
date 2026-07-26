@@ -182,6 +182,17 @@ DEFAULTS: dict[str, Any] = {
     # quitting, so the disappearance is not mistaken for a crash.
     "tray_hint_shown": False,
 
+    # --- updates --------------------------------------------------------
+    # One request to GitHub's release API at start-up. On by default: the program
+    # is distributed as a bare .exe with no installer and no package manager
+    # behind it, so a copy that never looks is a copy that stays on whatever
+    # version it was downloaded at. It only ever *offers* -- nothing downloads or
+    # installs itself without the button being pressed.
+    "update_check_enabled": True,
+    # A version the user chose to pass on. Only that exact one is silenced; the
+    # release after it is offered again.
+    "update_skipped_version": "",
+
     # --- misc -----------------------------------------------------------
     # Global hotkeys are opt-in: the `keyboard` library installs a system-wide
     # listener, which is unnecessary for normal use since the app needs no key

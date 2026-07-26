@@ -115,8 +115,12 @@ def format_notes(version: str, commits: list[str], previous: str | None) -> str:
         "",
         "## Installation",
         "",
-        "Téléchargez `Flashwatch.exe` ci-dessous, placez-le dans son propre dossier "
-        "et double-cliquez.",
+        "**Vous avez déjà Flashwatch ?** Ne retéléchargez rien : lancez-le, il "
+        "propose la mise à jour tout seul (bandeau en haut de la fenêtre de "
+        "réglages) et remplace son propre exécutable. Vos réglages sont conservés.",
+        "",
+        "**Première installation :** téléchargez `Flashwatch.exe` ci-dessous, "
+        "placez-le dans son propre dossier et double-cliquez.",
         "",
         "Windows affichera « Windows a protégé votre PC » : *Informations "
         "complémentaires* → *Exécuter quand même*. L'exécutable n'est pas signé, "

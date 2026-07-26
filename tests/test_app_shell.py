@@ -20,8 +20,9 @@ tmp = Path(os.environ["TEMP"]) / "flashwatch_shelltest"
 tmp.mkdir(parents=True, exist_ok=True)
 settings_module.CONFIG_PATH = tmp / "settings.json"
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QThread, QTimer, Qt
 import main as app_main
+import updater
 
 results = []
 def check(name, cond, extra=""):
@@ -219,6 +220,44 @@ def finish():
                                      "scoreboard_region": board_saved})
         application.worker.set_probe("clock", None)
 
+    # ------------------------------------------------------------ updates
+    # The banner is the one thing in this window that appears by itself, so what
+    # it does with a release matters more than how it looks. Nothing here touches
+    # the network: the release is handed straight to the handler the check calls.
+    # isHidden rather than isVisible: the settings window itself is closed at this
+    # point, and no child of a hidden window is "visible" whatever it was told.
+    # The question here is what the banner was asked to do.
+    def banner_offered():
+        return not application.control.update_banner.isHidden()
+
+    state["banner_hidden_at_rest"] = not banner_offered()
+
+    offered = updater.Release(version="99.0.0", tag="v99.0.0", notes="",
+                              download_url="https://example.invalid/exe",
+                              size=0, page_url="https://example.invalid")
+    application._on_check_finished(offered, False)
+    state["banner_shown"] = banner_offered()
+    state["release_pending"] = application._pending_release is offered
+    state["banner_names_the_version"] = (
+        "99.0.0" in application.control.label_update.text())
+
+    # Running from source there is no packaged build to swap, so pressing the
+    # button must do nothing rather than download 80 MB into a checkout.
+    state["nothing_to_replace_from_source"] = application._exe is None
+    application._on_install_update()
+    state["install_declined_from_source"] = not application._update_busy
+
+    # Skipping silences that exact version, and only for the automatic check.
+    application.control.update_skipped.emit()
+    state["banner_dismissed"] = not banner_offered()
+    state["skip_persisted"] = (
+        application.settings.get("update_skipped_version") == "99.0.0")
+    application._on_check_finished(offered, False)
+    state["skipped_not_reoffered"] = not banner_offered()
+    application._on_check_finished(offered, True)
+    state["asking_overrides_the_skip"] = banner_offered()
+    application.settings.set("update_skipped_version", "")
+
     # ------------------------------------------------- language round-trip
     # Switching language replaces the settings window and refills the tray menu.
     # The window being discarded must not be able to quit the application on its
@@ -235,13 +274,35 @@ def finish():
     state["tray_still_complete"] = len(entries) >= 8
     state["rebuild_did_not_quit"] = asked["count"] == quits_before
 
+    # An offer the user has not acted on belongs to the application, not to the
+    # window that happened to be showing it.
+    state["offer_survives_the_rebuild"] = (
+        not application.control.update_banner.isHidden())
+
     # Put French back, so the saved settings are left as they were found.
     combo = application.control.combo_language
     combo.setCurrentIndex(combo.findData("fr"))
     state["back_to_french"] = any(
         "quitter" in a.text().lower()
         for a in application.tray.contextMenu().actions() if not a.isSeparator())
-    application.quit()
+
+    # The thread -> UI hop everything above reports through. Checked from a plain
+    # worker thread because that is the case that used to fail silently:
+    # QTimer.singleShot creates its timer in the calling thread, which has no
+    # event loop, so the callback was simply never delivered.
+    state["hop_thread"] = None
+    ui_thread = QThread.currentThread()
+
+    def from_worker():
+        application._invoker.post(
+            lambda: state.__setitem__("hop_thread", QThread.currentThread()))
+
+    threading.Thread(target=from_worker, name="HopProbe").start()
+    # Returning lets the event loop run, which is the only way the posted
+    # callback can arrive; the result is read once it has had the chance.
+    QTimer.singleShot(500, lambda: (
+        state.__setitem__("hop_on_ui_thread", state["hop_thread"] is ui_thread),
+        application.quit()))
 
 QTimer.singleShot(9000, finish)
 application.run()
@@ -296,6 +357,30 @@ check("the tray menu is still complete after the rebuild",
 check("replacing the window does not quit the application",
       state.get("rebuild_did_not_quit"))
 check("switching back restores French", state.get("back_to_french"))
+
+# ------------------------------------------------------------- updates
+check("no banner until there is something to say",
+      state.get("banner_hidden_at_rest"))
+check("a newer release raises the banner", state.get("banner_shown"))
+check("and is remembered so the button has something to install",
+      state.get("release_pending"))
+check("the banner says which version", state.get("banner_names_the_version"))
+check("running from source there is no executable to replace",
+      state.get("nothing_to_replace_from_source"))
+check("so the install button does nothing rather than download",
+      state.get("install_declined_from_source"))
+check("skipping dismisses the banner", state.get("banner_dismissed"))
+check("and remembers the version passed on", state.get("skip_persisted"))
+check("a skipped version is not offered again", state.get("skipped_not_reoffered"))
+check("but asking explicitly overrides the skip",
+      state.get("asking_overrides_the_skip"))
+check("an unanswered offer survives a language change",
+      state.get("offer_survives_the_rebuild"))
+
+# ------------------------------------------------------- thread -> UI hop
+check("a callback posted from a worker thread arrives on the Qt thread",
+      state.get("hop_on_ui_thread"),
+      f"landed on {state.get('hop_thread')}")
 
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

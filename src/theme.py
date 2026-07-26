@@ -157,6 +157,17 @@ QLabel {{ background: transparent; color: {INK_DIM}; }}
 QLabel[role="value"] {{ font-family: {FONT_MONO}; color: {INK}; }}
 QLabel[role="hint"] {{ color: {INK_FAINT}; font-size: 12px; }}
 
+/* ── the update banner ─────────────────────────────────────────────────── */
+/* Says its piece without shouting: the same signal colour the window already
+   uses for live values, at wash strength, so it reads as part of the page
+   rather than as a notification bolted on top of it. */
+QFrame[role="update"] {{
+    border: 1px solid {SIGNAL_EDGE};
+    border-radius: 6px;
+    background: {SIGNAL_FILL};
+}}
+QFrame[role="update"] QLabel {{ color: {INK}; }}
+
 /* ── buttons ───────────────────────────────────────────────────────────── */
 QPushButton {{
     font-family: {FONT_MONO};

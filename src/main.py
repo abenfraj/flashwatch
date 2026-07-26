@@ -22,8 +22,9 @@ from pathlib import Path
 # Allow "import overlay" etc. when launched as a script from any directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from PySide6.QtCore import QPointF, QTimer, Qt
-from PySide6.QtGui import (QAction, QColor, QIcon, QPainter, QPen, QPixmap)
+from PySide6.QtCore import QObject, QPointF, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import (QAction, QColor, QDesktopServices, QIcon, QPainter,
+                           QPen, QPixmap)
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import autostart
@@ -31,6 +32,7 @@ import chat_detector
 import i18n
 import settings as settings_module
 import theme
+import updater
 from audio import Notifier
 from chat_detector import ChatRegion
 from i18n import tr
@@ -50,6 +52,11 @@ log = logging.getLogger(__name__)
 UI_REFRESH_MS = 100          # overlay countdown smoothness
 DRAIN_MS = 50                # how often the queue is emptied
 LOG_PATH = settings_module.ASSETS_DIR / "flashwatch.log"
+
+# How long after start-up the update check runs. Late enough that it never
+# competes with loading Riot's data, early enough that the answer is there before
+# the user has finished reading the settings window.
+UPDATE_CHECK_DELAY_MS = 4000
 
 # Where each hand-placed area is persisted.
 SETTING_FOR_ZONE = {
@@ -125,6 +132,38 @@ def make_tray_icon() -> QIcon:
     return QIcon(make_mark())
 
 
+class UiInvoker(QObject):
+    """Runs a callable on the Qt thread, from any thread.
+
+    A queued signal rather than ``QTimer.singleShot(0, callback)``, which is what
+    this code used to do and which silently does nothing: the static ``singleShot``
+    creates its timer in the *calling* thread, and a plain worker thread has no
+    event loop to run it in, so the callback is never delivered. Emitting a signal
+    across threads is queued to the receiver's thread instead, which is the one
+    guarantee needed here.
+    """
+
+    posted = Signal(object)
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Explicit rather than automatic: the connection type is the whole point,
+        # and Qt's automatic choice depends on which thread emitted.
+        self.posted.connect(self._run, Qt.QueuedConnection)
+
+    def post(self, callback) -> None:
+        self.posted.emit(callback)
+
+    @staticmethod
+    def _run(callback) -> None:
+        try:
+            callback()
+        except Exception:                             # noqa: BLE001
+            # A raise here would cross back into Qt's event loop, where it is
+            # neither caught nor reported.
+            log.exception("posted callback failed")
+
+
 class Application:
     """Owns every component and the wiring between them."""
 
@@ -138,6 +177,9 @@ class Application:
 
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
+        # Created with the application, so it belongs to the Qt thread: that is
+        # what makes a posted callback arrive there.
+        self._invoker = UiInvoker()
         # Set on the application, not on each window: it reaches the control
         # panel, the taskbar button and Alt-Tab in one go. Without it those all
         # fall back to Qt's own default icon, which is how the settings window
@@ -147,6 +189,16 @@ class Application:
         # which would leave a startup entry booting a path that no longer
         # exists. Only rewrites an entry that is already there.
         autostart.refresh_if_moved()
+
+        # The version this replaced, if an update ran last time. Now is the first
+        # moment it is no longer the running image and can therefore go.
+        self._exe = updater.installed_exe()
+        if self._exe is not None:
+            updater.cleanup(self._exe.parent)
+        # The release currently being offered, and whether an install is running.
+        self._pending_release: updater.Release | None = None
+        self._update_busy = False
+        self._update_percent = -1
 
         self.assets = RiotAssets(locale=str(self.settings.get("locale", "fr_FR")))
         self.notifier = Notifier(self.settings)
@@ -191,6 +243,10 @@ class Application:
         self.drain_timer.timeout.connect(self._drain_results)
         self.drain_timer.start()
 
+        # Started from a timer on the UI thread, which has an event loop, so this
+        # one does fire.
+        QTimer.singleShot(UPDATE_CHECK_DELAY_MS, self._start_update_check)
+
     # ------------------------------------------------------------------
     def _connect_ui(self) -> None:
         self.control.redetect_requested.connect(self._on_redetect)
@@ -206,6 +262,11 @@ class Application:
         self.control.preview_requested.connect(self._on_preview)
         self.control.language_changed.connect(self._on_language_changed)
         self.control.quit_requested.connect(self.quit)
+        self.control.update_requested.connect(self._on_install_update)
+        self.control.update_notes_requested.connect(self._on_update_notes)
+        self.control.update_skipped.connect(self._on_update_skipped)
+        self.control.update_check_requested.connect(
+            lambda: self._start_update_check(manual=True))
 
     def _build_tray(self) -> None:
         """Build the tray icon and its menu.
@@ -315,7 +376,147 @@ class Application:
 
     def _invoke_on_ui(self, callback) -> None:
         """Hop from the keyboard hook's thread onto the Qt thread."""
-        QTimer.singleShot(0, callback)
+        self._invoker.post(callback)
+
+    # ------------------------------------------------------------------
+    # Updates
+    # ------------------------------------------------------------------
+    # Nothing here installs anything on its own. The check reports, the banner
+    # offers, and the download only starts once the button is pressed -- a program
+    # that watches the screen during a game is the last thing that should be
+    # replacing its own executable unasked.
+    def _start_update_check(self, *, manual: bool = False) -> None:
+        if self._update_busy:
+            # An install is already running. Reported rather than ignored: the
+            # button disables itself when pressed and something has to put it back.
+            if manual:
+                self.control.set_check_result(tr("update.installing"))
+            return
+        if not manual and not self.settings.get("update_check_enabled"):
+            return
+        if self._exe is None:
+            # Running from source: there is no packaged build to swap, and the
+            # answer to an out-of-date checkout is git.
+            if manual:
+                self.control.set_check_result(tr("ui.update_from_source"))
+            return
+        threading.Thread(target=self._run_update_check, args=(manual,),
+                         name="UpdateCheck", daemon=True).start()
+
+    def _run_update_check(self, manual: bool) -> None:
+        """One request to GitHub, off the UI thread."""
+        release = updater.fetch_latest()
+        self._invoker.post(lambda: self._on_check_finished(release, manual))
+
+    def _on_check_finished(self, release, manual: bool) -> None:
+        newer = (release is not None
+                 and updater.is_newer(release.version, __version__))
+
+        if manual:
+            if release is None:
+                self.control.set_check_result(tr("ui.update_unavailable"))
+                return
+            self.control.set_check_result(
+                tr("update.available", version=release.version) if newer
+                else tr("ui.update_up_to_date"))
+        if not newer:
+            return
+        # A version the user passed on stays passed on -- but only that exact
+        # one, and only for the automatic check. Asking explicitly overrides it.
+        if not manual and release.version == str(
+                self.settings.get("update_skipped_version") or ""):
+            log.info("update %s was skipped by the user", release.version)
+            return
+
+        log.info("update available: %s (running %s)", release.version, __version__)
+        self._pending_release = release
+        self.control.show_update(release.version, __version__)
+        if not manual:
+            # The window is usually not open at start-up, so the balloon is the
+            # only thing that would be seen.
+            self.tray.showMessage(
+                "Flashwatch", tr("update.available", version=release.version),
+                self.tray.icon(), 8000)
+
+    def _on_install_update(self) -> None:
+        release = self._pending_release
+        if release is None or self._update_busy or self._exe is None:
+            return
+        if not updater.can_install(self._exe):
+            # Program Files, a network share, a read-only stick. Nothing to do
+            # about it from here, so say where the file would have to go.
+            self.control.set_update_message(
+                tr("update.read_only", folder=str(self._exe.parent)))
+            return
+        self._update_busy = True
+        self._update_percent = -1
+        self.control.set_update_progress(0)
+        threading.Thread(target=self._run_update, args=(release, self._exe),
+                         name="UpdateInstall", daemon=True).start()
+
+    def _run_update(self, release, target) -> None:
+        """Download, verify, swap. Off the UI thread; reports back by posting."""
+        try:
+            staged = updater.download(release, updater.staged_path(target),
+                                      progress=self._on_update_progress)
+            self._invoker.post(
+                lambda: self.control.set_update_message(tr("update.installing")))
+            updater.install(staged, target)
+        except updater.UpdateError as exc:
+            log.warning("update to %s failed (%s)", release.version, exc)
+            self._invoker.post(lambda message=str(exc):
+                               self._on_update_failed(message))
+            return
+        self._invoker.post(lambda: self._finish_update(target))
+
+    def _on_update_progress(self, done: int, total: int) -> None:
+        """Called per chunk from the download thread; posts per whole percent.
+
+        The difference matters: 80 MB in 256 KB chunks is a few hundred calls, and
+        posting each one would queue that many repaints of a label that can only
+        show a hundred distinct values.
+        """
+        percent = int(done * 100 / total) if total > 0 else 0
+        if percent == self._update_percent:
+            return
+        self._update_percent = percent
+        self._invoker.post(lambda value=percent:
+                           self.control.set_update_progress(value))
+
+    def _on_update_failed(self, message: str) -> None:
+        self._update_busy = False
+        self.control.set_update_message(
+            f"{tr('update.failed', error=message)} {tr('update.failed_hint')}",
+            offer=True)
+
+    def _finish_update(self, target) -> None:
+        """Hand over to the executable that has just taken this one's place."""
+        self.overlay.save_geometry()
+        self.settings.save()
+        # Before the launch, not after: the replacement checks the same
+        # single-instance token this copy is holding, and would refuse to start
+        # while it is still held.
+        release_single_instance()
+        if updater.relaunch(target):
+            self.control.set_update_message(tr("update.restarting"))
+            log.info("restarting into %s", target)
+            # Long enough for the message to be painted before the window goes.
+            QTimer.singleShot(600, self.quit)
+            return
+        self.control.set_update_message(tr("update.restart_manually"))
+        self._update_busy = False
+
+    def _on_update_notes(self) -> None:
+        release = self._pending_release
+        QDesktopServices.openUrl(QUrl(
+            release.page_url if release is not None else updater.RELEASES_PAGE))
+
+    def _on_update_skipped(self) -> None:
+        release = self._pending_release
+        if release is not None:
+            self.settings.set("update_skipped_version", release.version)
+            log.info("%s will not be offered again", release.version)
+        self.control.hide_update()
 
     # ------------------------------------------------------------------
     def _bootstrap_assets(self) -> None:
@@ -774,6 +975,10 @@ class Application:
         # The team tab starts empty again, so let the next sync refill it.
         self._known_champions.clear()
         self._sync_team()
+        # The banner belonged to the window that was just replaced. An offer the
+        # user has not acted on has to survive changing language.
+        if self._pending_release is not None and not self._update_busy:
+            self.control.show_update(self._pending_release.version, __version__)
         if was_visible:
             self._show_control()
 
@@ -792,7 +997,10 @@ class Application:
             log.exception("could not reload assets for %s", locale)
             self._set_boot_message(tr("boot.error", error=exc))
             return
-        QTimer.singleShot(0, lambda: self._adopt_assets(assets))
+        # Posted, not QTimer.singleShot: this runs on a plain thread, where a
+        # single-shot timer has no event loop to fire in and the newly loaded
+        # assets were simply never adopted.
+        self._invoker.post(lambda: self._adopt_assets(assets))
 
     def _adopt_assets(self, assets: RiotAssets) -> None:
         """Swap in freshly loaded data. Runs on the UI thread."""
@@ -844,6 +1052,12 @@ class Application:
 
 SINGLE_INSTANCE_NAME = "Flashwatch.instance"
 
+# Held for the life of the process. Module-level rather than a local in main()
+# because the updater has to be able to let go of it early: the replacement
+# executable checks the same token, and would refuse to start while this copy
+# still holds it.
+_instance_guard = None
+
 
 def acquire_single_instance(name: str = SINGLE_INSTANCE_NAME):
     """Claim the "only one running" token, or return None if it is taken.
@@ -872,6 +1086,25 @@ def acquire_single_instance(name: str = SINGLE_INSTANCE_NAME):
     return handle
 
 
+def release_single_instance() -> None:
+    """Give up the "only one running" token, so a replacement may start.
+
+    Idempotent: called once by the updater just before it launches the new
+    executable, and again on the way out of main().
+    """
+    global _instance_guard
+    handle, _instance_guard = _instance_guard, None
+    if handle is None:
+        return
+    try:
+        import win32api
+        win32api.CloseHandle(handle)
+        log.info("single-instance token released")
+    except Exception as exc:                          # noqa: BLE001
+        # Includes the no-pywin32 case, where the "handle" is a plain sentinel.
+        log.debug("could not release the single-instance token (%s)", exc)
+
+
 def _warn_already_running() -> None:
     """Say why nothing happened. Silence would just get double-clicked again."""
     try:
@@ -889,8 +1122,9 @@ def main() -> int:
 
     # Before the guard, so its message is in the user's language.
     i18n.set_language(str(Settings().get("locale", "fr_FR")))
-    guard = acquire_single_instance()
-    if guard is None:
+    global _instance_guard
+    _instance_guard = acquire_single_instance()
+    if _instance_guard is None:
         log.warning("another instance is already running, exiting")
         _warn_already_running()
         return 0
@@ -899,9 +1133,10 @@ def main() -> int:
     try:
         return application.run()
     finally:
-        # Named to make it obvious the handle is held on purpose: releasing it
-        # early would let a second copy start while this one is still up.
-        del guard
+        # Held until here on purpose: releasing it early would let a second copy
+        # start while this one is still up. The one exception is an update, which
+        # releases it deliberately so its replacement can take over.
+        release_single_instance()
 
 
 if __name__ == "__main__":

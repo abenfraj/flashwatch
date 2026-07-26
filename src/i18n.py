@@ -143,6 +143,44 @@ STRINGS: dict[str, tuple[str, str]] = {
         "Flashwatch is still running here. Double-click the icon to reopen the "
         "settings, or right-click then Quit to close the program."),
 
+    # -- updates ---------------------------------------------------------
+    "update.available": ("Flashwatch {version} est disponible.",
+                         "Flashwatch {version} is available."),
+    "update.banner": ("Nouvelle version disponible : {version} "
+                      "(vous avez la {current}).",
+                      "New version available: {version} "
+                      "(you have {current})."),
+    "update.install": ("Mettre a jour maintenant", "Update now"),
+    "update.notes": ("Voir les nouveautes", "See what changed"),
+    "update.skip": ("Ignorer cette version", "Skip this version"),
+    "update.downloading": ("Telechargement... {percent}%",
+                           "Downloading... {percent}%"),
+    "update.installing": ("Installation...", "Installing..."),
+    "update.restarting": (
+        "Mise a jour installee. Flashwatch redemarre.",
+        "Update installed. Flashwatch is restarting."),
+    "update.restart_manually": (
+        "Mise a jour installee. Relancez Flashwatch pour l'utiliser.",
+        "Update installed. Start Flashwatch again to use it."),
+    "update.failed": ("La mise a jour a echoue : {error}",
+                      "The update failed: {error}"),
+    "update.failed_hint": (
+        "Vous pouvez toujours telecharger la nouvelle version depuis la page "
+        "des releases.",
+        "You can still download the new version from the releases page."),
+    "update.read_only": (
+        "Flashwatch ne peut pas s'ecrire dans {folder}. Telechargez la nouvelle "
+        "version a la main, ou deplacez le programme dans un dossier a vous.",
+        "Flashwatch cannot write to {folder}. Download the new version by hand, "
+        "or move the program to a folder of your own."),
+    "update.keeps_settings": (
+        "Vos reglages et les icones deja telechargees sont conserves : ils "
+        "vivent dans le dossier assets, pas dans l'executable. L'ancienne "
+        "version est supprimee, il ne reste qu'un seul fichier.",
+        "Your settings and the icons already downloaded are kept: they live in "
+        "the assets folder, not inside the executable. The old version is "
+        "removed, so only one file is left."),
+
     # -- control window: tabs and footer ---------------------------------
     "ui.tab_status": ("Statut", "Status"),
     "ui.tab_settings": ("Reglages", "Settings"),
@@ -303,6 +341,26 @@ STRINGS: dict[str, tuple[str, str]] = {
         "L'entree de demarrage n'a pas ete changee.",
         "Windows refused the change (security policy?). The startup entry was "
         "not modified."),
+
+    "ui.updates": ("Mises a jour", "Updates"),
+    "ui.update_check": ("Verifier au demarrage",
+                        "Check at start-up"),
+    "ui.update_check_tip": (
+        "Une requete a GitHub au lancement. Rien ne se telecharge sans que vous "
+        "cliquiez : la nouvelle version est seulement proposee.",
+        "One request to GitHub at launch. Nothing downloads unless you click: "
+        "the new version is only offered."),
+    "ui.update_installed": ("Version installee :", "Installed version:"),
+    "ui.update_check_now": ("Verifier maintenant", "Check now"),
+    "ui.update_checking": ("Verification...", "Checking..."),
+    "ui.update_up_to_date": ("Vous avez la derniere version.",
+                             "You have the latest version."),
+    "ui.update_unavailable": (
+        "Verification impossible (pas de reseau ?).",
+        "Could not check (no network?)."),
+    "ui.update_from_source": (
+        "Lance depuis les sources : il n'y a pas d'executable a remplacer.",
+        "Running from source: there is no executable to replace."),
 
     # -- team tab --------------------------------------------------------
     "ui.team_help": (

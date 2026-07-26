@@ -143,6 +143,40 @@ The workflow needs no secret — `GITHUB_TOKEN` is provided to it — but the
 repository must be **public** for the download page to list versions and for
 anyone to download without an account.
 
+## How a copy already out there updates itself
+
+Publishing is the whole distribution step: a running copy finds the release on
+its own, four seconds after start-up, through one request to
+`/repos/.../releases/latest`. It reports and nothing more — the banner across the
+top of the settings window offers the version, and the download only starts once
+the button is pressed. `Verifier au demarrage` in the settings turns the check
+off; *Ignorer cette version* silences one release and only that one.
+
+The install replaces the executable **in place**, which is what keeps a folder
+holding one program rather than one file per release:
+
+```text
+Flashwatch.exe      -> Flashwatch.previous.exe    (still running; Windows allows
+Flashwatch.new.exe  -> Flashwatch.exe              a running image to be renamed,
+                                                   just not overwritten)
+next start-up          Flashwatch.previous.exe deleted
+```
+
+Three renames on one directory, so nothing is ever half-written, and the old
+version is only moved aside once the new one is downloaded and checked — right
+size, and it starts with `MZ`, because a captive portal's sign-in page arrives as
+a perfectly successful HTTP 200. If the second rename fails the first is undone.
+Settings and the icon cache live in `assets` beside the executable, so they are
+untouched by any of it.
+
+Two things this deliberately does not do: it never installs without being asked,
+and it never runs while a game is on — the button is in a window, and that window
+is not where anyone is looking mid-match.
+
+`updater.py` holds all of it and imports no Qt, which is why `test_updater.py` can
+drive the whole swap — including both failure paths — against a temporary
+directory and a fake HTTP session.
+
 ## Sending it to someone
 
 ```bash
