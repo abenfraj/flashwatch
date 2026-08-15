@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flashwatch — enemy cooldowns, read off the screen</title>
-<meta name="description" content="Windows overlay that reads the League of Legends chat and shows enemy summoner spell cooldowns. No injection, no memory reading: only the pixels already on screen.">
+<title>Flashwatch — LoL summoner spell timer overlay for Windows</title>
+<meta name="description" content="Free League of Legends overlay that tracks enemy summoner spell and flash cooldowns automatically. It reads the match chat on screen — no installation, no injection, nothing to press in game.">
 <link rel="canonical" href="https://flashwatch.vercel.app/">
+<meta property="og:locale:alternate" content="fr_FR">
 <!-- The colour Discord paints down the side of the unfurl. It is also the
      browser chrome on Android, and the accent is the better answer for both
      than the near-black the page is made of. -->
@@ -841,6 +842,104 @@ footer .sep{margin-left:auto}
   .glow i{filter:blur(100px)}
 }
 </style>
+<!-- structured-data:begin -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Flashwatch",
+  "url": "https://flashwatch.vercel.app/",
+  "applicationCategory": "GameApplication",
+  "applicationSubCategory": "League of Legends overlay",
+  "operatingSystem": "Windows 10, Windows 11",
+  "softwareVersion": "1.0.0",
+  "downloadUrl": "https://github.com/abenfraj/flashwatch/releases/latest",
+  "installUrl": "https://flashwatch.vercel.app/#install",
+  "screenshot": "https://flashwatch.vercel.app/og-image.jpg",
+  "image": "https://flashwatch.vercel.app/logo.png",
+  "inLanguage": [
+    "en",
+    "fr"
+  ],
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "abenfraj",
+    "url": "https://github.com/abenfraj"
+  },
+  "description": "A free Windows overlay for League of Legends that tracks enemy summoner spell and ultimate cooldowns by reading the match chat on screen. No installation, no injection, no memory reading and nothing to press during a game."
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Windows says the file is dangerous, is that normal?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. An executable without a signing certificate triggers SmartScreen (“Windows protected your PC”), and sometimes a browser warning on download. Some antivirus products also flag programs packaged this way on principle: if yours deletes the file, you have to allow it explicitly. Signing the program would mean paying for a certificate."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Nothing shows up during my match.",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "In order: is League in borderless windowed? Does the program's language match your client's? Has an enemy actually used a summoner spell yet — with no announcement, the bar stays deliberately empty. If all of that is fine, type Wait Darius Flash - 245 sec. in chat: a timer must appear immediately. If it does not, open Troubleshooting → Frame the chat and look at what the area really reads."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is it heavy on resources?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Idle, the loop costs about 0.2 % of one core: the chat area image is compared from one capture to the next, and text recognition only runs when something changed. A few percent during an active read, on a single core."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I run it twice?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The program handles it: the second copy tells you and bows out, rather than reading the same chat twice and drawing two bars. Since nothing appears for the first two or three seconds, one double-click too many is easily done."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Where are my settings?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "In an assets folder created next to the executable: settings, cached icons and the flashwatch.log file. The program is portable — move the folder and you keep everything. If the location is read-only, it falls back to %LOCALAPPDATA%\\Flashwatch."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What about enemy ultimates?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Tracked too, but marked with a ~: their cooldown depends on rank and ability haste, neither of which is visible on screen. The rank is inferred from the match clock, and the estimate is replaced by the exact value if a line states a remaining time."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work at 1440p, 4K, on two monitors?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. No coordinate is hardcoded: the chat area is recognised by its content, not its position, which covers resolutions, HUD scales and windowed mode. The bar goes wherever you want on any monitor."
+      }
+    }
+  ]
+}
+</script>
+<!-- structured-data:end -->
 </head>
 <body>
 <div class="glow"><i></i><i></i><i></i></div>
@@ -1676,7 +1775,7 @@ parce qu'elle porte un temps restant, ce qui en fait un test net.</pre>`,
   "cta.back": "Relire l'installation",
   "foot.disclaimer": "Non affilié à Riot Games",
   "foot.dl": "Téléchargement",
-  "doc.title": "Flashwatch — les cooldowns ennemis, lus à l'écran",
+  "doc.title": "Flashwatch — timer des sorts d'invocateur LoL pour Windows",
 };
 
 // English, lifted straight out of the markup that is already on the page.
