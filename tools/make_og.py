@@ -37,11 +37,16 @@ FAR, MID, NEAR, READY = ((94, 214, 138), (255, 199, 88),
                          (255, 96, 92), (126, 245, 166))
 INK, DIM = (233, 238, 248), (169, 178, 200)
 
-# Four cooldowns, one per rung, as the bar would have them.
-ROW = [("Darius", "SummonerFlash", "3:41", FAR),
-       ("Lux", "SummonerTeleport", "1:26", MID),
-       ("Ahri", "SummonerFlash", "0:24", NEAR),
-       ("Jinx", "SummonerHeal", "READY", READY)]
+# Four cooldowns, one per rung, as the bar would have them -- and each one *at
+# its progress along the rail*, which is the whole idea of the display: where a
+# portrait sits is how far through its cooldown it is. Evenly spaced they would
+# say nothing, and the one marked READY would be sitting short of the end it has
+# by definition reached.
+RAIL = (112, 1072)
+ROW = [("Darius", "SummonerFlash", "3:41", FAR, 0.06),
+       ("Lux", "SummonerTeleport", "1:26", MID, 0.40),
+       ("Ahri", "SummonerFlash", "0:24", NEAR, 0.72),
+       ("Jinx", "SummonerHeal", "READY", READY, 1.00)]
 
 
 def font(path: Path, size: int) -> ImageFont.FreeTypeFont:
@@ -106,17 +111,22 @@ def main() -> int:
     card.paste(bar, (72, 500), bar)
     draw.rounded_rectangle([72, 500, 1128, 608], radius=12,
                            outline=(96, 110, 140, 120), width=1)
-    draw.line([(112, 540), (1088, 540)], fill=(140, 152, 175, 120), width=2)
-    draw.line([(1012, 540), (1088, 540)], fill=(52, 211, 153, 150), width=2)
+    draw.line([(RAIL[0], 540), (RAIL[1], 540)], fill=(140, 152, 175, 120), width=2)
+    draw.line([(RAIL[1] - 76, 540), (RAIL[1], 540)], fill=(52, 211, 153, 150),
+              width=2)
 
     time_font = font(BAHNSCHRIFT, 30)
-    for index, (champion, spell, text, colour) in enumerate(ROW):
-        x = 150 + index * 236
+    for champion, spell, text, colour, progress in ROW:
+        x = round(RAIL[0] + progress * (RAIL[1] - RAIL[0]))
         face = CACHE / "champions" / f"{champion}.png"
         icon = CACHE / "spells" / f"{spell}.png"
         if face.exists():
             portrait = circle(Image.open(face), 56)
             card.paste(portrait, (x - 28, 512), portrait)
+        # The ring the overlay puts round a spell that is back up, and only that
+        # one: it is the state worth catching before any number is read.
+        if progress >= 1.0:
+            draw.ellipse([x - 30, 510, x + 30, 570], outline=READY, width=3)
         if icon.exists():
             badge = circle(Image.open(icon), 34)
             card.paste(badge, (x + 14, 534), badge)
