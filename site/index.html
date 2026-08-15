@@ -5,10 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flashwatch — enemy cooldowns, read off the screen</title>
 <meta name="description" content="Windows overlay that reads the League of Legends chat and shows enemy summoner spell cooldowns. No injection, no memory reading: only the pixels already on screen.">
-<meta name="theme-color" content="#0a0c11">
+<meta name="theme-color" content="#0a0d1a">
 <meta property="og:title" content="Flashwatch">
 <meta property="og:description" content="Enemy cooldowns, read off the screen. Nothing installed, nothing injected.">
 <meta property="og:type" content="website">
+<meta property="og:image" content="logo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="logo.png">
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      À MODIFIER AVANT DE PUBLIER : une seule ligne, chercher GITHUB_USER
@@ -16,33 +19,64 @@
      téléchargement en découlent.
      ═══════════════════════════════════════════════════════════════════ -->
 
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='27' fill='%23161a24' stroke='%235ac8ff' stroke-width='3'/%3E%3Cpath d='M32 32V17M32 32l12 6' stroke='%23f0f8ff' stroke-width='3.5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='3' fill='%235ac8ff'/%3E%3C/svg%3E">
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" href="logo.png" sizes="512x512">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
 <style>
 /* ══ tokens ═══════════════════════════════════════════════════════════════
-   Taken from the overlay's own dark theme, so the page and the tool look
-   like the same object. Green and amber stay *functional* -- ready and
-   nearly-ready -- exactly as they are in the bar. */
+   The desktop application's own palette, value for value from
+   `src/theme.py`'s MENU dict -- which was itself filled from
+   `design/maquette/Flashwatch *.dc.html`. The page and the program are the
+   same object, so they are the same drawing: the same near-black navy, the
+   same violet, the same 12 px corners, the same face.
+
+   Green, amber and red stay *functional* -- far off, halfway, about to land,
+   back up -- exactly as they are in the bar drawn over the game. They are the
+   only colours on this page that mean something rather than decorate, and the
+   demo below uses the program's own thresholds so the page teaches the reading
+   the program expects. */
 :root{
-  --field:#0a0c11;
-  --field-2:#0e1117;
-  --panel:rgba(16,19,27,.78);
-  --line:rgba(96,112,142,.28);
-  --line-strong:rgba(120,140,175,.5);
-  --ink:#e9eef8;
-  --ink-dim:#8d99b0;
-  --ink-faint:#5d6779;
-  --signal:#5ac8ff;
-  --ready:#6ee28e;
-  --soon:#ffb04a;
-  --danger:#ff6b6b;
-  --display:'Chakra Petch',system-ui,sans-serif;
-  --body:'Barlow',system-ui,sans-serif;
-  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --field:#0a0d1a;          /* the page */
+  --field-2:#0b0f1c;        /* the rail, the sticky bar */
+  --card:#0e1226;           /* a panel */
+  --card-2:#10142a;
+  --sunken:#0b0f1e;         /* an inset: a field, a log, a code block */
+  --line:#232941;
+  --line-2:#262d49;
+  --line-strong:#3a4268;
+  --edge:#1b2038;           /* the hairline between sections */
+  --hero-a:#141034;         /* the tinted card, three stops as in the maquette */
+  --hero-b:#12132e;
+  --hero-c:#101a33;
+  --hero-edge:#2b2f55;
+  --tile:#2b1a63;           /* the rounded square behind an icon */
+  --tile-edge:#4b3a94;
+  --ink:#ffffff;
+  --ink-2:#e4e8f5;
+  --ink-3:#c6ccdf;
+  --ink-dim:#b6bdd3;
+  --ink-faint:#9ba3bd;
+  --ink-faintest:#8b93ad;
+  --signal:#8B5CF6;         /* the accent, at the values the maquettes use */
+  --signal-deep:#7C3AED;
+  --signal-btn:#6D28D9;
+  --signal-pale:#c4b5fd;
+  --signal-wash:#1b1440;
+  --ready:#34D399;
+  --soon:#F59E0B;
+  --danger:#F87171;
+  /* The cooldown ladder, value for value from `src/overlay.py`'s dark theme. */
+  --far:#5ED68A;
+  --mid:#FFC758;
+  --near:#FF605C;
+  --body:'Mulish',system-ui,sans-serif;
+  --display:'Mulish',system-ui,sans-serif;
+  --mono:'Roboto Mono',ui-monospace,monospace;
   --gutter:clamp(20px,5vw,80px);
   --rule:1px solid var(--line);
 }
@@ -51,217 +85,494 @@
 html{scroll-behavior:smooth}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 body{
-  margin:0;background:var(--field);color:var(--ink);
-  font-family:var(--body);font-size:16.5px;line-height:1.65;
+  margin:0;background:var(--field);color:var(--ink-3);
+  font-family:var(--body);font-size:16.5px;line-height:1.7;font-weight:500;
   -webkit-font-smoothing:antialiased;overflow-x:hidden;
 }
 img,svg{display:block;max-width:100%}
 a{color:inherit}
 
-/* ══ atmosphere ═════════════════════════════════════════════════════════ */
+/* ══ atmosphere ═════════════════════════════════════════════════════════
+   The application's halos, at page scale. No scanlines: those belonged to a
+   terminal-green idea of "technical" that this direction has no use for. The
+   grain stays, at half strength -- on a near-black ground it is what keeps a
+   large flat area from banding. */
 .veil{position:fixed;inset:0;pointer-events:none;z-index:60}
 .veil::before{ /* grain */
-  content:'';position:absolute;inset:-50%;opacity:.045;
+  content:'';position:absolute;inset:-50%;opacity:.03;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-.veil::after{ /* scanlines */
-  content:'';position:absolute;inset:0;opacity:.5;
-  background:repeating-linear-gradient(180deg,rgba(255,255,255,.014) 0 1px,transparent 1px 3px);
-}
 .glow{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
-.glow i{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5}
-.glow i:nth-child(1){width:60vw;height:44vw;left:-14vw;top:-22vw;background:radial-gradient(closest-side,rgba(90,200,255,.20),transparent)}
-.glow i:nth-child(2){width:46vw;height:36vw;right:-12vw;top:14vh;background:radial-gradient(closest-side,rgba(110,226,142,.10),transparent)}
-.glow i:nth-child(3){width:54vw;height:40vw;left:20vw;bottom:-18vw;background:radial-gradient(closest-side,rgba(90,200,255,.09),transparent)}
+.glow i{position:absolute;border-radius:50%;filter:blur(100px);opacity:.6}
+.glow i:nth-child(1){width:62vw;height:46vw;left:-16vw;top:-24vw;
+  background:radial-gradient(closest-side,rgba(124,58,237,.30),transparent)}
+.glow i:nth-child(2){width:48vw;height:38vw;right:-14vw;top:12vh;
+  background:radial-gradient(closest-side,rgba(139,92,246,.16),transparent)}
+.glow i:nth-child(3){width:56vw;height:42vw;left:18vw;bottom:-20vw;
+  background:radial-gradient(closest-side,rgba(76,29,149,.24),transparent)}
 
 /* ══ shared bits ════════════════════════════════════════════════════════ */
 .wrap{max-width:1240px;margin-inline:auto;padding-inline:var(--gutter);position:relative;z-index:1}
 .kicker{
-  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.22em;
-  text-transform:uppercase;color:var(--signal);display:flex;align-items:center;gap:10px;
+  font-size:12.5px;font-weight:800;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--signal-pale);display:flex;align-items:center;gap:11px;
 }
-.kicker::before{content:'';width:22px;height:1px;background:var(--signal);opacity:.7}
-.kicker.dim{color:var(--ink-faint)}
-.kicker.dim::before{background:var(--ink-faint)}
-h1,h2,h3{font-family:var(--display);font-weight:700;line-height:1.02;margin:0;letter-spacing:-.01em}
+.kicker::before{content:'';width:22px;height:2px;border-radius:2px;background:var(--signal);opacity:.85}
+.kicker.dim{color:var(--ink-faintest)}
+.kicker.dim::before{background:var(--ink-faintest);opacity:.6}
+h1,h2,h3{font-family:var(--display);font-weight:700;line-height:1.08;margin:0;letter-spacing:-.015em;color:var(--ink)}
 h2{font-size:clamp(28px,4.4vw,46px)}
-h3{font-size:19px;font-weight:600;letter-spacing:0}
+h3{font-size:20px;font-weight:600;letter-spacing:-.005em}
 p{margin:0 0 1em}
-.lede{font-size:clamp(17px,1.5vw,19.5px);color:var(--ink-dim);max-width:62ch}
+.lede{font-size:clamp(17px,1.5vw,19.5px);line-height:1.62;color:var(--ink-dim);max-width:62ch;font-weight:500}
 .mono{font-family:var(--mono)}
+/* The brackets are gone with the direction that owned them. Kept as a no-op so
+   the markup that still carries the class does not need touching. */
 .brackets{position:relative}
-.brackets::before,.brackets::after{
-  content:'';position:absolute;width:11px;height:11px;pointer-events:none;
-  border-color:var(--signal);opacity:.55;
-}
-.brackets::before{left:-1px;top:-1px;border-left:1px solid;border-top:1px solid}
-.brackets::after{right:-1px;bottom:-1px;border-right:1px solid;border-bottom:1px solid}
 
-/* ══ top bar — a hairline strip, like the overlay itself ════════════════ */
+/* ══ top bar ════════════════════════════════════════════════════════════ */
 .topbar{
-  position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
-  background:linear-gradient(180deg,rgba(10,12,17,.92),rgba(10,12,17,.66));
-  border-bottom:var(--rule);
+  position:sticky;top:0;z-index:50;backdrop-filter:blur(16px);
+  background:linear-gradient(180deg,rgba(11,15,28,.94),rgba(11,15,28,.72));
+  border-bottom:1px solid var(--edge);
 }
-.topbar .wrap{display:flex;align-items:center;gap:18px;height:58px}
-.mark{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;letter-spacing:.04em}
-.mark svg{width:24px;height:24px;flex:none}
-.mark b{font-size:15.5px}
-.mark span{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--ink-faint);
-  border:var(--rule);padding:2px 6px;border-radius:3px}
-.topnav{margin-left:auto;display:flex;gap:26px;font-size:13.5px;font-weight:500}
-.topnav a{color:var(--ink-dim);text-decoration:none;position:relative;padding:4px 0;transition:color .18s}
-.topnav a::after{content:'';position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--signal);transition:right .24s ease}
+.topbar .wrap{display:flex;align-items:center;gap:18px;height:64px}
+.mark{display:flex;align-items:center;gap:12px;font-family:var(--display);font-weight:700}
+.mark img{width:26px;height:26px;flex:none;border-radius:6px;display:block}
+.mark b{font-size:17px;color:var(--ink-2);letter-spacing:-.01em}
+/* The application's own chip: a dark field, a hairline, ten-pixel corners. */
+.mark span{
+  font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faintest);
+  background:#0f1428;border:1px solid #2a3150;padding:4px 9px;border-radius:8px;
+}
+.topnav{margin-left:auto;display:flex;gap:26px;font-size:14.5px;font-weight:600}
+.topnav a{color:var(--ink-faint);text-decoration:none;position:relative;padding:5px 0;transition:color .18s}
+.topnav a::after{content:'';position:absolute;left:0;right:100%;bottom:0;height:2px;border-radius:2px;
+  background:var(--signal);transition:right .24s ease}
 .topnav a:hover{color:var(--ink)}
 .topnav a:hover::after{right:0}
 .topbar .mini{
-  font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-  text-decoration:none;color:var(--field);background:var(--signal);padding:8px 14px;border-radius:3px;
-  transition:transform .16s,box-shadow .16s;white-space:nowrap;
+  font-size:14px;font-weight:700;text-decoration:none;white-space:nowrap;
+  color:#fff;background:var(--signal-btn);padding:11px 18px;border-radius:10px;
+  transition:transform .16s,box-shadow .16s,background .16s;
 }
-.topbar .mini:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(90,200,255,.32)}
+.topbar .mini:hover{background:var(--signal-deep);transform:translateY(-1px);
+  box-shadow:0 10px 25px rgba(109,40,217,.45)}
 @media (max-width:880px){.topnav{display:none}}
 
 /* Language switch. Deliberately a sibling of .topnav rather than a child:
    the nav is hidden below 880px, and the switch has to survive that. */
-.langsw{display:flex;flex:none;border:var(--rule);border-radius:3px;overflow:hidden}
+.langsw{display:flex;flex:none;border:1px solid var(--line-2);border-radius:10px;overflow:hidden;background:#0d1224}
 .langsw button{
-  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;
-  background:none;border:0;color:var(--ink-faint);padding:6px 9px;cursor:pointer;
+  font-family:var(--body);font-size:12.5px;font-weight:700;letter-spacing:.08em;
+  background:none;border:0;color:var(--ink-faintest);padding:8px 11px;cursor:pointer;
   transition:color .16s,background .16s;
 }
-.langsw button+button{border-left:var(--rule)}
+.langsw button+button{border-left:1px solid var(--line-2)}
 .langsw button:hover{color:var(--ink)}
-.langsw button[aria-pressed="true"]{background:rgba(90,200,255,.14);color:var(--signal)}
+.langsw button[aria-pressed="true"]{background:var(--signal-wash);color:var(--signal-pale)}
 @media (max-width:880px){.topnav{display:none}.topbar .wrap{gap:12px}}
 
 /* ══ hero ═══════════════════════════════════════════════════════════════ */
-.hero{padding:clamp(54px,9vh,110px) 0 0}
+/* The first screen sits on champion art from Riot's public CDN, and it is
+   *atmosphere*: blurred, darkened and scrimmed until it is a texture in the
+   page's own violet rather than a picture competing with the headline. The
+   panel below it is the thing to look at; this only has to stop the top of the
+   page being a flat colour.
+
+   Chosen for its palette. A green or a red splash behind a violet page reads as
+   two designs stacked; this one is the page's own hue, already. */
+.hero{position:relative;padding:clamp(54px,9vh,110px) 0 0}
+.hero > .wrap{position:relative;z-index:1}
+.hero-bg{
+  position:absolute;top:-8%;left:-4%;width:108%;height:min(820px,116%);
+  /* The page-wide `img{max-width:100%}` applies here too, and it was clamping
+     this one back to 100 % while the -4 % offset stayed -- which left a strip of
+     bare page down the right-hand side where the picture simply stopped. It is
+     the one image on the page that is meant to overflow its container. */
+  max-width:none;
+  object-fit:cover;object-position:50% 62%;
+  filter:blur(6px) saturate(.9) brightness(.62);
+  z-index:0;pointer-events:none;user-select:none;
+  /* The picture *dissolves* rather than ending. Veiling it with a gradient on
+     top could not do this: the veil is measured against the section, which is
+     taller than the image, so wherever the image stopped there was a hard line
+     across the page with the veil only half-way through its fade. Fading the
+     image itself puts the end of the picture and the end of the fade in the
+     same place by construction. */
+  -webkit-mask-image:linear-gradient(180deg,#000 44%,rgba(0,0,0,.55) 74%,transparent 100%);
+          mask-image:linear-gradient(180deg,#000 44%,rgba(0,0,0,.55) 74%,transparent 100%);
+}
+/* Darkest under the words, and fading into the page colour at the bottom so the
+   next section does not begin with an edge. */
+.hero::after{
+  content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:
+    linear-gradient(100deg,rgba(10,13,26,.90) 2%,rgba(10,13,26,.72) 32%,
+                    rgba(10,13,26,.36) 64%,rgba(10,13,26,.66) 100%),
+    linear-gradient(180deg,rgba(10,13,26,.74),rgba(10,13,26,.44) 36%,
+                    rgba(10,13,26,.20) 68%,transparent 92%);
+}
+@media (max-width:760px){
+  .hero-bg{height:min(560px,108%);filter:blur(8px) saturate(.85) brightness(.46)}
+  /* One column, so the text crosses the whole width and the side-to-side scrim
+     no longer protects it. Flat and darker instead. */
+  .hero::after{
+    background:
+      linear-gradient(180deg,rgba(10,13,26,.80),rgba(10,13,26,.60) 42%,
+                      rgba(10,13,26,.34) 74%,transparent 94%);
+  }
+}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,.94fr);gap:clamp(28px,5vw,72px);align-items:end}
-.hero h1{font-size:clamp(40px,7.4vw,86px);margin:22px 0 20px}
+.hero h1{font-size:clamp(40px,7.2vw,82px);margin:22px 0 20px;font-weight:800;letter-spacing:-.03em}
 /* No `white-space:nowrap` here: it kept the phrase on one line, but on a phone
    it widened the grid column past the viewport, and every block on the page was
    then laid out on a canvas wider than the screen and clipped. */
-.hero h1 em{font-style:normal;color:var(--signal);position:relative}
-.hero h1 em::after{content:'';position:absolute;left:0;right:0;bottom:.1em;height:2px;background:var(--signal);opacity:.35}
+.hero h1 em{font-style:normal;color:var(--signal-pale);position:relative}
+.hero h1 em::after{content:'';position:absolute;left:0;right:0;bottom:.06em;height:3px;border-radius:3px;
+  background:var(--signal);opacity:.45}
 .hero-cta{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
 .readout{
-  margin-bottom:30px;padding:15px 17px;border:var(--rule);border-radius:6px;
-  background:rgba(9,11,16,.5);display:grid;gap:7px;
+  margin-bottom:30px;padding:18px 20px;border:1px solid var(--line-2);border-radius:12px;
+  background:rgba(9,12,28,.55);display:grid;gap:10px;
 }
-.readout div{display:flex;align-items:baseline;gap:12px;font-family:var(--mono);font-size:11.5px}
-.readout span{color:var(--ink-faint);letter-spacing:.13em;text-transform:uppercase;min-width:98px}
-.readout b{color:var(--ink-dim);font-weight:500;margin-left:auto;text-align:right}
+.readout div{display:flex;align-items:baseline;gap:12px;font-size:13.5px}
+.readout span{color:var(--ink-faintest);font-weight:600;min-width:104px}
+.readout b{color:var(--ink-2);font-weight:600;margin-left:auto;text-align:right;font-family:var(--mono);font-size:12.5px}
 @media (max-width:980px){.readout{display:none}}
-.side-note{margin:22px 0 0;font-size:14.5px;color:var(--ink-faint);max-width:44ch}
-.specs{display:flex;flex-wrap:wrap;gap:0;margin-top:26px;border-top:var(--rule);border-bottom:var(--rule)}
-.specs div{padding:13px 20px 13px 0;margin-right:20px;border-right:var(--rule);flex:1 1 auto}
+.side-note{margin:22px 0 0;font-size:14.5px;color:var(--ink-faintest);max-width:44ch}
+.specs{display:flex;flex-wrap:wrap;gap:0;margin-top:26px;border-top:1px solid var(--edge);border-bottom:1px solid var(--edge)}
+.specs div{padding:15px 22px 15px 0;margin-right:22px;border-right:1px solid var(--edge);flex:1 1 auto}
 .specs div:last-child{border-right:0;margin-right:0}
-.specs dt{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)}
-.specs dd{margin:3px 0 0;font-family:var(--display);font-size:17px;font-weight:600}
+.specs dt{font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faintest)}
+.specs dd{margin:4px 0 0;font-family:var(--display);font-size:18px;font-weight:700;color:var(--ink-2)}
 
 /* the big button */
 .btn{
-  --accent:var(--signal);
   position:relative;display:inline-flex;align-items:center;gap:16px;overflow:hidden;
-  padding:19px 30px;border-radius:5px;text-decoration:none;isolation:isolate;
-  background:linear-gradient(140deg,#7ad4ff,#3badf0 60%,#2b93d6);
-  color:#04141f;box-shadow:0 14px 40px -12px rgba(90,200,255,.6),inset 0 1px 0 rgba(255,255,255,.4);
-  transition:transform .18s cubic-bezier(.2,.8,.3,1),box-shadow .18s;
+  padding:19px 30px;border-radius:12px;text-decoration:none;isolation:isolate;
+  background:var(--signal-btn);color:#fff;
+  box-shadow:0 16px 40px -14px rgba(109,40,217,.85),inset 0 1px 0 rgba(255,255,255,.14);
+  transition:transform .18s cubic-bezier(.2,.8,.3,1),box-shadow .18s,background .18s;
 }
-.btn:hover{transform:translateY(-2px);box-shadow:0 20px 52px -12px rgba(90,200,255,.72),inset 0 1px 0 rgba(255,255,255,.5)}
+.btn:hover{background:var(--signal-deep);transform:translateY(-2px);
+  box-shadow:0 22px 54px -14px rgba(124,58,237,.95),inset 0 1px 0 rgba(255,255,255,.2)}
 .btn:active{transform:translateY(0)}
 .btn::after{ /* sweep */
   content:'';position:absolute;inset:0;z-index:-1;
-  background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);
+  background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.30) 50%,transparent 70%);
   transform:translateX(-120%);
 }
 .btn:hover::after{animation:sweep .8s ease}
 @keyframes sweep{to{transform:translateX(120%)}}
 .btn .ico{width:26px;height:26px;flex:none}
-.btn b{display:block;font-family:var(--display);font-size:19px;font-weight:700;letter-spacing:.01em;line-height:1.1}
-.btn small{display:block;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.11em;text-transform:uppercase;opacity:.72;margin-top:3px}
+.btn b{display:block;font-family:var(--display);font-size:19px;font-weight:700;line-height:1.15}
+.btn small{display:block;font-size:12px;font-weight:600;letter-spacing:.06em;opacity:.8;margin-top:2px}
 .btn-ghost{
-  display:inline-flex;align-items:center;gap:9px;padding:18px 22px;border:1px solid var(--line-strong);
-  border-radius:5px;text-decoration:none;font-family:var(--display);font-weight:600;font-size:15px;
-  color:var(--ink);transition:border-color .18s,background .18s,transform .18s;
+  display:inline-flex;align-items:center;gap:10px;padding:18px 24px;
+  border:1px solid var(--line-2);border-radius:12px;background:#0d1224;
+  text-decoration:none;font-family:var(--display);font-weight:600;font-size:16px;
+  color:var(--ink-2);transition:border-color .18s,background .18s,transform .18s;
 }
-.btn-ghost:hover{border-color:var(--signal);background:rgba(90,200,255,.07);transform:translateY(-2px)}
+.btn-ghost:hover{border-color:var(--line-strong);background:#141a2e;transform:translateY(-2px)}
 
-/* ══ the live bar — signature piece ════════════════════════════════════ */
+/* ══ the live bar — signature piece ════════════════════════════════════
+   The one panel on the page that is a picture of the product rather than of
+   the page, so it keeps the tinted ground the application gives its own
+   figures. */
 .demo{margin-top:clamp(46px,8vh,86px);position:relative}
 .demo-frame{
-  position:relative;border:var(--rule);border-radius:10px;overflow:hidden;
-  background:
-    linear-gradient(180deg,rgba(20,25,36,.9),rgba(9,11,16,.94)),
-    repeating-linear-gradient(90deg,rgba(255,255,255,.02) 0 1px,transparent 1px 42px);
-  box-shadow:0 40px 90px -50px rgba(0,0,0,.9);
+  position:relative;border:1px solid var(--hero-edge);border-radius:14px;overflow:hidden;
+  background:linear-gradient(100deg,var(--hero-a) 0%,var(--hero-b) 42%,var(--hero-c) 100%);
+  box-shadow:0 44px 100px -56px rgba(0,0,0,.95);
 }
 .demo-chrome{
-  display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:var(--rule);
-  font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);
+  display:flex;align-items:center;gap:11px;padding:12px 18px;border-bottom:1px solid rgba(43,47,85,.8);
+  font-size:12.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faintest);
 }
-.demo-chrome i{width:7px;height:7px;border-radius:50%;background:var(--ink-faint);opacity:.5;flex:none}
-.demo-chrome i.on{background:var(--ready);opacity:1;box-shadow:0 0 9px var(--ready)}
-.demo-chrome span{margin-left:auto;color:var(--ink-faint)}
-.demo-stage{position:relative;height:clamp(190px,26vw,250px);padding:26px 22px 0;
-  background:radial-gradient(120% 130% at 50% 0%,rgba(90,200,255,.07),transparent 60%)}
+.demo-chrome i{width:9px;height:9px;border-radius:50%;background:var(--ink-faintest);opacity:.5;flex:none}
+.demo-chrome i.on{background:var(--signal);opacity:1;box-shadow:0 0 10px rgba(139,92,246,.9)}
+.demo-chrome span{margin-left:auto;color:var(--ink-faintest);letter-spacing:.04em;text-transform:none;font-weight:500}
+/* The stage is a *screen*, not a card: a game behind, the bar where the bar
+   actually goes (top centre), the chat line where the chat actually is (bottom
+   left). Drawn that way the panel stops being a widget on a page and starts
+   being a picture of what you will see in your own game -- which is the only
+   job this piece has.
 
-/* the bar as the app draws it: a hairline track with markers riding it */
-.bar{
-  position:relative;height:74px;border-radius:9px;
-  background:rgba(14,16,22,.5);border:1px solid rgba(120,140,175,.16);
-  backdrop-filter:blur(2px);
+   The ground is champion art from Riot's public CDN, blurred and darkened until
+   it is atmosphere rather than a subject: the eye has to land on the countdowns,
+   and any detail behind them is competition. */
+.demo-stage{
+  position:relative;overflow:hidden;isolation:isolate;
+  height:clamp(212px,26vw,272px);background:#080a12;
 }
-.bar-track{position:absolute;left:26px;right:26px;top:20px;height:1px;background:var(--line-strong)}
-.bar-track::before,.bar-track::after{content:'';position:absolute;top:-3px;width:1px;height:7px;background:var(--line-strong)}
-.bar-track::before{left:0}.bar-track::after{right:0}
+.demo-shot{
+  position:absolute;inset:-8%;width:116%;height:116%;object-fit:cover;
+  filter:blur(6px) saturate(.78) brightness(.52);transform:scale(1.04);
+  z-index:0;
+}
+/* Two washes over it: a violet one to tie the picture to the page, and a
+   vignette so nothing bright reaches the edges and fights the frame. */
+.demo-stage::after{
+  content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:
+    radial-gradient(120% 100% at 50% 0%,rgba(139,92,246,.16),transparent 60%),
+    radial-gradient(100% 120% at 50% 100%,rgba(6,10,26,.92),rgba(6,10,26,.30) 55%),
+    linear-gradient(180deg,rgba(6,10,26,.45),transparent 30%);
+}
+.demo-screen{position:absolute;inset:0;z-index:2}
+
+/* The bar, at the app's own values: a translucent panel, a hairline track, and
+   portraits centred *on* the track rather than hanging under it. */
+.bar{
+  position:absolute;left:50%;top:22px;transform:translateX(-50%);
+  width:min(620px,92%);height:80px;border-radius:9px;
+  background:rgba(14,16,22,.52);border:1px solid rgba(96,110,140,.34);
+  backdrop-filter:blur(3px);
+  box-shadow:0 18px 40px -28px rgba(0,0,0,.9);
+}
+.bar-track{
+  position:absolute;left:32px;right:32px;top:33px;height:2px;border-radius:1px;
+  background:rgba(140,152,175,.45);
+}
+/* The arrival end, the one piece of the rail that means something. */
+.bar-track::after{
+  content:'';position:absolute;right:0;top:0;height:2px;width:58px;border-radius:1px;
+  background:rgba(52,211,153,.55);
+}
 /* No transition on `left`: the position is recomputed every frame, and a
    transition would fight each update instead of smoothing anything. */
-.marker{position:absolute;top:14px;transform:translateX(-50%);text-align:center;transition:opacity .5s ease}
-.token{position:relative;width:34px;height:34px;margin-inline:auto}
-.token .disc{
-  width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
-  background:conic-gradient(from 210deg,#243044,#101620 55%,#2b3849);
-  border:1px solid rgba(140,160,195,.45);
-  font-family:var(--display);font-size:12.5px;font-weight:700;color:#cfe0f5;letter-spacing:.02em;
+.marker{position:absolute;top:12px;transform:translateX(-50%);text-align:center;transition:opacity .5s ease}
+.token{position:relative;width:44px;height:44px;margin-inline:auto}
+.token .face{
+  width:44px;height:44px;border-radius:50%;display:block;object-fit:cover;
+  background:linear-gradient(160deg,#241a4d,#141a2e);
 }
-.token.ready .disc{border-color:var(--ready);box-shadow:0 0 0 1px rgba(110,226,142,.35),0 0 16px -4px var(--ready)}
+/* The ring is its own element so the portrait can be a plain image: a border on
+   the image itself would be clipped by the same radius that rounds it. */
+.token .ring{
+  position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(96,110,140,.75);
+  transition:border-color .25s,box-shadow .25s;
+}
+.token.ready .ring{border-color:var(--ready);box-shadow:0 0 0 1px rgba(52,211,153,.4),0 0 20px -4px var(--ready)}
 .token .badge{
-  position:absolute;right:-7px;bottom:-3px;width:17px;height:17px;border-radius:50%;
-  display:grid;place-items:center;background:#0d1119;border:1px solid rgba(140,160,195,.5);
-  font-family:var(--mono);font-size:8.5px;font-weight:700;color:var(--signal);
+  position:absolute;right:-10px;bottom:-1px;width:30px;height:30px;border-radius:50%;
+  display:block;object-fit:cover;background:#0e1116;
+  border:1.5px solid rgba(20,24,34,.95);box-shadow:0 0 0 1px rgba(96,110,140,.5);
 }
+/* Champion initials, for a portrait that failed to load -- an empty circle would
+   read as a broken page, and the CDN is not this site's to promise. */
+.token .fallback{
+  position:absolute;inset:0;display:none;place-items:center;border-radius:50%;
+  font-family:var(--display);font-size:15px;font-weight:800;color:#ddd6fe;
+}
+.token.noart .face{display:none}
+.token.noart .fallback{display:grid}
 .marker .time{
-  display:block;margin-top:5px;font-family:var(--mono);font-size:12.5px;font-weight:700;
-  color:var(--ink);text-shadow:0 1px 2px #000;
+  display:block;margin-top:4px;line-height:1;
+  /* Bahnschrift is the face the application itself uses for its countdowns, and
+     it is on every Windows machine -- which is every machine this program runs
+     on. Elsewhere the mono is the fallback. Tabular figures either way, or the
+     number twitches as its digits change width. */
+  font-family:Bahnschrift,"DIN Alternate",var(--mono),monospace;
+  font-variant-numeric:tabular-nums;
+  font-size:15px;font-weight:700;letter-spacing:.01em;
+  color:var(--ink-2);text-shadow:0 1px 3px rgba(0,0,0,.95);
 }
-.marker.soon .time{color:var(--soon)}
+.marker.far .time{color:var(--far)}
+.marker.mid .time{color:var(--mid)}
+.marker.near .time{color:var(--near)}
 .marker.rdy .time{color:var(--ready)}
-.demo-caption{
-  position:absolute;left:22px;right:22px;bottom:18px;display:flex;flex-wrap:wrap;gap:8px 18px;
-  font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-faint);
-}
-.demo-caption b{color:var(--ink-dim);font-weight:500}
+
+/* The line the game writes, where the game writes it. */
 .chatline{
-  margin:18px 0 0;padding:11px 14px;border:var(--rule);border-left:2px solid var(--signal);
-  border-radius:4px;background:rgba(9,11,16,.6);
-  font-family:var(--mono);font-size:12.5px;color:var(--ink-dim);overflow-x:auto;white-space:nowrap;
+  position:absolute;left:20px;bottom:16px;max-width:min(72%,560px);
+  margin:0;padding:9px 14px;border-radius:8px;border:1px solid rgba(96,110,140,.22);
+  border-left:3px solid var(--signal);
+  background:rgba(6,9,18,.72);backdrop-filter:blur(2px);
+  font-family:var(--mono);font-size:12.5px;line-height:1.5;color:var(--ink-dim);
+  overflow-x:auto;white-space:nowrap;
 }
 .chatline u{text-decoration:none;color:var(--danger);font-weight:700}
-.chatline b{color:var(--ink);font-weight:700}
+.chatline b{color:var(--ink-2);font-weight:700}
+/* Outside the screen: the caption explains the picture and is not part of it. */
+.demo-caption{
+  display:flex;flex-wrap:wrap;gap:8px 18px;padding:14px 20px;
+  border-top:1px solid rgba(43,47,85,.8);background:rgba(8,11,24,.6);
+  font-size:13px;color:var(--ink-faintest);
+}
+.demo-caption b{color:var(--ink-dim);font-weight:600}
+
+/* ══ the three displays ════════════════════════════════════════════════
+   Each figure is the real thing at rest: the same three champions, the same
+   three cooldowns, drawn three ways. Built from the page's own elements rather
+   than from screenshots so it stays sharp at any zoom and follows the palette
+   -- and so the colours are the *product's* colours, which is half of what the
+   section is explaining. */
+.displays{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:8px}
+.disp{margin:0;border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
+.disp-art{
+  position:relative;height:132px;display:grid;place-items:center;
+  background:radial-gradient(120% 120% at 50% 0%,rgba(139,92,246,.10),transparent 62%),var(--sunken);
+  border-bottom:1px solid var(--line);
+}
+.disp figcaption{padding:18px 20px 20px}
+.disp h3{font-family:var(--display);font-size:19px;font-weight:700;margin:0 0 8px}
+.disp p{margin:0;font-size:14.5px;line-height:1.6;color:var(--ink-faint)}
+.disp .tag{
+  display:inline-block;margin-bottom:10px;padding:3px 9px;border-radius:99px;
+  font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--signal-pale);background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.3);
+}
+
+/* Shared bits of the figures. `--p` is how far through the cooldown, 0 to 1, and
+   the only number that changes between the three drawings. */
+.fig-face{width:34px;height:34px;border-radius:50%;display:block;background:#1a1f33}
+.fig-badge{
+  position:absolute;right:-7px;bottom:-1px;width:22px;height:22px;border-radius:50%;
+  display:block;background:#0e1116;border:1.5px solid var(--card);
+  box-shadow:0 0 0 1px rgba(96,110,140,.45);
+}
+.fig-tok{position:relative;width:34px;height:34px}
+.fig-time{
+  font-family:Bahnschrift,"DIN Alternate",var(--mono),monospace;
+  font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:700;line-height:1;
+}
+.is-far{color:var(--far)}.is-mid{color:var(--mid)}.is-near{color:var(--near)}
+.is-rdy{color:var(--ready)}
+
+/* 1. the track */
+.fig-bar{position:relative;width:86%;height:66px;border-radius:8px;
+  background:rgba(14,16,22,.5);border:1px solid rgba(96,110,140,.3)}
+.fig-bar .rail{position:absolute;left:22px;right:22px;top:28px;height:2px;border-radius:1px;
+  background:rgba(140,152,175,.4)}
+.fig-bar .rail::after{content:'';position:absolute;right:0;top:0;width:26px;height:2px;
+  border-radius:1px;background:rgba(52,211,153,.55)}
+.fig-bar .m{position:absolute;top:11px;transform:translateX(-50%);text-align:center}
+.fig-bar .fig-time{display:block;margin-top:3px;line-height:1}
+
+/* 2. the cards. The ring is a conic gradient masked to an annulus: no SVG, no
+   extra request, and it turns clockwise from the top exactly as the app's does. */
+.fig-cards{display:flex;gap:18px;align-items:flex-start}
+.fig-card{text-align:center}
+.fig-ring{
+  position:relative;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;
+  background:conic-gradient(var(--ring) calc(var(--p) * 360deg),rgba(140,152,175,.28) 0);
+  -webkit-mask:none;
+}
+.fig-ring::before{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--sunken)}
+.fig-ring .fig-tok{position:relative;z-index:1}
+.fig-card .fig-time{display:block;margin-top:5px}
+
+/* 3. the rows */
+.fig-rows{width:88%;display:grid;gap:4px}
+.fig-row{
+  display:grid;grid-template-columns:24px 18px 1fr auto;align-items:center;gap:8px;
+  padding:4px 8px 6px;border-radius:6px;background:rgba(255,255,255,.035);position:relative;
+}
+.fig-row .fig-face{width:24px;height:24px}
+.fig-row .sp{width:18px;height:18px;border-radius:50%;display:block;background:#0e1116;
+  box-shadow:0 0 0 1px rgba(96,110,140,.45)}
+.fig-row .nm{font-size:12px;font-weight:600;color:var(--ink-2)}
+.fig-row .gauge{position:absolute;left:8px;right:8px;bottom:2px;height:2px;border-radius:1px;
+  background:rgba(140,152,175,.3);overflow:hidden}
+.fig-row .gauge i{display:block;height:100%;width:calc(var(--p) * 100%);background:var(--ring)}
+
+/* The rest of what the display settings can do -- worth listing, not worth a
+   figure each. */
+.disp-more{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px 26px;
+  margin-top:26px;padding:22px 24px;border:1px solid var(--line);border-radius:14px;
+  background:var(--card-2);
+}
+.disp-more div{font-size:14.5px;line-height:1.6;color:var(--ink-faint)}
+.disp-more b{display:block;color:var(--ink-2);font-family:var(--display);font-weight:700;
+  font-size:15.5px;margin-bottom:3px}
+
+/* ══ the spell table ═══════════════════════════════════════════════════
+   The numbers the program counts from, with the icons the game draws them
+   with -- taken from src/cooldowns.py rather than retyped, so the page cannot
+   claim a cooldown the program does not use. */
+.spells{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px;
+  margin-top:26px;
+}
+.spell{
+  display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:12px;
+  padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);
+}
+.spell img{width:38px;height:38px;border-radius:9px;display:block;background:#0e1116}
+.spell b{font-family:var(--display);font-size:15px;font-weight:700;color:var(--ink-2)}
+.spell .cds{text-align:right;line-height:1.25}
+.spell .base{
+  display:block;font-family:Bahnschrift,"DIN Alternate",var(--mono),monospace;
+  font-variant-numeric:tabular-nums;font-size:15px;font-weight:700;color:var(--ink);
+}
+.spell .haste{display:block;font-family:var(--mono);font-size:11.5px;color:var(--ready)}
+.spells-note{margin-top:14px;font-size:13.5px;color:var(--ink-faintest)}
+.spells-note b{color:var(--ready);font-weight:700}
+
+/* ══ the closing band ══════════════════════════════════════════════════
+   Ten portraits, decoration and nothing else -- so they are dimmed until the
+   pointer is on one, and they carry no alt text for a screen reader to read
+   out as ten meaningless names. */
+.champ-band{
+  display:flex;flex-wrap:wrap;justify-content:center;gap:10px;
+  margin:0 auto 30px;max-width:640px;
+}
+.champ-band img{
+  width:52px;height:52px;border-radius:50%;display:block;
+  border:1px solid var(--line-2);opacity:.55;filter:saturate(.75);
+  transition:opacity .25s,filter .25s,transform .25s;
+}
+.champ-band img:hover{opacity:1;filter:none;transform:translateY(-3px)}
+@media (max-width:560px){ .champ-band img{width:42px;height:42px} }
+
+/* ══ the guided first run ══════════════════════════════════════════════ */
+.guide-card{
+  margin-bottom:34px;padding:24px 26px;border:1px solid rgba(139,92,246,.28);border-radius:14px;
+  background:linear-gradient(120deg,rgba(139,92,246,.10),rgba(139,92,246,.02) 60%),var(--card);
+}
+.guide-card h3{font-family:var(--display);font-size:20px;font-weight:700;margin:0 0 8px}
+.guide-card p{margin:0;font-size:15px;line-height:1.65;color:var(--ink-faint);max-width:70ch}
+.guide-steps{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;align-items:center}
+.guide-steps span{
+  display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:99px;
+  border:1px solid var(--line-2);background:var(--sunken);
+  font-size:13px;font-weight:600;color:var(--ink-dim);
+}
+.guide-steps span i{
+  font-style:normal;font-family:var(--mono);font-size:11px;font-weight:700;
+  color:var(--signal-pale);
+}
+.guide-steps u{text-decoration:none;color:var(--ink-faintest);font-size:13px}
+
+@media (max-width:900px){
+  .displays{grid-template-columns:1fr;gap:16px}
+  .disp-art{height:120px}
+}
 @media (max-width:980px){
   .hero-grid{grid-template-columns:1fr;align-items:start;gap:34px}
 }
 /* Phones: the demo panel stops being a fixed-height stage with an absolutely
    positioned caption -- both would overlap once the text wraps. */
+/* Phones. The screen keeps its proportions -- it is a picture, and a picture
+   that reflows is no longer the same picture -- but everything inside it comes
+   down a size, and the chat line stops trying to hold a full sentence on one
+   line at 340 px wide. */
 @media (max-width:760px){
-  .demo-stage{height:auto;padding:20px 14px 18px}
-  .chatline{white-space:normal;overflow-x:visible}
-  .demo-caption{position:static;left:auto;right:auto;bottom:auto;margin-top:14px;display:grid;gap:6px}
+  .demo-stage{height:clamp(200px,54vw,250px)}
+  .bar{top:16px;width:94%;height:70px}
+  .bar-track{left:22px;right:22px;top:29px}
+  .bar-track::after{width:38px}
+  .marker{top:12px}
+  .token,.token .face{width:36px;height:36px}
+  .token .badge{width:24px;height:24px;right:-8px}
+  .token .fallback{font-size:13px}
+  .marker .time{font-size:12.5px}
+  .chatline{left:12px;right:12px;bottom:12px;max-width:none;font-size:11px;padding:7px 10px}
+  .demo-caption{display:grid;gap:6px;padding:12px 14px}
   .demo-chrome em{display:none}
-  .bar{height:78px}
-  .marker .time{font-size:11.5px}
 }
 /* Long unbroken strings (paths, chat lines) must never widen the page. */
 body{overflow-wrap:break-word}
@@ -269,10 +580,10 @@ pre,code,.mono{overflow-wrap:normal}
 
 /* ══ sections ═══════════════════════════════════════════════════════════ */
 section{position:relative;padding:clamp(58px,9vh,108px) 0}
-section+section{border-top:var(--rule)}
+section+section{border-top:1px solid var(--edge)}
 .sec-head{display:grid;grid-template-columns:auto 1fr;gap:clamp(20px,4vw,58px);align-items:start;margin-bottom:clamp(32px,5vw,58px)}
-.sec-num{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.18em;color:var(--ink-faint);
-  padding-top:10px;border-top:2px solid var(--signal)}
+.sec-num{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--signal-pale);
+  padding-top:12px;border-top:3px solid var(--signal);border-radius:2px}
 .sec-head p{margin-top:14px}
 
 /* ══ rules band ═════════════════════════════════════════════════════════
@@ -280,184 +591,216 @@ section+section{border-top:var(--rule)}
    first question a player has and the last thing they should have to hunt
    for. Tinted rather than boxed: a warning-coloured panel would create the
    alarm it is there to remove. */
-.rules{background:linear-gradient(180deg,rgba(90,200,255,.05),transparent 72%)}
-.rules-head{display:flex;gap:15px;align-items:flex-start}
-.rules-head>svg{width:27px;height:27px;flex:none;margin-top:6px;
-  stroke:var(--signal);stroke-width:1.4;fill:none}
+.rules{background:linear-gradient(180deg,rgba(124,58,237,.09),transparent 74%)}
+.rules-head{display:flex;gap:20px;align-items:flex-start}
+/* The application's icon tile, at the size it uses on a card. */
+.rules-head>svg{
+  width:52px;height:52px;flex:none;padding:12px;border-radius:12px;
+  background:var(--tile);border:1px solid var(--tile-edge);
+  stroke:var(--signal-pale);stroke-width:1.6;fill:none;
+}
 .rules h2{font-size:clamp(25px,3.4vw,37px)}
 .rules .lede{margin:14px 0 0}
 .rules-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));
-  gap:1px;background:var(--line);margin-top:clamp(28px,4vw,42px)}
-.rules-grid>div{background:var(--field);padding:clamp(19px,2.4vw,26px)}
-.rules-grid h3{margin:0 0 9px;color:var(--ink)}
-.rules-grid p{margin:0;color:var(--ink-dim);font-size:14.8px}
-.rules-foot{margin:26px 0 0;font-size:14px;color:var(--ink-faint);max-width:86ch}
-.rules-foot a{color:var(--signal)}
+  gap:14px;margin-top:clamp(28px,4vw,42px)}
+.rules-grid>div{
+  background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:clamp(19px,2.4vw,24px);transition:border-color .18s,transform .18s;
+}
+.rules-grid>div:hover{border-color:var(--line-strong);transform:translateY(-2px)}
+.rules-grid h3{margin:0 0 9px}
+.rules-grid p{margin:0;color:var(--ink-dim);font-size:15px}
+.rules-foot{margin:26px 0 0;font-size:14.5px;color:var(--ink-faintest);max-width:86ch}
+.rules-foot a{color:var(--signal-pale)}
 
 /* feature triptych */
-.tri{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;background:var(--line)}
-.tri>div{background:var(--field);padding:clamp(22px,3vw,34px);position:relative}
-.tri .n{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--signal)}
+.tri{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.tri>div{
+  background:linear-gradient(160deg,#161135 0%,#0f1226 100%);
+  border:1px solid var(--hero-edge);border-radius:14px;
+  padding:clamp(22px,3vw,30px);position:relative;transition:border-color .18s,transform .18s;
+}
+.tri>div:hover{border-color:#3f4585;transform:translateY(-3px)}
+.tri .n{font-family:var(--mono);font-size:12px;letter-spacing:.1em;color:var(--signal-pale)}
 .tri h3{margin:14px 0 10px}
-.tri p{color:var(--ink-dim);font-size:15px;margin:0}
-.tri .glyph{width:30px;height:30px;margin-bottom:18px;stroke:var(--signal);stroke-width:1.4;fill:none}
+.tri p{color:var(--ink-dim);font-size:15.2px;margin:0}
+.tri .glyph{
+  width:52px;height:52px;padding:13px;margin-bottom:20px;border-radius:12px;
+  background:var(--tile);border:1px solid var(--tile-edge);
+  stroke:var(--signal-pale);stroke-width:1.6;fill:none;
+}
 
 /* install steps */
-.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:clamp(18px,2.4vw,26px);counter-reset:s}
-.step{position:relative;padding:26px 24px 24px;border:var(--rule);border-radius:8px;background:var(--panel)}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:clamp(18px,2.4vw,22px);counter-reset:s}
+.step{position:relative;padding:26px 24px 24px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .step::before{
   counter-increment:s;content:counter(s,decimal-leading-zero);
-  font-family:var(--display);font-size:54px;font-weight:700;line-height:.8;
-  color:transparent;-webkit-text-stroke:1px rgba(120,140,175,.4);display:block;margin-bottom:16px;
+  font-family:var(--display);font-size:15px;font-weight:800;line-height:1;
+  color:var(--signal-pale);background:var(--signal-wash);border:1px solid var(--signal-btn);
+  border-radius:10px;padding:9px 12px;display:inline-block;margin-bottom:18px;
 }
 .step h3{margin-bottom:9px}
-.step p{color:var(--ink-dim);font-size:15px;margin:0}
+.step p{color:var(--ink-dim);font-size:15.2px;margin:0}
 .step p+p{margin-top:9px}
 .step kbd{
-  font-family:var(--mono);font-size:12px;background:rgba(90,200,255,.1);border:1px solid rgba(90,200,255,.3);
-  border-bottom-width:2px;border-radius:4px;padding:1px 6px;color:#bfe6ff;white-space:nowrap;
+  font-family:var(--mono);font-size:12.5px;background:var(--signal-wash);
+  border:1px solid var(--signal-btn);border-radius:6px;padding:2px 7px;color:#e9e6fb;white-space:nowrap;
 }
 .note{
-  display:flex;gap:13px;margin-top:26px;padding:16px 18px;border-radius:6px;
-  border:1px solid rgba(255,176,74,.34);background:rgba(255,176,74,.06);font-size:14.5px;color:#f2dcbd;
+  display:flex;gap:14px;margin-top:26px;padding:18px 20px;border-radius:12px;
+  border:1px solid rgba(245,158,11,.34);background:rgba(245,158,11,.07);font-size:15px;color:#f3e0c2;
 }
-.note svg{width:19px;height:19px;flex:none;margin-top:2px;stroke:var(--soon);stroke-width:1.6;fill:none}
+.note svg{width:20px;height:20px;flex:none;margin-top:3px;stroke:var(--soon);stroke-width:1.8;fill:none}
 .note b{color:#ffd9a3}
 
 /* config: fake settings panel + prose */
 .cfg{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:clamp(26px,4vw,56px);align-items:start}
 @media (max-width:900px){.cfg{grid-template-columns:1fr}}
-.win{border:var(--rule);border-radius:9px;overflow:hidden;background:linear-gradient(180deg,#12161f,#0c0f15);
-  box-shadow:0 30px 70px -40px #000;position:sticky;top:82px}
-.win-bar{display:flex;align-items:center;gap:8px;padding:10px 13px;border-bottom:var(--rule);
-  font-family:var(--display);font-size:12.5px;font-weight:600;letter-spacing:.03em;color:var(--ink-dim)}
-.win-bar i{width:8px;height:8px;border-radius:2px;background:rgba(140,160,195,.35)}
-.win-tabs{display:flex;gap:2px;padding:9px 10px 0;border-bottom:var(--rule)}
-.win-tabs span{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
-  padding:7px 11px;color:var(--ink-faint);border:var(--rule);border-bottom:0;border-radius:4px 4px 0 0}
-.win-tabs span.on{color:var(--signal);border-color:var(--line-strong);background:rgba(90,200,255,.07)}
-.win-body{padding:16px 15px 18px;display:grid;gap:11px}
-.row{display:flex;align-items:center;gap:11px;font-size:14px;color:var(--ink-dim)}
-.row .sw{width:34px;height:18px;border-radius:9px;background:rgba(120,140,175,.22);position:relative;flex:none}
-.row .sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--ink-faint);transition:.2s}
-.row.on .sw{background:rgba(90,200,255,.32)}
-.row.on .sw::after{left:18px;background:var(--signal)}
-.row .val{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink)}
-.row .sel{margin-left:auto;font-family:var(--mono);font-size:11.5px;border:var(--rule);border-radius:4px;
-  padding:3px 9px;color:var(--ink);background:rgba(255,255,255,.03)}
-.win-foot{border-top:var(--rule);padding:10px 14px;font-family:var(--mono);font-size:10.5px;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+/* A small portrait of the real window, in the real window's parts: a title
+   bar, a rail, switches on a violet track. */
+.win{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card);
+  box-shadow:0 36px 80px -50px #000;position:sticky;top:88px}
+.win-bar{display:flex;align-items:center;gap:9px;padding:13px 16px;background:#0d1120;
+  border-bottom:1px solid #1a2036;font-family:var(--display);font-size:13.5px;font-weight:600;color:var(--ink-2)}
+.win-bar i{width:9px;height:9px;border-radius:50%;background:var(--signal);box-shadow:0 0 10px rgba(139,92,246,.8)}
+.win-tabs{display:flex;gap:6px;padding:12px 12px 0}
+.win-tabs span{
+  font-size:12px;font-weight:600;padding:8px 12px;color:var(--ink-faintest);
+  border:1px solid transparent;border-radius:10px;
+}
+.win-tabs span.on{color:#fff;font-weight:700;background:#1a1440;border-color:#3a2c7a}
+.win-body{padding:14px 14px 16px;display:grid;gap:12px}
+.row{display:flex;align-items:center;gap:14px;font-size:14.5px;color:var(--ink-dim)}
+.row .sw{width:44px;height:24px;border-radius:100px;background:#2a3150;position:relative;flex:none;transition:background .2s}
+.row .sw::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+  background:#fff;transition:left .2s}
+.row.on .sw{background:var(--signal-deep)}
+.row.on .sw::after{left:23px}
+.row .val{margin-left:auto;font-family:var(--mono);font-size:12.5px;color:var(--ink-2)}
+.row .sel{margin-left:auto;font-size:13px;border:1px solid var(--line-2);border-radius:8px;
+  padding:5px 11px;color:var(--ink-2);background:var(--sunken)}
+.win-foot{border-top:1px solid var(--line);padding:12px 16px;font-size:12px;
+  letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--ink-faintest)}
 .cfg dl{margin:0;display:grid;gap:0}
-.cfg dl>div{padding:20px 0;border-bottom:var(--rule)}
+.cfg dl>div{padding:22px 0;border-bottom:1px solid var(--edge)}
 .cfg dl>div:first-child{padding-top:0}
-.cfg dt{font-family:var(--display);font-size:17.5px;font-weight:600;display:flex;align-items:baseline;gap:11px}
-.cfg dt em{font-family:var(--mono);font-style:normal;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--signal);border:1px solid rgba(90,200,255,.3);border-radius:3px;padding:2px 7px}
-.cfg dt em.opt{color:var(--ink-faint);border-color:var(--line)}
-.cfg dd{margin:9px 0 0;color:var(--ink-dim);font-size:15.2px}
+.cfg dt{font-family:var(--display);font-size:18.5px;font-weight:700;color:var(--ink);display:flex;align-items:baseline;gap:12px}
+.cfg dt em{
+  font-family:var(--body);font-style:normal;font-size:11.5px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--signal-pale);background:var(--signal-wash);
+  border:1px solid var(--signal-btn);border-radius:8px;padding:3px 9px;
+}
+.cfg dt em.opt{color:var(--ink-faintest);background:#0d1224;border-color:var(--line-2)}
+.cfg dd{margin:10px 0 0;color:var(--ink-dim);font-size:15.5px}
 
 /* anatomy diagram */
-.anatomy{border:var(--rule);border-radius:9px;background:rgba(9,11,16,.66);padding:clamp(20px,3vw,32px);overflow-x:auto}
-.anatomy pre{margin:0;font-family:var(--mono);font-size:13px;line-height:1.85;color:var(--ink-dim);white-space:pre}
-.anatomy pre b{color:var(--ink)}
+.anatomy{border:1px solid var(--line);border-radius:12px;background:var(--sunken);
+  padding:clamp(20px,3vw,30px);overflow-x:auto}
+.anatomy pre{margin:0;font-family:var(--mono);font-size:13px;line-height:1.9;color:var(--ink-dim);white-space:pre}
+.anatomy pre b{color:var(--ink-2)}
 .anatomy pre u{text-decoration:none;color:var(--danger);font-weight:700}
-.anatomy pre i{font-style:normal;color:var(--signal)}
+.anatomy pre i{font-style:normal;color:var(--signal-pale)}
 .anatomy pre s{text-decoration:none;color:var(--ready)}
-.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--line);margin-top:26px}
-.flow>div{background:var(--field);padding:16px 14px}
-.flow .t{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}
-.flow .v{font-family:var(--display);font-size:15.5px;font-weight:600;margin-top:5px}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:26px}
+.flow>div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 16px}
+.flow .t{font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faintest)}
+.flow .v{font-family:var(--display);font-size:16px;font-weight:700;color:var(--ink-2);margin-top:6px}
 
 /* safety */
-.safe{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:clamp(20px,3vw,30px)}
-.safe ul{list-style:none;margin:0;padding:0;display:grid;gap:12px}
-.safe li{display:flex;gap:12px;font-size:15.2px;color:var(--ink-dim)}
-.safe li svg{width:17px;height:17px;flex:none;margin-top:4px;stroke-width:2;fill:none}
+.safe{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:clamp(20px,3vw,26px)}
+.safe>div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:clamp(20px,2.6vw,26px)}
+.safe ul{list-style:none;margin:0;padding:0;display:grid;gap:13px}
+.safe li{display:flex;gap:13px;font-size:15.2px;color:var(--ink-dim)}
+.safe li svg{width:18px;height:18px;flex:none;margin-top:4px;stroke-width:2.2;fill:none}
 .safe .no li svg{stroke:var(--danger)}
 .safe .yes li svg{stroke:var(--ready)}
-.safe h3{margin-bottom:16px;display:flex;align-items:center;gap:10px}
-.safe h3 span{font-family:var(--mono);font-size:10px;letter-spacing:.14em;padding:3px 8px;border-radius:3px}
-.safe .no h3 span{color:var(--danger);background:rgba(255,107,107,.11);border:1px solid rgba(255,107,107,.3)}
-.safe .yes h3 span{color:var(--ready);background:rgba(110,226,142,.1);border:1px solid rgba(110,226,142,.3)}
+.safe h3{margin-bottom:18px;display:flex;align-items:center;gap:12px}
+.safe h3 span{font-size:11.5px;font-weight:700;letter-spacing:.1em;padding:4px 10px;border-radius:8px}
+.safe .no h3 span{color:var(--danger);background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.32)}
+.safe .yes h3 span{color:var(--ready);background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.32)}
 
 /* latest release, under the install button */
-.latest{margin-top:38px;border:var(--rule);border-radius:8px;background:rgba(9,11,16,.5);overflow:hidden}
+.latest{margin-top:38px;border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
 .latest-head{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;
-  padding:14px 20px;border-bottom:var(--rule);background:rgba(90,200,255,.04)}
-.latest-meta{margin-left:auto;display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink-faint)}
-.latest-meta b{color:var(--signal);font-weight:700}
-.notes{padding:18px 20px 20px;font-size:15px;color:var(--ink-dim)}
-.notes h4{font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.06em;
-  text-transform:uppercase;color:var(--ink);margin:20px 0 9px}
+  padding:16px 22px;border-bottom:1px solid var(--line);background:rgba(124,58,237,.07)}
+.latest-meta{margin-left:auto;display:flex;flex-wrap:wrap;gap:18px;font-size:13px;color:var(--ink-faintest)}
+.latest-meta b{color:var(--signal-pale);font-weight:700}
+.notes{padding:20px 22px 22px;font-size:15.2px;color:var(--ink-dim)}
+.notes h4{font-family:var(--display);font-size:13.5px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-2);margin:22px 0 10px}
 .notes h4:first-child{margin-top:0}
-.notes ul{margin:0;padding-left:20px;display:grid;gap:6px}
+.notes ul{margin:0;padding-left:20px;display:grid;gap:7px}
 .notes li::marker{color:var(--signal)}
 .notes p{margin:0 0 10px}
 .notes p:last-child{margin-bottom:0}
-.notes code{font-family:var(--mono);font-size:13px;color:#bfe6ff;
-  background:rgba(90,200,255,.08);border-radius:3px;padding:1px 5px}
-.notes em{color:var(--ink);font-style:normal;font-weight:600}
+.notes code{font-family:var(--mono);font-size:13px;color:#e9e6fb;
+  background:var(--signal-wash);border:1px solid rgba(109,40,217,.5);border-radius:6px;padding:1px 6px}
+.notes em{color:var(--ink-2);font-style:normal;font-weight:700}
 
 /* all versions */
-.versions{border-top:var(--rule)}
-.versions-status{padding:20px 0;color:var(--ink-faint);font-size:12.5px}
-.versions details{border-bottom:var(--rule)}
+.versions{border-top:1px solid var(--edge)}
+.versions-status{padding:22px 0;color:var(--ink-faintest);font-size:13px}
+.versions details{border-bottom:1px solid var(--edge)}
 .versions summary{
-  cursor:pointer;list-style:none;padding:17px 0;display:flex;flex-wrap:wrap;align-items:center;
+  cursor:pointer;list-style:none;padding:18px 0;display:flex;flex-wrap:wrap;align-items:center;
   gap:10px 18px;transition:color .16s;
 }
 .versions summary::-webkit-details-marker{display:none}
 .versions summary::before{
-  content:'+';font-family:var(--mono);font-size:15px;color:var(--signal);width:21px;height:21px;
-  border:1px solid rgba(90,200,255,.35);border-radius:3px;display:grid;place-items:center;flex:none;
+  content:'';width:26px;height:26px;flex:none;border-radius:8px;
+  background:#0d1224 no-repeat center/12px 12px;border:1px solid var(--line-2);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c4b5fd' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E");
+  transition:transform .22s,border-color .22s;
 }
-.versions details[open] summary::before{content:'−';background:rgba(90,200,255,.12)}
-.versions summary:hover{color:var(--signal)}
-.versions .v-tag{font-family:var(--display);font-size:17.5px;font-weight:700}
-.versions .v-latest{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--ready);border:1px solid rgba(110,226,142,.35);background:rgba(110,226,142,.08);
-  border-radius:3px;padding:3px 7px}
-.versions .v-when,.versions .v-size{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint)}
+.versions details[open] summary::before{transform:rotate(90deg);border-color:var(--signal-btn)}
+.versions summary:hover{color:var(--ink)}
+.versions .v-tag{font-family:var(--display);font-size:18px;font-weight:700;color:var(--ink-2)}
+.versions .v-latest{font-size:11px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--ready);border:1px solid rgba(52,211,153,.34);background:rgba(52,211,153,.09);
+  border-radius:8px;padding:4px 9px}
+.versions .v-when,.versions .v-size{font-family:var(--mono);font-size:12px;color:var(--ink-faintest)}
 .versions .v-get{
-  margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;
-  text-transform:uppercase;text-decoration:none;color:var(--signal);border:1px solid rgba(90,200,255,.4);
-  border-radius:4px;padding:7px 13px;transition:background .16s,transform .16s;white-space:nowrap;
+  margin-left:auto;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap;
+  color:var(--signal-pale);background:var(--signal-wash);border:1px solid var(--signal-btn);
+  border-radius:10px;padding:9px 16px;transition:border-color .16s,transform .16s;
 }
-.versions .v-get:hover{background:rgba(90,200,255,.12);transform:translateY(-1px)}
-.versions .notes{padding:0 0 22px 39px}
+.versions .v-get:hover{border-color:var(--signal);transform:translateY(-1px);
+  box-shadow:0 8px 20px rgba(109,40,217,.3)}
+.versions .notes{padding:0 0 24px 44px}
 @media (max-width:640px){
   .versions .v-get{margin-left:0}
   .versions .notes{padding-left:0}
 }
 
 /* faq */
-.faq{border-top:var(--rule)}
-.faq details{border-bottom:var(--rule)}
+.faq{border-top:1px solid var(--edge)}
+.faq details{border-bottom:1px solid var(--edge)}
 .faq summary{
-  cursor:pointer;list-style:none;padding:20px 0;display:flex;align-items:center;gap:16px;
-  font-family:var(--display);font-size:17.5px;font-weight:600;transition:color .16s;
+  cursor:pointer;list-style:none;padding:22px 0;display:flex;align-items:center;gap:18px;
+  font-family:var(--display);font-size:18.5px;font-weight:600;color:var(--ink-2);transition:color .16s;
 }
 .faq summary::-webkit-details-marker{display:none}
 .faq summary::before{
-  content:'+';font-family:var(--mono);font-size:16px;color:var(--signal);width:22px;height:22px;
-  border:1px solid rgba(90,200,255,.35);border-radius:3px;display:grid;place-items:center;flex:none;
-  transition:transform .22s,background .22s;
+  content:'';width:28px;height:28px;flex:none;border-radius:8px;
+  background:#0d1224 no-repeat center/13px 13px;border:1px solid var(--line-2);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c4b5fd' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E");
+  transition:transform .22s,border-color .22s;
 }
-.faq details[open] summary::before{content:'−';background:rgba(90,200,255,.12)}
-.faq summary:hover{color:var(--signal)}
-.faq .a{padding:0 0 22px 38px;color:var(--ink-dim);font-size:15.2px;max-width:78ch}
-.faq .a code{font-family:var(--mono);font-size:13px;color:#bfe6ff}
+.faq details[open] summary::before{transform:rotate(90deg);border-color:var(--signal-btn)}
+.faq summary:hover{color:var(--ink)}
+.faq .a{padding:0 0 24px 46px;color:var(--ink-dim);font-size:15.5px;max-width:78ch}
+.faq .a code{font-family:var(--mono);font-size:13px;color:#e9e6fb}
 
 /* closing call */
 .close-cta{text-align:center;padding:clamp(70px,12vh,140px) 0}
 .close-cta h2{margin-bottom:18px}
 .close-cta .lede{margin-inline:auto;margin-bottom:34px}
 .close-cta .hero-cta{justify-content:center}
-footer{border-top:var(--rule);padding:30px 0 42px}
+footer{border-top:1px solid var(--edge);padding:32px 0 44px;background:var(--field-2)}
 footer .wrap{display:flex;flex-wrap:wrap;gap:14px 26px;align-items:center;
-  font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint)}
-footer a{color:var(--ink-dim);text-decoration:none}
-footer a:hover{color:var(--signal)}
+  font-size:12.5px;font-weight:600;letter-spacing:.05em;color:var(--ink-faintest)}
+footer a{color:var(--ink-faint);text-decoration:none}
+footer a:hover{color:var(--signal-pale)}
 footer .sep{margin-left:auto}
 
 /* ══ reveals ════════════════════════════════════════════════════════════ */
@@ -474,6 +817,7 @@ footer .sep{margin-left:auto}
 @media (prefers-reduced-motion:reduce){
   .rise{opacity:1;transform:none;animation:none!important}
   .marker{transition:none}
+  .glow i{filter:blur(100px)}
 }
 </style>
 </head>
@@ -484,12 +828,13 @@ footer .sep{margin-left:auto}
 <header class="topbar">
   <div class="wrap">
     <a class="mark" href="#top" style="text-decoration:none">
-      <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="#161a24" stroke="#5ac8ff" stroke-width="3"/><path d="M32 32V17M32 32l12 6" stroke="#f0f8ff" stroke-width="3.5" stroke-linecap="round"/><circle cx="32" cy="32" r="3" fill="#5ac8ff"/></svg>
+      <img src="logo-96.png" alt="" width="26" height="26" decoding="async">
       <b>Flashwatch</b><span>Windows</span>
     </a>
     <nav class="topnav">
       <a href="#install" data-i18n="nav.install">Install</a>
       <a href="#config" data-i18n="nav.config">Setup</a>
+      <a href="#displays" data-i18n="nav.displays">Displays</a>
       <a href="#fonctionnement" data-i18n="nav.how">How it works</a>
       <a href="#securite" data-i18n="nav.safety">Safety</a>
       <a href="#versions" data-i18n="nav.versions">Versions</a>
@@ -507,6 +852,8 @@ footer .sep{margin-left:auto}
 
 <!-- ══════════════════════════════ HERO ══════════════════════════════ -->
 <section class="hero">
+  <img class="hero-bg" src="hero-champions.jpg" alt="" aria-hidden="true"
+       fetchpriority="low" decoding="async">
   <div class="wrap">
     <div class="hero-grid">
       <div>
@@ -545,18 +892,49 @@ footer .sep{margin-left:auto}
       <div class="demo-frame brackets">
         <div class="demo-chrome">
           <i class="on"></i><i></i><i></i>
-          <em style="font-style:normal;letter-spacing:.13em" data-i18n="demo.title">overlay preview — live</em>
-          <span id="clock" class="mono">12:34</span>
+          <em style="font-style:normal;letter-spacing:.13em" data-i18n="demo.title">overlay preview</em>
+          <span class="mono">12:31</span>
         </div>
         <div class="demo-stage">
-          <div class="bar" id="bar">
-            <div class="bar-track"></div>
+          <img class="demo-shot" id="demo-shot" alt="" aria-hidden="true">
+          <div class="demo-screen">
+            <div class="bar">
+              <div class="bar-track"></div>
+              <div class="marker far" style="left:18%">
+                <div class="token">
+                  <img class="face" data-champ="Darius" alt="" decoding="async">
+                  <span class="fallback">DA</span><span class="ring"></span>
+                  <img class="badge" data-spell="SummonerFlash" alt="" decoding="async">
+                </div><span class="time">3:41</span>
+              </div>
+              <div class="marker mid" style="left:48%">
+                <div class="token">
+                  <img class="face" data-champ="Lux" alt="" decoding="async">
+                  <span class="fallback">LX</span><span class="ring"></span>
+                  <img class="badge" data-spell="SummonerTeleport" alt="" decoding="async">
+                </div><span class="time">1:26</span>
+              </div>
+              <div class="marker near" style="left:71%">
+                <div class="token">
+                  <img class="face" data-champ="Ahri" alt="" decoding="async">
+                  <span class="fallback">AH</span><span class="ring"></span>
+                  <img class="badge" data-spell="SummonerFlash" alt="" decoding="async">
+                </div><span class="time">0:24</span>
+              </div>
+              <div class="marker rdy" style="left:90%">
+                <div class="token ready">
+                  <img class="face" data-champ="Jinx" alt="" decoding="async">
+                  <span class="fallback">JX</span><span class="ring"></span>
+                  <img class="badge" data-spell="SummonerHeal" alt="" decoding="async">
+                </div><span class="time">READY</span>
+              </div>
+            </div>
+            <p class="chatline" data-i18n="demo.chatline">(12:31) <u>Darius</u> used Flash<span style="color:var(--ink-faint)">   ← the line the game writes</span></p>
           </div>
-          <p class="chatline" data-i18n="demo.chatline">(12:31) <u>Darius</u> used Flash<span style="color:var(--ink-faint)">   ← the line the game writes</span></p>
-          <div class="demo-caption">
-            <span data-i18n="demo.cap1"><b>One portrait per spell on cooldown</b> — it enters on the left at cast, reaches the right when the spell is back</span>
-            <span data-i18n="demo.cap2"><b>READY</b> stays 5 s, then the row disappears</span>
-          </div>
+        </div>
+        <div class="demo-caption">
+          <span data-i18n="demo.cap1"><b>One portrait per spell on cooldown</b> — it enters on the left at cast, reaches the right when the spell is back</span>
+          <span data-i18n="demo.cap2"><b>READY</b> stays 5 s, then the row disappears</span>
         </div>
       </div>
     </div>
@@ -692,14 +1070,29 @@ footer .sep{margin-left:auto}
       </div>
     </div>
 
+    <div class="guide-card" data-i18n="cfg.guide">
+      <h3>The first launch walks you through it</h3>
+      <p>You do not have to find any of this on your own. On the very first run a full-window guide opens and takes you through it in order — and it ends on proof rather than on a promise: you paste one line into the Practice Tool chat and watch a timer start.</p>
+      <div class="guide-steps">
+        <span><i>1</i>Client language</span>
+        <span><i>2</i>Welcome</span>
+        <span><i>3</i>Borderless window</span>
+        <span><i>4</i>Pick a display</span>
+        <span><i>5</i>Place it</span>
+        <span><i>6</i>The proof</span>
+        <span><i>7</i>All set</span>
+        <u>— skippable, and reopenable at any time from the settings</u>
+      </div>
+    </div>
+
     <div class="cfg">
       <div class="win brackets" aria-hidden="true" data-i18n="cfg.win">
         <div class="win-bar"><i></i> Flashwatch</div>
-        <div class="win-tabs"><span>Status</span><span class="on">Settings</span><span>Team</span><span>Debug</span></div>
+        <div class="win-tabs"><span>Home</span><span class="on">Display</span><span>Settings</span><span>Troubleshooting</span></div>
         <div class="win-body">
-          <div class="row">Langue / Language <span class="sel">English ▾</span></div>
-          <div class="row">Layout <span class="sel">Bar on top ▾</span></div>
-          <div class="row on"><span class="sw"></span> Hide out of game</div>
+          <div class="row">Client language <span class="sel">English ▾</span></div>
+          <div class="row">Display <span class="sel">Chrono track ▾</span></div>
+          <div class="row on"><span class="sw"></span> Show only during a game</div>
           <div class="row on"><span class="sw"></span> Sort by role</div>
           <div class="row">Keep READY shown <span class="val">5 s</span></div>
           <div class="row">Scale <span class="val">1.00</span></div>
@@ -711,7 +1104,7 @@ footer .sep{margin-left:auto}
       <dl data-i18n="cfg.dl">
         <div>
           <dt>Client language <em>mandatory</em></dt>
-          <dd><b style="color:var(--ink)">If your League is in French</b>, open <span class="mono">Settings → Langue / Language</span> and pick <span class="mono">Français</span>. The program looks for the chat wording in that language: set to English against a French client, it will detect nothing at all. The change takes effect immediately.</dd>
+          <dd><b style="color:var(--ink)">If your League is in French</b>, open <span class="mono">Settings → Client language</span> and pick <span class="mono">Français</span>. The program looks for the chat wording in that language: set to English against a French client, it will detect nothing at all. The change takes effect immediately. <b style="color:var(--ink)">The setup guide on the first run asks you this</b>, along with the two below.</dd>
         </div>
         <div>
           <dt>Borderless windowed <em>mandatory</em></dt>
@@ -719,7 +1112,7 @@ footer .sep{margin-left:auto}
         </div>
         <div>
           <dt>Chat area <em class="opt">if nothing shows up</em></dt>
-          <dd>The chat is found automatically, whatever your resolution. If timers never start, open <span class="mono">Status → Test mode: chat area</span>: a frame appears around the area being read, you drag it onto your chat and you see <b style="color:var(--ink)">live what it reads</b> underneath. <span class="mono">Apply</span> saves it.</dd>
+          <dd>The chat is found automatically, whatever your resolution. If timers never start, open <span class="mono">Troubleshooting → Frame the chat</span>: a frame appears around the area being read, you drag it onto your chat and you see <b style="color:var(--ink)">live what it reads</b> underneath. <span class="mono">Apply</span> saves it.</dd>
         </div>
         <div>
           <dt>Game clock area <em class="opt">recommended</em></dt>
@@ -727,9 +1120,105 @@ footer .sep{margin-left:auto}
         </div>
         <div>
           <dt>Comfort <em class="opt">to taste</em></dt>
-          <dd>Compact bar on top or vertical list, dark / light / neon theme, opacity, scale, sorting by role, sounds when a spell comes back, a warning a few seconds before. Unlock the overlay to move or resize it, lock it again to get click-through back.</dd>
+          <dd><b style="color:var(--ink)">Three displays</b> to choose from, each draggable anywhere and keeping its own position — <a href="#displays">they are shown just below</a>. Plus sounds when a spell comes back, a warning a few seconds before, and sorting by role.</dd>
         </div>
       </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ DISPLAYS ════════════════════════════ -->
+<section id="displays">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">04</div>
+      <div>
+        <h2 data-i18n="disp.h2">Three ways to read the same thing</h2>
+        <p class="lede" data-i18n="disp.lede">The same three cooldowns, drawn three ways. There is no right answer — it depends on your screen, your role and what you look at mid-fight — so all three ship and you switch whenever you like.</p>
+      </div>
+    </div>
+
+    <div class="displays">
+      <figure class="disp">
+        <div class="disp-art">
+          <div class="fig-bar">
+            <div class="rail"></div>
+            <div class="m" style="left:22%">
+              <div class="fig-tok"><img class="fig-face" data-champ="Darius" alt=""><img class="fig-badge" data-spell="SummonerFlash" alt=""></div>
+              <span class="fig-time is-far">3:48</span>
+            </div>
+            <div class="m" style="left:62%">
+              <div class="fig-tok"><img class="fig-face" data-champ="Ahri" alt=""><img class="fig-badge" data-spell="SummonerTeleport" alt=""></div>
+              <span class="fig-time is-mid">0:52</span>
+            </div>
+            <div class="m" style="left:90%">
+              <div class="fig-tok"><img class="fig-face" data-champ="Jinx" alt=""><img class="fig-badge" data-spell="SummonerHeal" alt=""></div>
+              <span class="fig-time is-near">0:11</span>
+            </div>
+          </div>
+        </div>
+        <figcaption data-i18n="disp.bar">
+          <span class="tag">default</span>
+          <h3>Chrono track</h3>
+          <p>A hairline along the top of the screen. Each portrait enters on the left at cast and reaches the right as the spell comes back, so <b>where</b> it sits already answers “is anyone nearly back?” before you read a single number. Can be stood on its end, down a side of the screen.</p>
+        </figcaption>
+      </figure>
+
+      <figure class="disp">
+        <div class="disp-art">
+          <div class="fig-cards">
+            <div class="fig-card">
+              <div class="fig-ring" style="--p:.24;--ring:var(--far)"><div class="fig-tok"><img class="fig-face" data-champ="Darius" alt=""><img class="fig-badge" data-spell="SummonerFlash" alt=""></div></div>
+              <span class="fig-time is-far">3:48</span>
+            </div>
+            <div class="fig-card">
+              <div class="fig-ring" style="--p:.79;--ring:var(--mid)"><div class="fig-tok"><img class="fig-face" data-champ="Ahri" alt=""><img class="fig-badge" data-spell="SummonerTeleport" alt=""></div></div>
+              <span class="fig-time is-mid">0:52</span>
+            </div>
+            <div class="fig-card">
+              <div class="fig-ring" style="--p:.94;--ring:var(--near)"><div class="fig-tok"><img class="fig-face" data-champ="Jinx" alt=""><img class="fig-badge" data-spell="SummonerHeal" alt=""></div></div>
+              <span class="fig-time is-near">0:11</span>
+            </div>
+          </div>
+        </div>
+        <figcaption data-i18n="disp.cards">
+          <h3>Fixed cards</h3>
+          <p>The track is clever, but a moving thing has to be found before it can be read. Here each portrait <b>stays put</b> and the ring around it closes instead — the same sweep the game draws on your own cooldowns, so it is read rather than learned.</p>
+        </figcaption>
+      </figure>
+
+      <figure class="disp">
+        <div class="disp-art">
+          <div class="fig-rows">
+            <div class="fig-row" style="--p:.24;--ring:var(--far)">
+              <img class="fig-face" data-champ="Darius" alt=""><img class="sp" data-spell="SummonerFlash" alt="">
+              <span class="nm">Darius</span><span class="fig-time is-far">3:48</span>
+              <span class="gauge"><i></i></span>
+            </div>
+            <div class="fig-row" style="--p:.79;--ring:var(--mid)">
+              <img class="fig-face" data-champ="Ahri" alt=""><img class="sp" data-spell="SummonerTeleport" alt="">
+              <span class="nm">Ahri</span><span class="fig-time is-mid">0:52</span>
+              <span class="gauge"><i></i></span>
+            </div>
+            <div class="fig-row" style="--p:.94;--ring:var(--near)">
+              <img class="fig-face" data-champ="Jinx" alt=""><img class="sp" data-spell="SummonerHeal" alt="">
+              <span class="nm">Jinx</span><span class="fig-time is-near">0:11</span>
+              <span class="gauge"><i></i></span>
+            </div>
+          </div>
+        </div>
+        <figcaption data-i18n="disp.list">
+          <h3>Compact rows</h3>
+          <p>One line per champion: portrait, spell, time left, and a gauge underneath. The most legible of the three and the tallest — the trade. The gauge is what makes it more than a table: it answers “nearly back?” without you having to know every cooldown by heart.</p>
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="disp-more" data-i18n="disp.more">
+      <div><b>Green, amber, red</b>Far off, halfway, about to land — then green again once it is up. One meaning per colour, the same in all three.</div>
+      <div><b>Anywhere on screen</b>Unlock, drag, resize from the corner. Each display remembers its own place, so trying one never loses another's.</div>
+      <div><b>Dark, light, neon</b>Plus opacity and scale. The light one is the only one that stays legible over a bright game as well as a dark one.</div>
+      <div><b>Out of the way</b>Locked, it lets every click through and can never steal focus. It can also stay hidden until a game is actually running.</div>
     </div>
   </div>
 </section>
@@ -738,7 +1227,7 @@ footer .sep{margin-left:auto}
 <section id="fonctionnement">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">04</div>
+      <div class="sec-num">05</div>
       <div>
         <h2 data-i18n="how.h2">Where the timers come from</h2>
         <p class="lede" data-i18n="how.lede">From a sentence the game writes itself, and only ever writes for the opposing team. Nothing is guessed: with no announcement, the bar stays empty.</p>
@@ -770,6 +1259,27 @@ accepts it because it carries a remaining time, which makes it a
 clean test.</pre>
     </div>
 
+
+    <div class="spells" aria-hidden="true">
+      <div class="spell"><img data-spell="SummonerFlash" alt="" loading="lazy" decoding="async"><b>Flash</b><span class="cds"><span class="base">5:00</span><span class="haste">4:06</span></span></div>
+      <div class="spell"><img data-spell="SummonerTeleport" alt="" loading="lazy" decoding="async"><b>Teleport</b><span class="cds"><span class="base">6:00</span><span class="haste">4:55</span></span></div>
+      <div class="spell"><img data-spell="SummonerHaste" alt="" loading="lazy" decoding="async"><b>Ghost</b><span class="cds"><span class="base">4:00</span><span class="haste">3:17</span></span></div>
+      <div class="spell"><img data-spell="SummonerHeal" alt="" loading="lazy" decoding="async"><b>Heal</b><span class="cds"><span class="base">4:00</span><span class="haste">3:17</span></span></div>
+      <div class="spell"><img data-spell="SummonerExhaust" alt="" loading="lazy" decoding="async"><b>Exhaust</b><span class="cds"><span class="base">4:00</span><span class="haste">3:17</span></span></div>
+      <div class="spell"><img data-spell="SummonerBoost" alt="" loading="lazy" decoding="async"><b>Cleanse</b><span class="cds"><span class="base">3:30</span><span class="haste">2:52</span></span></div>
+      <div class="spell"><img data-spell="SummonerDot" alt="" loading="lazy" decoding="async"><b>Ignite</b><span class="cds"><span class="base">3:00</span><span class="haste">2:28</span></span></div>
+      <div class="spell"><img data-spell="SummonerBarrier" alt="" loading="lazy" decoding="async"><b>Barrier</b><span class="cds"><span class="base">3:00</span><span class="haste">2:28</span></span></div>
+      <div class="spell"><img data-spell="SummonerSmite" alt="" loading="lazy" decoding="async"><b>Smite</b><span class="cds"><span class="base">1:30</span><span class="haste">1:14</span></span></div>
+    </div>
+    <p class="spells-note" data-i18n="how.spells">Every cooldown the program counts from, straight out of its own table — the big number is the spell's own, the <b>green one</b> is the same spell with Cosmic Insight, which is assumed by default and switchable in the settings.</p>
+
+    <div class="disp-more" style="margin-top:26px" data-i18n="how.more">
+      <div><b>A ping counts too</b>A spell named without being announced as cast — what a ping writes — starts a timer as well, but a <span class="mono" style="color:var(--ink-2)">?</span> is drawn beside the countdown. Being wrong there costs a question mark, never a wrong time presented as fact.</div>
+      <div><b>Ultimates, if you want them</b>The same line exists for ultimates. Off or on per your taste, and the cooldown follows the champion's rank and your ability-haste assumptions.</div>
+      <div><b>The clock, not the wall clock</b>Frame the match timer once and announcements are dated by the game itself, so a line read two seconds late costs nothing at all.</div>
+      <div><b>It updates itself</b>New versions are offered in the window, downloaded and swapped in place — one program stays one file, and your settings come with it.</div>
+    </div>
+
     <div class="flow" data-i18n="how.flow">
       <div><div class="t">Capture</div><div class="v">200 ms</div></div>
       <div><div class="t">Recognition</div><div class="v">Chat area</div></div>
@@ -785,7 +1295,7 @@ clean test.</pre>
 <section id="securite">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">05</div>
+      <div class="sec-num">06</div>
       <div>
         <h2 data-i18n="safe.h2">What it does, what it does not</h2>
         <p class="lede" data-i18n="safe.lede">The program behaves like someone watching your screen over your shoulder and counting in their head.</p>
@@ -820,7 +1330,7 @@ clean test.</pre>
 <section id="versions">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">06</div>
+      <div class="sec-num">07</div>
       <div>
         <h2 data-i18n="ver.h2">Every version</h2>
         <p class="lede" data-i18n="ver.lede">Every published version stays downloadable, with its notes. If a new one causes trouble, the previous one is right below it.</p>
@@ -837,7 +1347,7 @@ clean test.</pre>
 <section id="faq">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">07</div>
+      <div class="sec-num">08</div>
       <div><h2 data-i18n="faq.h2">Frequently asked</h2></div>
     </div>
     <div class="faq" data-i18n="faq.body">
@@ -847,7 +1357,7 @@ clean test.</pre>
       </details>
       <details>
         <summary>Nothing shows up during my match.</summary>
-        <div class="a">In order: is League in <b>borderless windowed</b>? Does the program's <b>language</b> match your client's? Has an enemy actually used a summoner spell yet — with no announcement, the bar stays deliberately empty. If all of that is fine, type <span class="mono">Wait Darius Flash - 245 sec.</span> in chat: a timer must appear immediately. If it does not, open <span class="mono">Status → Test mode: chat area</span> and look at what the area really reads.</div>
+        <div class="a">In order: is League in <b>borderless windowed</b>? Does the program's <b>language</b> match your client's? Has an enemy actually used a summoner spell yet — with no announcement, the bar stays deliberately empty. If all of that is fine, type <span class="mono">Wait Darius Flash - 245 sec.</span> in chat: a timer must appear immediately. If it does not, open <span class="mono">Troubleshooting → Frame the chat</span> and look at what the area really reads.</div>
       </details>
       <details>
         <summary>Is it heavy on resources?</summary>
@@ -875,6 +1385,18 @@ clean test.</pre>
 
 <section class="close-cta">
   <div class="wrap">
+    <div class="champ-band" aria-hidden="true">
+      <img data-champ="Ahri" alt="" loading="lazy" decoding="async">
+      <img data-champ="Darius" alt="" loading="lazy" decoding="async">
+      <img data-champ="Jinx" alt="" loading="lazy" decoding="async">
+      <img data-champ="Lux" alt="" loading="lazy" decoding="async">
+      <img data-champ="Thresh" alt="" loading="lazy" decoding="async">
+      <img data-champ="Viego" alt="" loading="lazy" decoding="async">
+      <img data-champ="Yasuo" alt="" loading="lazy" decoding="async">
+      <img data-champ="Zed" alt="" loading="lazy" decoding="async">
+      <img data-champ="Sona" alt="" loading="lazy" decoding="async">
+      <img data-champ="Ashe" alt="" loading="lazy" decoding="async">
+    </div>
     <div class="kicker" style="justify-content:center" data-i18n="cta.kicker">Ready</div>
     <h2 style="margin-top:18px" data-i18n="cta.h2">One file. Three minutes.</h2>
     <p class="lede" data-i18n="cta.lede">Windows 10/11 64-bit · no installation · free</p>
@@ -940,7 +1462,7 @@ const FR = {
   "dl.detail2": "99 Mo · Windows 10/11 64 bits",
   "dl.detail3": "99 Mo",
 
-  "demo.title": "aperçu de l'overlay — en direct",
+  "demo.title": "aperçu de l'overlay",
   "demo.chatline": "(12:31) <u>Darius</u> a utilisé Saut éclair<span style=\"color:var(--ink-faint)\">   ← la ligne que le jeu écrit</span>",
   "demo.cap1": "<b>Un portrait par sort en recharge</b> — il entre à gauche au cast, arrive à droite quand le sort revient",
   "demo.cap2": "<b>READY</b> reste 5 s, puis la ligne disparaît",
@@ -989,13 +1511,51 @@ const FR = {
 
   "cfg.h2": "Configuration : deux choses obligatoires",
   "cfg.lede": "Le reste marche par défaut. Ces deux-là, non — et sans elles tu ne verras rien.",
+  "cfg.guide":
+    "<h3>Le premier lancement te prend par la main</h3>" +
+    "<p>Tu n'as rien à trouver tout seul. Au tout premier démarrage, un guide plein écran s'ouvre et te fait passer les étapes dans l'ordre — et il se termine sur une preuve plutôt que sur une promesse : tu colles une ligne dans le chat de l'Outil d'entraînement et tu regardes un timer démarrer.</p>" +
+    "<div class=\"guide-steps\">" +
+      "<span><i>1</i>Langue du client</span>" +
+      "<span><i>2</i>Bienvenue</span>" +
+      "<span><i>3</i>Fenêtré sans bordure</span>" +
+      "<span><i>4</i>Choisir l'affichage</span>" +
+      "<span><i>5</i>Le poser</span>" +
+      "<span><i>6</i>La preuve</span>" +
+      "<span><i>7</i>Tout est prêt</span>" +
+      "<u>— on peut le passer, et le rouvrir quand on veut depuis les réglages</u>" +
+    "</div>",
+
+  "nav.displays": "Affichages",
+  "how.spells": "Tous les cooldowns sur lesquels le programme compte, sortis de sa propre table — le grand nombre est celui du sort, le <b>vert</b> est le même sort avec Perspicacité cosmique, supposée par défaut et désactivable dans les réglages.",
+  "how.more":
+    "<div><b>Un ping compte aussi</b>Un sort nommé sans être annoncé comme lancé — ce qu'écrit un ping — démarre lui aussi un timer, mais un <span class=\"mono\" style=\"color:var(--ink-2)\">?</span> est dessiné à côté du compte à rebours. Se tromper là coûte un point d'interrogation, jamais un mauvais temps présenté comme un fait.</div>" +
+    "<div><b>Les ultimes, si tu veux</b>La même ligne existe pour les ultimes. À activer ou non selon ton goût, et le cooldown suit le rang du champion et tes hypothèses d'accélération de compétences.</div>" +
+    "<div><b>L'horloge de la partie, pas celle du PC</b>Cadre le chrono du match une fois et les annonces sont datées par le jeu lui-même : une ligne lue deux secondes trop tard ne coûte alors plus rien du tout.</div>" +
+    "<div><b>Il se met à jour tout seul</b>Les nouvelles versions sont proposées dans la fenêtre, téléchargées et remplacées sur place — un programme reste un fichier, et tes réglages suivent.</div>",
+  "disp.h2": "Trois façons de lire la même chose",
+  "disp.lede": "Les mêmes trois recharges, dessinées de trois manières. Il n'y a pas de bonne réponse — ça dépend de ton écran, de ton rôle et de ce que tu regardes en combat — alors les trois sont livrées et tu changes quand tu veux.",
+  "disp.bar":
+    "<span class=\"tag\">par défaut</span>" +
+    "<h3>Barre chronologique</h3>" +
+    "<p>Un filet en haut de l'écran. Chaque portrait entre à gauche au cast et arrive à droite quand le sort revient : <b>sa position</b> répond donc déjà à « qui est bientôt de retour ? » avant même que tu lises un chiffre. Elle peut aussi se dresser verticalement, le long d'un bord.</p>",
+  "disp.cards":
+    "<h3>Cartes fixes</h3>" +
+    "<p>La barre est maligne, mais une chose qui bouge doit d'abord être trouvée pour être lue. Ici chaque portrait <b>reste en place</b> et c'est l'anneau autour qui se referme — le même balayage que le jeu dessine sur tes propres sorts, donc ça se lit sans s'apprendre.</p>",
+  "disp.list":
+    "<h3>Lignes compactes</h3>" +
+    "<p>Une ligne par champion : portrait, sort, temps restant, et une jauge dessous. La plus lisible des trois et la plus haute — c'est le compromis. La jauge est ce qui en fait plus qu'un tableau : elle répond à « bientôt dispo ? » sans que tu aies à connaître tous les cooldowns par cœur.</p>",
+  "disp.more":
+    "<div><b>Vert, jaune, rouge</b>Loin, à mi-chemin, sur le point de revenir — puis vert à nouveau une fois dispo. Une seule signification par couleur, la même dans les trois.</div>" +
+    "<div><b>N'importe où à l'écran</b>Déverrouille, glisse, redimensionne par le coin. Chaque affichage retient sa propre place : en essayer un ne fait jamais perdre le placement d'un autre.</div>" +
+    "<div><b>Sombre, clair, néon</b>Plus l'opacité et l'échelle. Le thème clair est le seul qui reste lisible aussi bien sur un jeu lumineux que sur un jeu sombre.</div>" +
+    "<div><b>Jamais dans les pattes</b>Verrouillé, il laisse passer tous les clics et ne peut pas voler le focus. Il peut aussi rester caché tant qu'aucune partie ne tourne.</div>",
   "cfg.win":
     "<div class=\"win-bar\"><i></i> Flashwatch</div>" +
-    "<div class=\"win-tabs\"><span>Statut</span><span class=\"on\">Réglages</span><span>Équipe</span><span>Debug</span></div>" +
+    "<div class=\"win-tabs\"><span>Accueil</span><span class=\"on\">Affichage</span><span>Réglages</span><span>Dépannage</span></div>" +
     "<div class=\"win-body\">" +
-      "<div class=\"row\">Langue / Language <span class=\"sel\">Français ▾</span></div>" +
-      "<div class=\"row\">Disposition <span class=\"sel\">Barre en haut ▾</span></div>" +
-      "<div class=\"row on\"><span class=\"sw\"></span> Masquer hors partie</div>" +
+      "<div class=\"row\">Langue du client <span class=\"sel\">Français ▾</span></div>" +
+      "<div class=\"row\">Affichage <span class=\"sel\">Barre chrono ▾</span></div>" +
+      "<div class=\"row on\"><span class=\"sw\"></span> Seulement pendant la partie</div>" +
       "<div class=\"row on\"><span class=\"sw\"></span> Trier par rôle</div>" +
       "<div class=\"row\">Garder READY affiché <span class=\"val\">5 s</span></div>" +
       "<div class=\"row\">Échelle <span class=\"val\">1,00</span></div>" +
@@ -1004,15 +1564,15 @@ const FR = {
     "<div class=\"win-foot\">Réglages enregistrés automatiquement</div>",
   "cfg.dl":
     "<div><dt>Langue du client <em>obligatoire</em></dt>" +
-    "<dd><b style=\"color:var(--ink)\">Si ton League est en anglais</b>, ouvre <span class=\"mono\">Réglages → Langue / Language</span> et choisis <span class=\"mono\">English</span>. Le programme cherche les phrases du chat dans cette langue : réglé sur français avec un client anglais, il ne détectera rien du tout. Le changement s'applique tout de suite.</dd></div>" +
+    "<dd><b style=\"color:var(--ink)\">Si ton League est en anglais</b>, ouvre <span class=\"mono\">Réglages → Langue du client</span> et choisis <span class=\"mono\">English</span>. Le programme cherche les phrases du chat dans cette langue : réglé sur français avec un client anglais, il ne détectera rien du tout. Le changement s'applique tout de suite. <b style=\"color:var(--ink)\">Le guide d'installation, au premier lancement, te pose la question</b> — ainsi que les deux suivantes.</dd></div>" +
     "<div><dt>Fenêtré sans bordure <em>obligatoire</em></dt>" +
     "<dd>Dans les options vidéo de League, mets <span class=\"mono\">Fenêtré sans bordure</span>. En plein écran exclusif, Windows interdit à n'importe quel overlay de s'afficher — ce n'est pas une limite du programme.</dd></div>" +
     "<div><dt>Zone du chat <em class=\"opt\">si rien ne s'affiche</em></dt>" +
-    "<dd>Le chat est trouvé automatiquement, quelle que soit ta résolution. Si les timers ne démarrent pas, ouvre <span class=\"mono\">Statut → Mode test : zone du chat</span> : un cadre apparaît autour de la zone lue, tu le déplaces sur ton chat et tu vois <b style=\"color:var(--ink)\">en direct ce qu'il lit</b> sous le cadre. <span class=\"mono\">Valider</span> l'enregistre.</dd></div>" +
+    "<dd>Le chat est trouvé automatiquement, quelle que soit ta résolution. Si les timers ne démarrent pas, ouvre <span class=\"mono\">Dépannage → Cadrer le chat</span> : un cadre apparaît autour de la zone lue, tu le déplaces sur ton chat et tu vois <b style=\"color:var(--ink)\">en direct ce qu'il lit</b> sous le cadre. <span class=\"mono\">Valider</span> l'enregistre.</dd></div>" +
     "<div><dt>Zone du temps de partie <em class=\"opt\">recommandé</em></dt>" +
     "<dd>Même principe, cadré sur le chronomètre en haut de l'écran. Une fois validé, le programme lit l'heure du jeu directement : une annonce lue deux secondes trop tard ne coûte plus rien en précision.</dd></div>" +
     "<div><dt>Confort <em class=\"opt\">au goût</em></dt>" +
-    "<dd>Barre compacte en haut ou liste verticale, thème sombre / clair / néon, opacité, échelle, tri par rôle, sons quand un sort revient, alerte quelques secondes avant. Déverrouille l'overlay pour le déplacer ou le redimensionner, reverrouille pour retrouver les clics traversants.</dd></div>",
+    "<dd><b style=\"color:var(--ink)\">Trois affichages au choix</b> — une barre chrono où l'icône glisse de gauche à droite, des cartes fixes avec un anneau de progression, ou des rangées compactes avec une jauge — et chacun se pose n'importe où à l'écran en gardant sa propre position. Plus le thème sombre / clair / néon, l'opacité, l'échelle, le tri par rôle, les sons quand un sort revient, l'alerte quelques secondes avant.</dd></div>",
 
   "how.h2": "D'où viennent les timers",
   "how.lede": "D'une phrase que le jeu écrit lui-même, et qu'il n'écrit que pour l'équipe adverse. Rien n'est deviné : sans annonce, la barre reste vide.",
@@ -1077,7 +1637,7 @@ parce qu'elle porte un temps restant, ce qui en fait un test net.</pre>`,
     "<details open><summary>Windows dit que le fichier est dangereux, c'est normal ?</summary>" +
     "<div class=\"a\">Oui. Un exécutable sans certificat de signature déclenche SmartScreen (« Windows a protégé votre PC ») et parfois un avertissement du navigateur au téléchargement. Certains antivirus signalent aussi par principe les programmes empaquetés de cette façon : si le tien supprime le fichier, il faut l'autoriser explicitement. Signer le programme coûterait un certificat payant.</div></details>" +
     "<details><summary>Rien ne s'affiche pendant ma partie.</summary>" +
-    "<div class=\"a\">Dans l'ordre : League est-il en <b>fenêtré sans bordure</b> ? La <b>langue</b> du programme correspond-elle à celle de ton client ? Un ennemi a-t-il utilisé un sort d'invocateur depuis le début de la partie — sans annonce, la barre reste volontairement vide. Si tout est bon, tape <span class=\"mono\">Attendez Darius Saut éclair - 245 sec.</span> dans le chat : un timer doit apparaître immédiatement. Sinon, ouvre <span class=\"mono\">Statut → Mode test : zone du chat</span> et regarde ce que la zone lit réellement.</div></details>" +
+    "<div class=\"a\">Dans l'ordre : League est-il en <b>fenêtré sans bordure</b> ? La <b>langue</b> du programme correspond-elle à celle de ton client ? Un ennemi a-t-il utilisé un sort d'invocateur depuis le début de la partie — sans annonce, la barre reste volontairement vide. Si tout est bon, tape <span class=\"mono\">Attendez Darius Saut éclair - 245 sec.</span> dans le chat : un timer doit apparaître immédiatement. Sinon, ouvre <span class=\"mono\">Dépannage → Cadrer le chat</span> et regarde ce que la zone lit réellement.</div></details>" +
     "<details><summary>Ça consomme beaucoup ?</summary>" +
     "<div class=\"a\">Non. Au repos la boucle coûte environ <b>0,2 % d'un cœur</b> : l'image de la zone du chat est comparée d'une capture à l'autre et la reconnaissance de texte ne tourne que si quelque chose a changé. Quelques pourcents pendant une lecture active, sur un seul cœur.</div></details>" +
     "<details><summary>Est-ce que je peux le lancer deux fois ?</summary>" +
@@ -1301,93 +1861,56 @@ applyLang(saved === "fr" ? "fr" : "en");
 
 loadReleases();
 
-/* ═══════════════════════════════════════════════════════════════════════
-   2. LA BARRE VIVANTE. Reproduit ce que fait l'overlay : chaque marqueur
-   avance de gauche à droite à mesure que son cooldown s'écoule, affiche
-   READY cinq secondes en arrivant, puis disparaît — et repart plus tard,
-   comme un nouveau cast.
-   ═══════════════════════════════════════════════════════════════════ */
-const SPELLS = [
-  { who:"DA", name:"Darius",  spell:"F",  cd:245, start:-96 },
-  { who:"AH", name:"Ahri",    spell:"F",  cd:245, start:-172 },
-  { who:"JX", name:"Jinx",    spell:"H",  cd:196, start:-188 },
-  { who:"LX", name:"Lux",     spell:"TP", cd:295, start:-40 },
-  { who:"VG", name:"Viego",   spell:"S",  cd:74,  start:-70 },
-];
-const LINGER = 5;      // READY stays this long, then the entry goes
-const RESPAWN = 26;    // ...and comes back later, as a fresh cast
+/* ════════════════════════════════════════════════════════════════════════
+   2. LES IMAGES. La barre de l'en-tete est une image fixe, ecrite dans le
+   HTML : une composition choisie, ou les quatre etats de l'echelle sont
+   visibles a la fois. Il ne reste ici qu'a lui donner ses portraits.
 
-const bar = document.getElementById("bar");
-const clockEl = document.getElementById("clock");
-const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+   Ils viennent du CDN public de Riot -- celui-la meme que le programme
+   utilise -- pour que l'apercu montre ce qu'on verra vraiment, et pas une
+   interpretation. La version est demandee, avec un repli : une page qui ne
+   peut pas joindre le CDN doit quand meme dessiner sa barre.
+   ══════════════════════════════════════════════════════════════════ */
+const DDRAGON = "https://ddragon.leagueoflegends.com";
+const DD_FALLBACK = "16.16.1";
+let ddVersion = DD_FALLBACK;
 
-const nodes = SPELLS.map(s => {
-  const el = document.createElement("div");
-  el.className = "marker";
-  el.innerHTML =
-    `<div class="token"><div class="disc">${s.who}</div><div class="badge">${s.spell}</div></div>` +
-    `<span class="time"></span>`;
-  bar.appendChild(el);
-  return { ...s, el, time: el.querySelector(".time"), token: el.querySelector(".token") };
-});
+const champUrl = (id) => `${DDRAGON}/cdn/${ddVersion}/img/champion/${id}.png`;
+const spellUrl = (id) => `${DDRAGON}/cdn/${ddVersion}/img/spell/${id}.png`;
+const splashUrl = (id) => `${DDRAGON}/cdn/img/champion/splash/${id}_0.jpg`;
 
-const t0 = performance.now() / 1000;
-let clockBase = 12 * 60 + 34;
-
-function frame() {
-  const now = performance.now() / 1000 - t0;
-
-  const clock = clockBase + now;
-  clockEl.textContent = `${Math.floor(clock / 60)}:${String(Math.floor(clock % 60)).padStart(2, "0")}`;
-
-  // Positions first, then spacing: two spells used in the same second land on
-  // the same point of the track, so the row is laid out as a group -- the same
-  // reason the real bar nudges its markers apart.
-  const shown = [];
-  for (const m of nodes) {
-    const cycle = m.cd + LINGER + RESPAWN;
-    let elapsed = (now - m.start) % cycle;
-    if (elapsed < 0) elapsed += cycle;
-
-    if (elapsed > m.cd + LINGER) {          // between two casts: not shown
-      m.el.style.opacity = 0;
-      continue;
-    }
-    const left = Math.max(0, m.cd - elapsed);
-    m.el.style.opacity = 1;
-    shown.push({ m, left, progress: Math.min(1, elapsed / m.cd) });
-
-    if (left <= 0) {
-      m.time.textContent = "READY";
-      m.el.className = "marker rdy";
-      m.token.className = "token ready";
-    } else {
-      m.time.textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}`;
-      m.el.className = left <= 30 ? "marker soon" : "marker";
-      m.token.className = "token";
-    }
+function paintArt() {
+  const shot = document.getElementById("demo-shot");
+  if (shot) shot.src = splashUrl("Viego");
+  for (const img of document.querySelectorAll("img[data-champ]")) {
+    // Initials if the portrait never arrives: an empty circle reads as a broken
+    // page, and this site cannot promise somebody else's CDN.
+    img.addEventListener("error", () => {
+      const token = img.closest(".token");
+      if (token) token.classList.add("noart");
+    }, { once: true });
+    img.src = champUrl(img.dataset.champ);
   }
-
-  const span = bar.clientWidth - 52;            // usable track, in pixels
-  const gap = 46;                               // marker width plus a little air
-  shown.sort((a, b) => a.progress - b.progress);
-
-  let cursor = 26;                              // forward: clear the previous one
-  for (const s of shown) {
-    s.x = Math.max(26 + s.progress * span, cursor);
-    cursor = s.x + gap;
+  for (const img of document.querySelectorAll("img[data-spell]")) {
+    img.src = spellUrl(img.dataset.spell);
   }
-  cursor = 26 + span;                           // backward: stay inside the edge
-  for (let i = shown.length - 1; i >= 0; i--) {
-    shown[i].x = Math.max(26, Math.min(shown[i].x, cursor));
-    cursor = shown[i].x - gap;
-  }
-  for (const s of shown) s.m.el.style.left = `${s.x}px`;
-  if (!reduced) requestAnimationFrame(frame);
 }
-frame();
+
+(async function resolveDdragon() {
+  try {
+    const response = await fetch(`${DDRAGON}/api/versions.json`);
+    if (response.ok) {
+      const versions = await response.json();
+      if (Array.isArray(versions) && versions[0]) ddVersion = versions[0];
+    }
+  } catch (_) { /* offline, or the CDN is having a day: the fallback stands */ }
+  paintArt();
+})();
 
 /* ══ 3. Reveals on scroll ═════════════════════════════════════════════ */
+// The one piece of motion left on the page, and the one thing that has to
+// respect somebody who has asked their system for less of it.
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 if (!reduced) {
   const seen = new IntersectionObserver((entries) => {
     for (const e of entries) {
