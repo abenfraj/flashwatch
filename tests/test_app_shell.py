@@ -19,9 +19,15 @@ import settings as settings_module
 tmp = Path(os.environ["TEMP"]) / "flashwatch_shelltest"
 tmp.mkdir(parents=True, exist_ok=True)
 settings_module.CONFIG_PATH = tmp / "settings.json"
+# Every run starts as a fresh install. Without this the file left behind by the
+# last run decides things -- most visibly whether the setup guide, which shows
+# itself exactly once, is expected to appear at all.
+if settings_module.CONFIG_PATH.exists():
+    settings_module.CONFIG_PATH.unlink()
 
 from PySide6.QtCore import QThread, QTimer, Qt
 import main as app_main
+import single_instance
 import updater
 
 results = []
@@ -39,6 +45,28 @@ token = app_main.acquire_single_instance(TOKEN_NAME)
 check("the first copy claims the instance token", token is not None)
 check("a second copy is refused",
       app_main.acquire_single_instance(TOKEN_NAME) is None)
+
+# ...and standing down is not the end of it: the refused copy knocks, and the
+# running one answers by consuming the knock and showing its window. This is the
+# handshake, without the window: an unanswered knock is what tells a refused copy
+# that the token is held by something wedged, and only then does it complain.
+check("no knock is waiting to begin with",
+      not single_instance.take_knock(TOKEN_NAME))
+_, knock_path = single_instance._paths(TOKEN_NAME)
+knock_path.write_text("0", "utf-8")
+check("a knock is picked up once", single_instance.take_knock(TOKEN_NAME))
+check("and only once", not single_instance.take_knock(TOKEN_NAME))
+check("an unanswered knock reports failure rather than hanging",
+      single_instance.knock(TOKEN_NAME, timeout=0.4) is False)
+check("and leaves nothing behind for the next run to trip over",
+      not knock_path.exists())
+
+# The updater's handover depends on this: it lets go early so the executable
+# replacing it can claim the token while this copy is still shutting down.
+token.release()
+handover = app_main.acquire_single_instance(TOKEN_NAME)
+check("releasing the token lets the next copy in", handover is not None)
+token = handover
 
 try:
     application = app_main.Application()
@@ -137,6 +165,63 @@ check("bar was placed at the top of the screen", geometry.y() < 80,
 # ------------------------------------------- background pipeline starts
 state = {}
 def finish():
+    # ------------------------------------------------- the setup guide
+    # It has to run itself on a fresh install: what it covers -- League's window
+    # mode, the client language, the chat, where the overlay goes -- cannot be
+    # discovered by looking at the interface, so waiting to be asked means never.
+    # And it has to run only once, or it is nagging.
+    state["guide_on_first_run"] = application.guide is not None
+    if application.guide is not None:
+        application.guide.close()
+    state["guide_marked_seen"] = bool(application.settings.get("onboarding_done"))
+    state["guide_released"] = application.guide is None
+    # Still reachable afterwards, from the window and from the tray.
+    application.control.guide_requested.emit()
+    state["guide_reopens_on_request"] = application.guide is not None
+    if application.guide is not None:
+        application.guide.close()
+
+    # ------------------------------------------------------- trial mode
+    # The whole point is judging and placing the overlay with League closed, so
+    # what matters is that it shows up *without* a game -- and that a real game
+    # takes it away again, click-through restored, because the overlay must never
+    # be sitting unlocked over a match.
+    application._on_demo_toggled(True)
+    state["demo_on"] = application._demo
+    state["demo_shows_overlay"] = application.overlay.isVisible()
+    state["demo_has_timers"] = bool(application.timers.snapshot())
+    # Asked of the overlay itself rather than re-derived here: the trial exists
+    # to show what the colours mean, so it has to cover every rung of the ladder
+    # the overlay actually draws, thresholds and all.
+    from overlay import Overlay as _Overlay
+    state["demo_covers_every_state"] = len({
+        _Overlay._state(timer)
+        for timer in application.timers.snapshot()}) >= 4
+    state["demo_says_so"] = application._ui_state(
+        getattr(application, "_latest_status", None)) == "demo"
+    state["demo_button_synced"] = application.control.button_demo.isChecked()
+    state["demo_tray_synced"] = application.action_demo.isChecked()
+
+    # Placing it: unlocked, and the trial keeps running so there is something to
+    # aim at for as long as it takes.
+    application._on_place_overlay()
+    state["placing_unlocks"] = not application.settings.get("overlay_locked")
+    state["placing_keeps_the_trial"] = application._demo
+
+    # Now a game appears.
+    status = getattr(application, "_latest_status", None)
+    if status is not None:
+        status.in_game = True
+        application._refresh_ui()
+    state["game_ends_the_trial"] = not application._demo
+    state["game_restores_click_through"] = bool(
+        application.settings.get("overlay_locked"))
+    state["game_cleared_the_fakes"] = not application.timers.snapshot()
+    state["demo_button_released"] = not application.control.button_demo.isChecked()
+    if status is not None:
+        status.in_game = False
+        application._refresh_ui()
+
     state["assets"] = application.assets.ready
     state["worker"] = application.worker is not None and application.worker.is_alive()
     state["parser"] = application.parser is not None
@@ -258,6 +343,39 @@ def finish():
     state["asking_overrides_the_skip"] = banner_offered()
     application.settings.set("update_skipped_version", "")
 
+    # -------------------------------------- language chosen inside the guide
+    # Step one of the guide is the client's language, and choosing there used to
+    # replace every window carrying a label -- the guide included, which meant
+    # the window under the reader's cursor was closed and reopened. It now
+    # translates itself instead: the same window, the same step, no toast.
+    application._show_guide(2)
+    guide_before = application.guide
+    application.guide.pick_language("en")
+    state["guide_survived_the_change"] = (application.guide is guide_before)
+    state["guide_kept_its_step"] = (application.guide is not None
+                                    and application.guide.step_index() == 2)
+    state["guide_language_persisted"] = (
+        application.settings.get("locale") == "en_US")
+    state["guide_speaks_the_new_language"] = (
+        "step" in application.guide.windowTitle().lower())
+    # A trial running across the rebuild belongs to the application, not to the
+    # window that started it: the replacement must not offer to start it again.
+    application._on_demo_toggled(True)
+    rebuilt = application.control
+    combo_again = application.control.combo_language
+    combo_again.setCurrentIndex(combo_again.findData("fr"))
+    state["trial_survives_a_rebuild"] = (
+        application.control is not rebuilt
+        and application._demo
+        and application.control.button_demo.isChecked())
+    application._on_demo_toggled(False)
+    state["guide_rebuild_did_not_quit"] = asked["count"] == 0
+    if application.guide is not None:
+        application.guide.close()
+    # Back to French, so the round-trip below starts where it expects to.
+    back = application.control.combo_language
+    back.setCurrentIndex(back.findData("fr"))
+
     # ------------------------------------------------- language round-trip
     # Switching language replaces the settings window and refills the tray menu.
     # The window being discarded must not be able to quit the application on its
@@ -306,6 +424,45 @@ def finish():
 
 QTimer.singleShot(9000, finish)
 application.run()
+
+# ------------------------------------------------------------- setup guide
+check("the guide shows itself on a fresh install",
+      state.get("guide_on_first_run"))
+check("closing it counts as having seen it", state.get("guide_marked_seen"))
+check("and the application lets go of the window", state.get("guide_released"))
+check("it can still be reopened on demand",
+      state.get("guide_reopens_on_request"))
+check("choosing a language inside the guide leaves the window standing",
+      state.get("guide_survived_the_change"))
+check("and it stays on the same step",
+      state.get("guide_kept_its_step"))
+check("and it is drawing in the new language",
+      state.get("guide_speaks_the_new_language"))
+check("and the choice is saved", state.get("guide_language_persisted"))
+check("rebuilding the rest of the interface does not quit the application",
+      state.get("guide_rebuild_did_not_quit"))
+check("a running trial survives a change of language",
+      state.get("trial_survives_a_rebuild"))
+
+# --------------------------------------------------------------- trial mode
+check("the trial mode turns on", state.get("demo_on"))
+check("and puts the overlay on screen with no game running",
+      state.get("demo_shows_overlay"))
+check("with fake cooldowns in it", state.get("demo_has_timers"))
+check("covering green, amber, red and ready at once",
+      state.get("demo_covers_every_state"))
+check("the window reports the trial rather than a real state",
+      state.get("demo_says_so"))
+check("the button and the tray entry agree",
+      state.get("demo_button_synced") and state.get("demo_tray_synced"))
+check("placing the overlay unlocks it", state.get("placing_unlocks"))
+check("and keeps the trial running to aim at",
+      state.get("placing_keeps_the_trial"))
+check("a real game ends the trial", state.get("game_ends_the_trial"))
+check("and restores click-through", state.get("game_restores_click_through"))
+check("and clears the fake cooldowns", state.get("game_cleared_the_fakes"))
+check("the button follows the trial ending by itself",
+      state.get("demo_button_released"))
 
 check("Riot assets loaded", state.get("assets"),
       f"{len(application.assets.champions)} champions")

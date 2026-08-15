@@ -143,24 +143,105 @@ check("every marker is inside the bar",
 
 
 # ------------------------------------------------------- the uncertainty chip
-# It marks the spell, so it has to stay on the spell. The countdown sits one pixel
-# under the icon's bottom edge, which is exactly what a chip straddling the corner
-# would land on -- and covering the time is what moving the mark here was meant to
-# stop doing.
-from PySide6.QtCore import QRect                        # noqa: E402
-from overlay import uncertain_chip_rect                 # noqa: E402
+# The chip sits next to the countdown, and the countdown is the one thing on the
+# bar that must be legible at a glance. So: never on the number, never outside the
+# box the layout reserved, and big enough to be seen -- it is a warning that the
+# spell is a guess, and a warning nobody notices is worse than none.
+from PySide6.QtCore import QRectF, Qt                   # noqa: E402
+from PySide6.QtGui import QFont, QFontMetrics           # noqa: E402
+from overlay import chip_extra, countdown_layout        # noqa: E402
 
-for size, scale in ((14, 1.0), (17, 1.0), (28, 2.0), (9, 0.6)):
-    icon = QRect(100, 50, size, size)
-    chip = uncertain_chip_rect(icon, scale)
-    check(f"the chip stays inside a {size}px icon at scale {scale}",
-          icon.contains(chip),
-          f"icon={icon.getRect()} chip={chip.getRect()}")
-    check(f"  and hugs its bottom-right corner ({size}px)",
-          chip.right() == icon.right() and chip.bottom() == icon.bottom(),
-          f"chip={chip.getRect()}")
-    check(f"  and is big enough to read ({size}px)", chip.width() >= 5,
-          f"{chip.width()}px")
+for scale in (0.6, 1.0, 2.0):
+    font = QFontMetrics(QFont("Consolas", max(6, int(9 * scale)), QFont.Bold))
+    for align, name in ((Qt.AlignHCenter | Qt.AlignVCenter, "centred"),
+                        (Qt.AlignRight | Qt.AlignVCenter, "right-aligned")):
+        # A box exactly as wide as the layouts make it: the number plus the room
+        # reserved for the chip.
+        width = font.horizontalAdvance("4:23") + chip_extra(font, scale)
+        box = QRectF(100, 50, width, font.height())
+        chip, text = countdown_layout(box, "4:23", font, align, True, scale)
+        check(f"the chip is beside the {name} number at scale {scale}",
+              chip is not None and not chip.intersects(text),
+              f"chip={chip.getRect()} text={text.getRect()}")
+        check(f"  and stays inside the reserved box ({name}, {scale})",
+              box.contains(chip) and text.right() <= box.right(),
+              f"box={box.getRect()} chip={chip.getRect()} text={text.getRect()}")
+        check(f"  and is as tall as the digits ({name}, {scale})",
+              chip.width() >= max(6, int(font.ascent() * 0.9)),
+              f"chip={chip.width()}px ascent={font.ascent()}px")
+
+    # A certain cooldown is left exactly as it was: no chip, no shifted number.
+    box = QRectF(100, 50, 60, font.height())
+    chip, text = countdown_layout(box, "4:23", font, Qt.AlignHCenter, False, scale)
+    check(f"a confirmed cooldown gets no chip at scale {scale}",
+          chip is None and text == box, f"{chip} {text.getRect()}")
+
+# --------------------------------------------- the countdown stays inside
+# The row under the portraits was sized by a rule of thumb that suited one font,
+# and a taller one hung off the bottom edge of the panel. What has to hold is a
+# property, not a number: whatever the window's height and whatever the scale,
+# nothing the track draws may fall outside it.
+fit = []
+for height in (46, 52, 58, 70, 78):
+    for scale in (0.6, 1.0, 1.25, 1.5, 2.0):
+        settings.set("overlay_scale", scale)
+        overlay.resize(640, height)
+        overlay.render(overlay.grab())      # a real paint applies the minimum
+        overlay.snap_motion()
+        for marker in overlay._bar_markers(scale):
+            bottom = (marker.text.bottom() if marker.text.height() >= 8
+                      else marker.rect.bottom())
+            if bottom > overlay.height() or marker.rect.top() < 0:
+                fit.append((height, scale, round(bottom, 1), overlay.height()))
+check("the countdown never leaves the panel, at any height or scale",
+      not fit, str(fit[:4]))
+settings.set("overlay_scale", 1.0)
+overlay.resize(640, 78)
+
+# ------------------------------------------------------------- the glide
+# Markers ease towards where the layout puts them instead of appearing there.
+# What has to hold: a new marker starts where it belongs (a spell just used must
+# not slide in from wherever the last one sat), an existing one moves part of the
+# way each frame, it gets there, and a marker that is gone is forgotten rather
+# than kept for a champion who might flash again in twenty minutes.
+from math import exp                                    # noqa: E402
+from time import monotonic                              # noqa: E402
+from overlay import GLIDE_TAU                           # noqa: E402
+
+one = [timer("Ahri", "SummonerFlash", 300, 10.0)]
+overlay.snap_motion()
+check("a new marker starts where the layout puts it",
+      overlay._glide(one, [100.0]) == [100.0], str(overlay._glide(one, [100.0])))
+
+overlay._glide_at = monotonic() - GLIDE_TAU        # pretend one time constant
+moved = overlay._glide(one, [200.0])[0]
+check("a marker that has moved eases rather than jumps",
+      100.0 < moved < 200.0, f"{moved:.1f}")
+check("  and covers about 63% of the way in one time constant",
+      abs(moved - (100.0 + 100.0 * (1 - exp(-1)))) < 1.0, f"{moved:.1f}")
+
+for _ in range(20):
+    overlay._glide_at = monotonic() - 0.1
+    settled = overlay._glide(one, [200.0])[0]
+check("and arrives", abs(settled - 200.0) < 0.5, f"{settled:.3f}")
+
+overlay._glide_at = monotonic()
+still = overlay._glide(one, [200.0])[0]
+check("a marker with nowhere to go stays put", still == settled, f"{still:.3f}")
+
+# The flag behind the extra frames. Thirty repaints a second are worth their CPU
+# while something is travelling and are pure waste once nothing is, so the layout
+# says which of the two it currently is.
+check("a settled track asks for no animation frames", overlay._gliding is False,
+      str(overlay._gliding))
+overlay._glide_at = monotonic() - 0.01
+overlay._glide(one, [400.0])
+check("and a track with a marker in transit asks for them",
+      overlay._gliding is True, str(overlay._gliding))
+
+overlay._glide([], [])
+check("a marker that is gone is forgotten", overlay._glide_from == {},
+      str(overlay._glide_from))
 
 # Painting one must work with no icons loaded at all: FakeAssets returns None for
 # every path, which is also what a first run before the icon download looks like.

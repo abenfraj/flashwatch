@@ -51,24 +51,70 @@ check("placeholders match across languages", not mismatched, str(mismatched))
 # Anything still identical in both languages should be deliberate (a product
 # name, a word that is spelled the same). Listed explicitly so a forgotten
 # translation cannot hide among them.
-SAME_ON_PURPOSE = {"app.title", "app.tray_tooltip", "ui.tab_debug",
-                   "ui.theme_neon", "ui.notifications", "ui.actions",
-                   "ui.overlay", "ui.capture",
+SAME_ON_PURPOSE = {"app.title", "app.tray_tooltip",
+                   "ui.theme_neon", "ui.notifications", "ui.capture",
                    # Words League itself does not translate.
-                   "zone.name_chat", "zone.name_scoreboard"}
+                   "zone.name_chat", "zone.name_scoreboard",
+                   # Labels drawn inside the figure that redraws League's own
+                   # options window: they are the client's words, and the client
+                   # spells these three the same in French and in English. They
+                   # stay in the catalogue rather than becoming literals because
+                   # the day one of them differs, this is where it is changed.
+                   "guide.shot_options", "guide.shot_tab_audio",
+                   "guide.shot_tab_interface",
+                   # A language names itself the same way whoever is reading:
+                   # a picker that offered "French" to a French speaker would be
+                   # asking the one person who cannot answer it.
+                   "guide.language_fr_name", "guide.language_en_name",
+                   "guide.language_en_sub"}
 identical = {key for key, (fr, en) in STRINGS.items() if fr == en}
 check("nothing is left untranslated by accident",
       identical <= SAME_ON_PURPOSE, str(sorted(identical - SAME_ON_PURPOSE)))
 check("the deliberate list has no stale entries",
       SAME_ON_PURPOSE <= identical, str(sorted(SAME_ON_PURPOSE - identical)))
 
+# Nothing in the catalogue that nothing can print. The point of one table is that
+# a missing string is visible; an entry no window reaches is the same problem
+# facing the other way -- it reads as covered when it is dead, and rewriting a
+# window quietly leaves a dozen of them behind.
+#
+# i18n.py itself is excluded, and that is the whole trick: every key is a string
+# literal in the catalogue, so scanning it too would pass any key that merely
+# exists.
+source = "\n".join(path.read_text("utf-8")
+                   for path in sorted((Path(__file__).resolve().parent.parent
+                                       / "src").glob("*.py"))
+                   if path.name != "i18n.py")
+literals = set(re.findall(r"""["']([a-z_]+\.[a-z0-9_]+)["']""", source))
+
+# The few keys that are built rather than written, spelled out from the same
+# lists the code builds them from. Enumerated rather than pattern-matched on
+# purpose: a regex like `guide\..*_title` matches keys that do not exist either,
+# which is how "guide.done_title" sat unused behind a passing check.
+from onboarding import STEP_NAV                   # noqa: E402
+from zone_overlay import ZONES                    # noqa: E402
+
+# The stepper's seven labels and the two language cards, built from the same
+# lists the guide builds them from.
+built = (set(STEP_NAV.values())
+         | {f"guide.language_{code}_{part}"
+            for code in ("fr", "en") for part in ("name", "sub")}
+         | {f"zone.name_{zone}" for zone in ZONES})
+
+orphans = sorted(key for key in STRINGS
+                 if key not in literals and key not in built)
+check("every string in the catalogue is reachable from the code", not orphans,
+      str(orphans))
+check("and the built keys really are in the catalogue",
+      not sorted(built - set(STRINGS)), str(sorted(built - set(STRINGS))))
+
 # ------------------------------------------------------------------ lookups
 i18n.set_language(FRENCH)
-check("French is served in French", tr("ui.tab_status") == "Statut",
-      tr("ui.tab_status"))
+check("French is served in French", tr("ui.nav_settings") == "Reglages",
+      tr("ui.nav_settings"))
 i18n.set_language(ENGLISH)
-check("English is served in English", tr("ui.tab_status") == "Status",
-      tr("ui.tab_status"))
+check("English is served in English", tr("ui.nav_settings") == "Settings",
+      tr("ui.nav_settings"))
 check("formatting works", tr("game.in_game", width=1920, height=1080)
       == "In game (1920x1080)", tr("game.in_game", width=1920, height=1080))
 check("a missing key returns the key rather than raising",
