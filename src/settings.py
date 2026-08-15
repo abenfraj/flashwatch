@@ -73,17 +73,34 @@ BREADCRUMB_PATH = (Path(os.environ.get("LOCALAPPDATA", Path.home()))
 
 DEFAULTS: dict[str, Any] = {
     # --- overlay -------------------------------------------------------
-    # "bar"  : discreet horizontal track at the top centre; each spell rides
-    #          left to right as its cooldown runs down.
-    # "list" : vertical panel listing each spell and its remaining time.
+    # Which of the three displays is drawn. None is "the right one": a 4K
+    # ultrawide and a 1080p laptop, a jungler watching two enemies and a support
+    # watching five, do not want the same thing, so the choice is the user's.
+    #
+    # "bar"   : horizontal track at the top centre; each spell rides left to
+    #           right as its cooldown runs down, so position *is* progress.
+    # "cards" : one fixed card per cooldown -- portrait, progress ring, spell
+    #           badge, countdown. Nothing moves, which is what makes it readable
+    #           mid-fight.
+    # "list"  : compact rows, one per spell, each with a progress gauge.
     "overlay_layout": "bar",
-    # Set once the bar has been centred at the top of the screen, so a saved
-    # position from the list layout is not reused for it.
+    # Geometry per layout: {"bar": [x, y, w, h], ...}. Kept apart because the
+    # three shapes have nothing in common -- a position and size that suit a wide
+    # top strip would put the vertical rows half off screen, and switching
+    # display must never lose where the previous one was placed.
+    "layout_geometry": {},
+    # Legacy. Superseded by layout_geometry above and only read once, to carry a
+    # position saved by an older version into the new per-layout store.
     "bar_placed": False,
     # Draw the empty track when nothing is on cooldown. Without it the bar is
     # completely invisible at rest, which is maximally discreet but leaves no
     # sign the application is alive or where the bar sits.
     "bar_show_when_idle": True,
+    # Stand the track on its end: cooldowns run top to bottom down a side of the
+    # screen instead of left to right along the top, with the countdown beside
+    # each portrait rather than under it. Only affects the "bar" display, and it
+    # keeps its own rectangle, since the two shapes have nothing in common.
+    "bar_vertical": False,
     # Keep the overlay off screen until League's in-game window is up. Outside a
     # game the bar has nothing to say and would sit over the client or the
     # desktop; it still appears while unlocked, so it can be positioned.
@@ -96,7 +113,10 @@ DEFAULTS: dict[str, Any] = {
     "overlay_locked": True,          # locked == click-through
     "overlay_opacity": 0.92,
     "overlay_scale": 1.0,
-    "theme": "dark",                 # dark | light | neon
+    # Light by default: it is the product's face, and the light overlay is the
+    # only one of the three that stays legible over a bright game as well as a
+    # dark one -- at the cost of being a little more opaque. dark | light | neon
+    "theme": "light",
     "sort_by_role": True,
     "hide_ready_entries": False,
     # How long a spell keeps showing READY once it is back up, before its entry
@@ -191,6 +211,15 @@ DEFAULTS: dict[str, Any] = {
     # Shown once, the first time the close button hides the window instead of
     # quitting, so the disappearance is not mistaken for a crash.
     "tray_hint_shown": False,
+
+    # --- first run -------------------------------------------------------
+    # The setup guide runs itself once. What it covers cannot be discovered by
+    # poking at the interface -- League has to be in borderless, the client's
+    # language decides what is looked for in chat, and the bar has to be put
+    # somewhere the user actually wants it -- so the first run walks through it
+    # rather than waiting to be asked. Set when the guide is finished *or*
+    # skipped: offering it again would be nagging, and it stays one click away.
+    "onboarding_done": False,
 
     # --- updates --------------------------------------------------------
     # One request to GitHub's release API at start-up. On by default: the program

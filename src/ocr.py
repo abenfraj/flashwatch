@@ -258,6 +258,11 @@ class PipelineStatus:
 
     game: str = "League of Legends non detecte"
     in_game: bool = False
+    # The client is up but no game is on screen. Reported as its own flag rather
+    # than left to be read back out of ``game``: the control window turns this
+    # into a state pill, and parsing a translated sentence to find out what it
+    # said would break the moment the wording changed.
+    client_running: bool = False
     region: str = "-"
     last_ocr_ms: float = 0.0
     frames: int = 0
@@ -708,6 +713,7 @@ class CaptureWorker(threading.Thread):
         state, session_changed = self.detector.poll()
         self.status.game = state.describe()
         self.status.in_game = state.in_game
+        self.status.client_running = state.client_running
 
         if session_changed:
             # New game or game closed: forget everything about the old one.

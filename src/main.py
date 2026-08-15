@@ -22,15 +22,15 @@ from pathlib import Path
 # Allow "import overlay" etc. when launched as a script from any directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from PySide6.QtCore import QObject, QPointF, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import (QAction, QColor, QDesktopServices, QIcon, QPainter,
-                           QPen, QPixmap)
+from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QAction, QDesktopServices, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import autostart
 import chat_detector
 import i18n
 import settings as settings_module
+import single_instance
 import theme
 import updater
 from audio import Notifier
@@ -38,6 +38,7 @@ from chat_detector import ChatRegion
 from i18n import tr
 from message_parser import MessageParser
 from ocr import CaptureWorker
+from onboarding import Onboarding
 from overlay import Overlay
 from riot_assets import RiotAssets
 from settings import Settings
@@ -57,6 +58,15 @@ LOG_PATH = settings_module.ASSETS_DIR / "flashwatch.log"
 # competes with loading Riot's data, early enough that the answer is there before
 # the user has finished reading the settings window.
 UPDATE_CHECK_DELAY_MS = 4000
+
+# How long after start-up the first-run guide appears. Long enough that the tray
+# icon and the windows exist first, short enough to read as part of launching.
+GUIDE_DELAY_MS = 700
+
+# How often the trial mode tops its fake cooldowns back up. Slow: it only has to
+# replace entries that have run out, and the countdowns animate from the UI
+# refresh like any others.
+DEMO_TICK_MS = 2000
 
 # Where each hand-placed area is persisted.
 SETTING_FOR_ZONE = {
@@ -87,44 +97,11 @@ def configure_logging() -> None:
     )
 
 
-def make_mark(size: int = 256) -> QPixmap:
-    """Draw the Flashwatch mark, the same one the download page uses.
-
-    Geometry comes from theme.py so this and the .ico drawn by build.py cannot
-    say different things -- they had, quietly: this one used to have hairline
-    strokes and no hub, which at 16px in the tray read as a smudged ring.
-
-    Drawn at 256 and let Qt downscale, rather than drawn at 16: a 3-unit stroke
-    on a 64-unit box is under one pixel at tray size, and rounding it up by hand
-    gives a different shape at every size.
-    """
-    scale = size / theme.MARK_BOX
-    pixmap = QPixmap(size, size)
-    pixmap.fill(QColor(0, 0, 0, 0))
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
-
-    cx, cy = (v * scale for v in theme.MARK_CENTRE)
-    radius = theme.MARK_DISC_R * scale
-    painter.setBrush(QColor(*theme.MARK_DISC_RGB))
-    painter.setPen(QPen(QColor(*theme.MARK_EDGE_RGB),
-                        theme.MARK_DISC_STROKE * scale))
-    painter.drawEllipse(QPointF(cx, cy), radius, radius)
-
-    hands = QPen(QColor(*theme.MARK_HAND_RGB), theme.MARK_HAND_STROKE * scale)
-    hands.setCapStyle(Qt.RoundCap)
-    painter.setPen(hands)
-    for (x1, y1), (x2, y2) in theme.MARK_HANDS:
-        painter.drawLine(QPointF(x1 * scale, y1 * scale),
-                         QPointF(x2 * scale, y2 * scale))
-
-    hub = theme.MARK_HUB_R * scale
-    painter.setPen(Qt.NoPen)
-    painter.setBrush(QColor(*theme.MARK_EDGE_RGB))
-    painter.drawEllipse(QPointF(cx, cy), hub, hub)
-
-    painter.end()
-    return pixmap
+# The mark itself is drawn in theme.py, next to the geometry it is drawn from.
+# It is wanted in four places now -- the tray, the taskbar, both windows' headers
+# -- and a copy per caller is exactly how the runtime icon and the one stamped on
+# the executable drifted apart before.
+make_mark = theme.mark_pixmap
 
 
 def make_tray_icon() -> QIcon:
@@ -223,6 +200,12 @@ class Application:
         self.overlay = Overlay(self.settings, self.assets)
         self.control = ControlWindow(self.settings, self.assets)
         self.picker: RegionPicker | None = None
+        # The setup guide, while it is open. One at a time: two copies would be
+        # writing the same settings behind each other's back.
+        self.guide: Onboarding | None = None
+        # True while the trial mode is running: fake cooldowns on screen, every
+        # hide rule overridden, and no game in sight.
+        self._demo = False
         # One test-mode frame per area being placed, keyed by zone.
         self.zone_frames: dict[str, ZoneFrame] = {}
         # What to put back if the chat test mode is cancelled.
@@ -254,9 +237,30 @@ class Application:
         self.drain_timer.timeout.connect(self._drain_results)
         self.drain_timer.start()
 
+        # Somebody launching Flashwatch again is asking for its window, not for a
+        # second copy. The one that stands down leaves a knock; this is what
+        # picks it up. A stat on a file that is almost never there, less often
+        # than once a second -- next to the capture loop it costs nothing.
+        self.knock_timer = QTimer()
+        self.knock_timer.setInterval(single_instance.POLL_MS)
+        self.knock_timer.timeout.connect(self._answer_knock)
+        self.knock_timer.start()
+
+        # Only runs while the trial mode is on.
+        self.demo_timer = QTimer()
+        self.demo_timer.setInterval(DEMO_TICK_MS)
+        self.demo_timer.timeout.connect(self._tick_demo)
+
         # Started from a timer on the UI thread, which has an event loop, so this
         # one does fire.
         QTimer.singleShot(UPDATE_CHECK_DELAY_MS, self._start_update_check)
+
+        # First run: walk through the four things that decide whether any of this
+        # works, none of which can be discovered by looking at the interface.
+        # Delayed a moment so the window arrives after the tray icon rather than
+        # on top of a half-built application.
+        if not self.settings.get("onboarding_done"):
+            QTimer.singleShot(GUIDE_DELAY_MS, self._show_guide)
 
     # ------------------------------------------------------------------
     def _connect_ui(self) -> None:
@@ -269,8 +273,9 @@ class Application:
         self.control.overlay_lock_toggled.connect(self._on_overlay_locked)
         self.control.settings_changed.connect(self._on_settings_changed)
         self.control.hidden_to_tray.connect(self._on_hidden_to_tray)
+        self.control.guide_requested.connect(self._show_guide)
         self.control.recentre_requested.connect(self._on_recentre)
-        self.control.preview_requested.connect(self._on_preview)
+        self.control.demo_toggled.connect(self._on_demo_toggled)
         self.control.language_changed.connect(self._on_language_changed)
         self.control.quit_requested.connect(self.quit)
         self.control.update_requested.connect(self._on_install_update)
@@ -324,10 +329,14 @@ class Application:
         self.tray_menu.addSeparator()
         self.tray_menu.addAction(tr("tray.settings")).triggered.connect(
             self._show_control)
+        self.tray_menu.addAction(tr("tray.guide")).triggered.connect(
+            self._show_guide)
         self.tray_menu.addAction(tr("tray.recentre")).triggered.connect(
             self._on_recentre)
-        self.tray_menu.addAction(tr("tray.preview")).triggered.connect(
-            self._on_preview)
+        self.action_demo = self.tray_menu.addAction(tr("tray.demo"))
+        self.action_demo.setCheckable(True)
+        self.action_demo.setChecked(self._demo)
+        self.action_demo.toggled.connect(self._on_demo_toggled)
         self.tray_menu.addAction(tr("tray.redetect")).triggered.connect(
             self._on_redetect)
         self.tray_menu.addAction(tr("tray.reset")).triggered.connect(
@@ -357,6 +366,16 @@ class Application:
         self.control.show()
         self.control.raise_()
         self.control.activateWindow()
+
+    def _answer_knock(self) -> None:
+        """Another copy was launched: show this one's window instead.
+
+        Deliberately the same thing a double-click on the tray icon does. A
+        second launch and a double-click are the same request -- *let me see it*
+        -- and answering them differently would be two behaviours to learn.
+        """
+        if single_instance.take_knock():
+            self._show_control()
 
     # ------------------------------------------------------------------
     def _install_hotkeys(self) -> None:
@@ -653,6 +672,11 @@ class Application:
 
         self.overlay.set_game_active(bool(status.in_game))
 
+        # A real game outranks the trial: from here on the screen has actual
+        # cooldowns to show, and the overlay has to be click-through again.
+        if self._demo and status.in_game:
+            self._end_demo_for_game()
+
         if status.game_clock is not None:
             # The clock area was validated and reads cleanly: that is the game
             # time itself, so it outranks anything inferred from chat timestamps.
@@ -688,9 +712,30 @@ class Application:
                 ocr=ocr_text,
                 timers=self.timers.active_count(),
                 clock=clock_text,
+                state=self._ui_state(status),
             )
             self.control.update_debug(status.lines, status.near_misses,
                                       status.colour_rejected)
+
+    def _ui_state(self, status) -> str:
+        """Which of the five states the control window's pill should show.
+
+        Decided here rather than in the window: this is where the difference
+        between "the client is up" and "nothing is running" is actually known.
+        """
+        if self._demo:
+            # Said before anything else: what is on screen is not real, and that
+            # is the one thing somebody reading this window has to know.
+            return "demo"
+        if self.timers is None or not self.assets.ready:
+            return "loading"
+        if status.error:
+            return "error"
+        if status.in_game:
+            return "in_game"
+        if status.client_running:
+            return "client"
+        return "waiting"
 
     # ------------------------------------------------------------------
     def _on_redetect(self) -> None:
@@ -942,20 +987,136 @@ class Application:
             visible=bool(self.settings.get("overlay_visible")), locked=locked)
 
     def _on_recentre(self) -> None:
-        self.overlay.centre_at_top()
+        self.overlay.place_default()
         self.overlay.update()
 
-    def _on_preview(self) -> None:
-        """Show fake timers briefly, so the overlay can be checked without a game."""
-        if self.timers is None:
-            return
+    # ------------------------------------------------------------------
+    # The setup guide
+    # ------------------------------------------------------------------
+    def _show_guide(self, step: int = 0) -> None:
+        """Open the guide, or bring the open one back to the front.
+
+        One window at a time, kept on the instance: a second copy would be
+        editing the same settings behind the first one's back.
+        """
+        if self.guide is None:
+            self.guide = Onboarding(self.settings)
+            self.guide.finished.connect(self._on_guide_finished)
+            self.guide.language_changed.connect(self._on_language_changed)
+            self.guide.layout_changed.connect(self._on_layout_changed)
+            self.guide.place_requested.connect(self._on_place_overlay)
+            self.guide.chat_frame_requested.connect(
+                lambda: self.control.button_test_mode.setChecked(True))
+        if step:
+            self.guide.show_step(step)
+        self.guide.show()
+        self.guide.raise_()
+        self.guide.activateWindow()
+
+    def _on_guide_finished(self) -> None:
+        """Hand over to the settings window, on the page the guide left off at.
+
+        Not a dead end: the last step is about the overlay, so the natural next
+        move is the page that has the rest of its settings on it.
+        """
+        self.guide = None
+        self.control.refresh_layout_choice()
+        self.control.go_to_display_page()
+        self._show_control()
+
+    def _on_layout_changed(self, _key: str) -> None:
+        """A display was picked: move the overlay onto its own geometry."""
+        self.overlay.sync_layout()
+        self.overlay.refresh_visibility()
+        self.control.refresh_layout_choice()
+
+    def _on_place_overlay(self) -> None:
+        """Put the overlay on screen, unlocked, with something in it to aim at.
+
+        Placing an empty display is possible but unpleasant -- there is nothing to
+        judge the position against -- so this is the trial and the unlock
+        together, which is what "place it now" means.
+
+        Nothing races the user here. Unlocked, the overlay accepts mouse events,
+        so a bar left unlocked *while playing* would swallow clicks over the game
+        -- but that is a state to end when the game starts, which is exactly what
+        happens, and not a reason to re-lock under somebody's cursor after twenty
+        seconds.
+        """
         if not self.settings.get("overlay_visible"):
             self._on_overlay_visible(True)
-        count = self.timers.add_preview()
-        self.overlay.set_timers(self.timers.snapshot())
-        if count:
-            self.tray.showMessage("Flashwatch", tr("notify.preview"),
+        self._on_demo_toggled(True)
+        self._on_overlay_locked(False)
+        self.overlay.raise_()
+
+    # ------------------------------------------------------------------
+    # Trial mode: judge and place the overlay with League closed
+    # ------------------------------------------------------------------
+    # This replaced a twenty-second "preview". Twenty seconds is enough to
+    # confirm the overlay draws and nowhere near enough to do what somebody
+    # actually opens it for -- compare the three displays, try a theme, drag the
+    # thing where they want it and look at it again. So the trial simply stays on
+    # until it is turned off, or until a real game arrives and takes over.
+    def _on_demo_toggled(self, active: bool) -> None:
+        if active and self.timers is None:
+            # Riot's data is still downloading, so there are no champions to make
+            # fake cooldowns out of. Said rather than ignored: a button that does
+            # nothing reads as broken.
+            self.control.sync_demo(False)
+            self._sync_demo_action(False)
+            self.tray.showMessage("Flashwatch", tr("notify.demo_loading"),
                                   QSystemTrayIcon.Information, 4000)
+            return
+
+        self._demo = active
+        self.control.sync_demo(active)
+        self._sync_demo_action(active)
+        self.overlay.set_demo(active)
+
+        if active:
+            self.timers.add_demo(first=True)
+            self.demo_timer.start()
+        else:
+            self.demo_timer.stop()
+            if self.timers is not None:
+                self.timers.clear_demo()
+        if self.timers is not None:
+            self.overlay.set_timers(self.timers.snapshot())
+        self.overlay.update()
+        log.info("trial mode %s", "on" if active else "off")
+
+    def _tick_demo(self) -> None:
+        """Keep the trial's cooldowns topped up, so the display stays alive.
+
+        Entries that run out are purged like any other; putting them back with a
+        full cooldown is what makes the trial a moving picture instead of a frozen
+        one -- the colours keep crossing their thresholds while somebody watches.
+        """
+        if not self._demo or self.timers is None:
+            return
+        if self.timers.add_demo():
+            self.overlay.set_timers(self.timers.snapshot())
+
+    def _end_demo_for_game(self) -> None:
+        """A real game appeared: the trial gets out of the way.
+
+        This is also what puts the click-through back, which is why there is no
+        timer racing the user any more: the risk was never "unlocked for too
+        long", it was "unlocked while playing".
+        """
+        self._on_demo_toggled(False)
+        if not self.settings.get("overlay_locked", True):
+            self._on_overlay_locked(True)
+        self.tray.showMessage("Flashwatch", tr("notify.demo_ended"),
+                              QSystemTrayIcon.Information, 5000)
+
+    def _sync_demo_action(self, active: bool) -> None:
+        action = getattr(self, "action_demo", None)
+        if action is None:
+            return
+        action.blockSignals(True)
+        action.setChecked(active)
+        action.blockSignals(False)
 
     # ------------------------------------------------------------------
     # Language
@@ -969,14 +1130,27 @@ class Application:
         adopted when it lands -- the interface is already readable by then.
         """
         i18n.set_language(language)
-        self._rebuild_interface()
-        self.tray.showMessage("Flashwatch", tr("ui.language_reloading"),
-                              QSystemTrayIcon.Information, 3000)
+        # Picking a language *inside the guide* is not the same event as picking
+        # one in the settings, even though it is the same signal. In the guide it
+        # is step one of seven: the reader is mid-sentence, and answering them
+        # with a Windows toast and a settings window jumping to the front is the
+        # application interrupting itself. So while the guide is up, the change
+        # happens silently behind it.
+        quiet = self.guide is not None and self.guide.isVisible()
+        self._rebuild_interface(quiet=quiet)
+        if not quiet:
+            self.tray.showMessage("Flashwatch", tr("ui.language_reloading"),
+                                  QSystemTrayIcon.Information, 3000)
         threading.Thread(target=self._reload_assets, name="Locale",
                          daemon=True).start()
 
-    def _rebuild_interface(self) -> None:
-        """Replace the control window and tray menu with ones in the new language."""
+    def _rebuild_interface(self, *, quiet: bool = False) -> None:
+        """Replace the control window and tray menu with ones in the new language.
+
+        ``quiet`` means: do it without anything coming to the front. The guide is
+        on screen, it is the window the user is looking at, and it must still be
+        the window the user is looking at when this returns.
+        """
         previous = self.control
         was_visible = previous.isVisible()
         # Silence it first: its close event asks the application to quit, and a
@@ -988,15 +1162,32 @@ class Application:
 
         self.control = ControlWindow(self.settings, self.assets)
         self._connect_ui()
-        # The team tab starts empty again, so let the next sync refill it.
+        # The team list starts empty again, so let the next sync refill it.
         self._known_champions.clear()
         self._sync_team()
+        # A running trial belongs to the application, not to the window that
+        # happened to start it: a fresh window would otherwise offer to start the
+        # one already on screen.
+        self.control.sync_demo(self._demo)
         # The banner belonged to the window that was just replaced. An offer the
         # user has not acted on has to survive changing language.
         if self._pending_release is not None and not self._update_busy:
             self.control.show_update(self._pending_release.version, __version__)
         if was_visible:
-            self._show_control()
+            if quiet:
+                # Rebuilt, but left where it was: raising it would put it over
+                # the guide the reader is still in the middle of.
+                self.control.show()
+            else:
+                self._show_control()
+
+        # The guide, if it is up, translates itself in place -- it draws every
+        # word of itself at paint time, so there is nothing to rebuild and, more
+        # to the point, nothing to close and reopen. It used to be replaced by a
+        # fresh copy here, which is exactly what made choosing a language flash
+        # the screen.
+        if self.guide is not None:
+            self.guide.retranslate()
 
         self._fill_tray_menu()
         self.overlay.icons.clear()
@@ -1043,13 +1234,12 @@ class Application:
         log.info("assets reloaded for %s", assets.locale)
 
     def _on_settings_changed(self) -> None:
-        self.overlay.setWindowOpacity(float(self.settings.get("overlay_opacity", 0.92)))
+        # Opacity is not set on the window any more -- it is painted into the
+        # panel, so the repaint at the end of this method is what applies it.
         self.overlay.refresh_visibility()
-        if (self.settings.get("overlay_layout") == "bar"
-                and not self.settings.get("bar_placed")):
-            # Switched to the bar for the first time: give it sensible geometry
-            # rather than the vertical panel's.
-            self.overlay.centre_at_top()
+        # Does nothing unless the chosen display actually changed, in which case
+        # it files away the outgoing one's position and restores the new one's.
+        self.overlay.sync_layout()
         self.overlay.update()
 
     # ------------------------------------------------------------------
@@ -1066,7 +1256,7 @@ class Application:
         self.app.quit()
 
 
-SINGLE_INSTANCE_NAME = "Flashwatch.instance"
+SINGLE_INSTANCE_NAME = single_instance.NAME
 
 # Held for the life of the process. Module-level rather than a local in main()
 # because the updater has to be able to let go of it early: the replacement
@@ -1078,28 +1268,9 @@ _instance_guard = None
 def acquire_single_instance(name: str = SINGLE_INSTANCE_NAME):
     """Claim the "only one running" token, or return None if it is taken.
 
-    Two copies would both OCR the same chat and both draw an overlay, and the
-    second one is easy to start by accident: packaged as a single .exe there is
-    no window and no cursor feedback for the first few seconds, so a second
-    double-click while waiting is the obvious thing to do.
-
-    A named mutex in the session namespace, so it disappears with the process
-    however it dies -- a lock file would survive a crash and lock the user out.
+    The mechanism, and why it is two mechanisms, is in ``single_instance.py``.
     """
-    try:
-        import win32api
-        import win32event
-        import winerror
-    except ImportError:                               # pragma: no cover
-        return object()                               # cannot check; allow it
-    handle = win32event.CreateMutex(None, False, name)
-    if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
-        # A handle comes back even when the mutex already existed; closing it
-        # keeps the refused copy from holding a reference to the token.
-        if handle:
-            win32api.CloseHandle(handle)
-        return None
-    return handle
+    return single_instance.acquire(name)
 
 
 def release_single_instance() -> None:
@@ -1109,20 +1280,19 @@ def release_single_instance() -> None:
     executable, and again on the way out of main().
     """
     global _instance_guard
-    handle, _instance_guard = _instance_guard, None
-    if handle is None:
-        return
-    try:
-        import win32api
-        win32api.CloseHandle(handle)
-        log.info("single-instance token released")
-    except Exception as exc:                          # noqa: BLE001
-        # Includes the no-pywin32 case, where the "handle" is a plain sentinel.
-        log.debug("could not release the single-instance token (%s)", exc)
+    token, _instance_guard = _instance_guard, None
+    if token is not None:
+        token.release()
 
 
 def _warn_already_running() -> None:
-    """Say why nothing happened. Silence would just get double-clicked again."""
+    """Say why nothing happened, when nothing happened.
+
+    Only reached if the knock went unanswered: the token is held by something
+    that is not listening, so there is no window for this copy to hand over to
+    and the user is owed an explanation. When the running copy *does* answer,
+    this is not shown -- its window coming up is the answer.
+    """
     try:
         import win32api
         import win32con
@@ -1141,8 +1311,13 @@ def main() -> int:
     global _instance_guard
     _instance_guard = acquire_single_instance()
     if _instance_guard is None:
-        log.warning("another instance is already running, exiting")
-        _warn_already_running()
+        # Launching again is how somebody asks for the window: it lives in the
+        # notification area with no taskbar button, so "it is already running"
+        # is an answer to a question nobody asked. Hand the request over to the
+        # copy that has a window, and only complain if nobody takes it.
+        log.warning("another instance is already running")
+        if not single_instance.knock():
+            _warn_already_running()
         return 0
 
     application = Application()

@@ -74,6 +74,12 @@ CLOCK_CONFIRM_TOLERANCE = 2.5    # seconds of slack, on top of the time elapsed
 
 ROLE_ORDER = {"TOP": 0, "JUNGLE": 1, "MID": 2, "ADC": 3, "SUPPORT": 4, "": 5}
 
+# The spell key an ultimate is filed under. One per champion, since a champion has
+# exactly one, and the same sentinel the parser emits -- the trial mode builds
+# fake entries by hand, and a different key there would file them where nothing
+# else looks.
+ULT_KEY = "ULT"
+
 
 @dataclass(slots=True)
 class ActiveTimer:
@@ -670,42 +676,111 @@ class TimerManager:
             timers.sort(key=lambda t: (t.remaining(now), t.champion_name))
         return timers
 
-    def add_preview(self) -> int:
-        """Insert short fake timers so the overlay can be checked without a game.
+    # What the trial mode shows: one cooldown per role, deliberately spread over
+    # every state the display can be in -- freshly cast, halfway, inside the
+    # thirty-second warning, already back up -- plus the two marks that are easy
+    # to get wrong and impossible to check in a real game on demand: the "?" on a
+    # spell that was only inferred, and the "~" on an ultimate whose rank is a
+    # guess. Somebody judging whether they can read the thing at a glance needs
+    # to see all of that at once, not three flashing twenty-second bars.
+    #
+    # (champion, spell, kind, full cooldown, remaining at the start, role,
+    #  uncertain)
+    DEMO_SAMPLES = (
+        ("Darius", "Flash", "summoner", 300.0, 282.0, "TOP", False),
+        ("Viego", "Smite", "summoner", 90.0, 47.0, "JUNGLE", False),
+        ("Ahri", "Teleport", "summoner", 360.0, 154.0, "MID", True),
+        ("Jinx", "Heal", "summoner", 240.0, 24.0, "ADC", False),
+        ("Thresh", "Exhaust", "summoner", 240.0, 0.0, "SUPPORT", False),
+    )
 
-        Durations are deliberately tiny (20s) rather than real cooldowns: it
-        spreads markers across the whole track immediately, and the displayed
-        times are small enough that a preview can never be mistaken for real
-        data. They expire on their own.
+    def add_demo(self, *, first: bool = False) -> int:
+        """Top the trial mode's fake cooldowns up. Returns how many were added.
+
+        Called repeatedly while the trial runs, and that is what makes it a trial
+        rather than a snapshot: an entry that has run out and been purged comes
+        back on the next call with its **full** cooldown, so the display keeps
+        moving, the colours keep crossing their thresholds and the countdowns
+        stay live for as long as somebody is looking at them.
+
+        ``first`` uses the scripted remaining times instead, so the very first
+        frame already shows every state at once rather than five identical bars
+        starting together.
+
+        Nothing here can be mistaken for real data further down: these never come
+        from a parsed line, and the trial is ended -- and everything cleared --
+        the moment a real game appears on screen.
         """
-        samples = [
-            # (champion, spell, duration, remaining) -> left, middle, right
-            ("Ahri", "Flash", 20.0, 19.0),
-            ("Darius", "Teleport", 20.0, 10.0),
-            ("Jinx", "Heal", 20.0, 2.5),
-        ]
         now = time.monotonic()
         added = 0
-        for champion_id, spell_key, duration, remaining in samples:
+        for (champion_id, spell_key, kind, duration, remaining, role,
+             uncertain) in self.DEMO_SAMPLES:
+            key = (champion_id, spell_key)
+            if key in self._timers:
+                continue
             champion = self.assets.champions.get(champion_id)
             spell = self.assets.spells.get(spell_key)
             if champion is None or spell is None:
                 continue
-            self._timers[(champion_id, spell_key)] = ActiveTimer(
+            left = remaining if first else duration
+            self._timers[key] = ActiveTimer(
                 champion_id=champion_id,
                 champion_name=champion.name,
-                kind="summoner",
+                kind=kind,
                 spell_key=spell_key,
                 spell_name=spell.name,
                 duration=duration,
-                started_at=now - (duration - remaining),
-                # Suppress the audio cues; this is a visual check.
+                started_at=now - (duration - left),
+                role=role,
+                uncertain=uncertain,
+                # Suppress the audio cues: this is a visual check, and a trial
+                # left running would otherwise chime every few seconds.
                 warned=True,
                 announced_ready=True,
             )
             added += 1
-        log.info("preview: %d timers added", added)
+
+        # One ultimate as well, since it is the only entry that carries a "~" and
+        # the only one whose duration is an estimate. Added separately: it is
+        # keyed on the champion's ultimate rather than a summoner spell.
+        ult_champion = self.assets.champions.get("Ahri")
+        ult = getattr(ult_champion, "ultimate", None) if ult_champion else None
+        if ult is not None and ("Ahri", ULT_KEY) not in self._timers:
+            self._timers[("Ahri", ULT_KEY)] = ActiveTimer(
+                champion_id="Ahri",
+                champion_name=ult_champion.name,
+                kind="ultimate",
+                spell_key=ULT_KEY,
+                spell_name=ult.name,
+                duration=100.0,
+                started_at=now - (100.0 - (68.0 if first else 100.0)),
+                approximate=True,
+                role="MID",
+                warned=True,
+                announced_ready=True,
+            )
+            added += 1
+
+        if added:
+            log.info("trial mode: %d fake cooldowns added", added)
         return added
+
+    def clear_demo(self) -> int:
+        """Remove the trial's fake cooldowns and nothing else.
+
+        Kept apart from :meth:`reset` on purpose: reset also throws away the
+        game-clock reference and the seen-line history, which the trial has no
+        business touching -- it can be turned on and off in the client between
+        two games.
+        """
+        keys = {(champion_id, spell_key)
+                for champion_id, spell_key, *_rest in self.DEMO_SAMPLES}
+        keys.add(("Ahri", ULT_KEY))
+        removed = 0
+        for key in keys:
+            if self._timers.pop(key, None) is not None:
+                removed += 1
+        return removed
 
     def active_count(self) -> int:
         now = time.monotonic()

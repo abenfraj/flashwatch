@@ -18,6 +18,10 @@ on:
       - '**/*.md'
       - '.gitignore'
       - '.github/**'
+      # The art-direction kit, including the reference images dropped into
+      # design/reference/. Those are not .md, so without this line adding a
+      # mockup would mint a version whose binary is byte-identical.
+      - 'design/**'
   workflow_dispatch:
     inputs:
       bump:
