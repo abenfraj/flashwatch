@@ -684,6 +684,13 @@ STRINGS: dict[str, tuple[str, str]] = {
         "or key press is ever sent to the game. Only the pixels already on your "
         "screen."),
     "guide.proof_read": ("lue", "read"),
+    "guide.proof_frame": (
+        "Rien n'apparaît ? La zone du chat est trouvée toute seule ; si elle "
+        "tombe à côté, ce bouton affiche un cadre à poser sur le tien, et "
+        "montre en direct ce qui est lu dessous. Il reste dans Dépannage.",
+        "Nothing appeared? The chat area is found on its own; if it lands in "
+        "the wrong place, this button draws a box to put over yours, and shows "
+        "live what it reads underneath. It stays in Troubleshooting."),
 
     # -- 7. all set ------------------------------------------------------
     "guide.done_title": ("Tout est prêt !", "All set!"),

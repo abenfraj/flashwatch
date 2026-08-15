@@ -1762,8 +1762,26 @@ class ProofScreen(Screen):
                      tr("ui.copied") if guide.copied else tr("ui.copy"),
                      hover=guide.weights.get("hover:copy"), primary=False,
                      grown=grown)
-        self.note(painter, guide, COL_X, button.bottom() + 26, COL_W,
-                  tr("guide.proof_note"), delay=0.5)
+        # The remedy, next to the test that reveals the need for it. Framing the
+        # chat by hand is not a step everybody walks through -- the area is found
+        # on its own, and asking a new user to draw a rectangle around something
+        # the program already located would be busywork. It belongs exactly here:
+        # the one moment where a reader discovers that nothing appeared.
+        paint_button(painter, self._frame_rect(guide), tr("ui.test_mode"),
+                     hover=guide.weights.get("hover:frame"), primary=False,
+                     grown=grown)
+        # A quiet line rather than a second note box: two boxes stacked do not
+        # fit the column, and this is a remedy for a minority, not a warning.
+        hint = px(17, QFont.Medium)
+        rows = _count_lines(tr("guide.proof_frame"), hint, COL_W)
+        top = button.bottom() + 20
+        painter.save()
+        painter.setOpacity(painter.opacity() * stage(guide.reveal, 0.5, 0.4))
+        flow(painter, COL_X, top, COL_W,
+             [(tr("guide.proof_frame"), hint, c("text_2"))], 26)
+        painter.restore()
+        self.note(painter, guide, COL_X, top + rows * 26 + 20, COL_W,
+                  tr("guide.proof_note"), delay=0.55)
 
         self.caption(painter, guide, PANEL_X, COL_TOP, tr("guide.layout_result"))
         panel = QRectF(PANEL_X, COL_TOP + 52, PANEL_W, 600)
@@ -1779,8 +1797,16 @@ class ProofScreen(Screen):
         field = QRectF(COL_X, top, COL_W, max(56, rows * 26 + 28))
         return field, QRectF(COL_X, field.bottom() + 18, 200, 56)
 
+    @classmethod
+    def _frame_rect(cls, guide) -> QRectF:
+        """The framing button, beside the copy one rather than under it."""
+        copy = cls._line_rects(guide)[1]
+        return QRectF(copy.right() + 16, copy.top(), 260, copy.height())
+
     def hots(self, guide) -> list[Hot]:
-        return [Hot(self._line_rects(guide)[1], guide.copy_test_line, "copy")]
+        return [Hot(self._line_rects(guide)[1], guide.copy_test_line, "copy"),
+                Hot(self._frame_rect(guide), guide.chat_frame_requested.emit,
+                    "frame")]
 
 
 class DoneScreen(Screen):
