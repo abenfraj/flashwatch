@@ -1,0 +1,20 @@
+Same simulated game background, but 3:2 and with the overlay placed along the LEFT
+side of the frame.
+
+Overlay: a tall narrow translucent panel, roughly 1:1.1 width-to-height, containing
+six rows grouped under small uppercase role headings (TOP, JUNGLE, MID, ADC,
+SUPPORT). Each row:
+  - a circular grey portrait with initials on the left
+  - a small circular spell badge next to it
+  - two lines of text: a champion name in primary ink, a spell name under it in
+    secondary ink
+  - a countdown right-aligned in tabular numerals: "4:42", "0:47", "~1:08", "2:34",
+    "0:24" in the warning colour, "READY" in the positive colour
+  - a thin horizontal progress gauge along the bottom edge of the row, filled from
+    the left in that row's state colour, each row filled to a different amount
+One row carries a small "?" chip inside the corner of its spell badge.
+
+Exact palette and radii from your token table. This panel is the most opaque of the
+three - it is a panel, not a strip - but the game must still show through faintly.
+Flat vector-style UI over the painterly abstract background. No device frame, no
+watermark, no logos.

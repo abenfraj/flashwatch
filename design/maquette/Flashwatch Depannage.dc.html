@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/colors.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/typography.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/base.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fig-tokens.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fig-typography.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/styles.css">
+<script src="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/_ds_bundle.js"></script>
+<style>
+  body { margin: 0; background: #05070f; }
+  a { color: #a78bfa; text-decoration: none; }
+  a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<div style="width:1353px;height:1163px;position:relative;background:#0a0d1a;font-family:Mulish, sans-serif;color:#e8ebf5;overflow:hidden;box-shadow:inset 0 0 0 1px #1b2038">
+
+  <div style="height:47px;display:flex;align-items:center;padding-left:18px;background:#0d1120;box-shadow:inset 0 -1px 0 #1a2036">
+    <div style="display:flex;align-items:center;gap:12px;flex:1">
+      <div style="color:#8B5CF6;display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 20 }}" hint-size="20px,20px"></x-import></div>
+      <div style="font-size:16px;font-weight:600;color:#e4e8f5">Flashwatch — v0.0.0-dev</div>
+    </div>
+    <div style="display:flex;height:47px">
+      <div style="width:52px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:17px;cursor:pointer" style-hover="background:#151a2c">–</div>
+      <div style="width:52px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:13px;cursor:pointer" style-hover="background:#151a2c">□</div>
+      <div style="width:52px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:17px;cursor:pointer" style-hover="background:#c0392b;color:#fff">✕</div>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:0;top:47px;width:236px;bottom:0;background:#0b0f1c;box-shadow:inset -1px 0 0 #1a2036;display:flex;flex-direction:column;padding:30px 18px 22px;box-sizing:border-box">
+    <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
+      <div style="width:74px;height:74px;border-radius:50%;box-shadow:inset 0 0 0 3px #7C3AED;display:flex;align-items:center;justify-content:center;color:#8B5CF6">
+        <x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 40 }}" hint-size="40px,40px"></x-import>
+      </div>
+      <div style="margin-top:18px;font-size:25px;font-weight:700;color:#f2f4fb">Flashwatch</div>
+      <div style="margin-top:6px;font-size:16px;font-weight:600;color:#8B5CF6">v0.0.0-dev</div>
+      <div style="margin-top:16px;font-size:15px;line-height:23px;font-weight:500;color:#9ba3bd;text-wrap:pretty">Timers des sorts ennemis, lus à l’écran</div>
+    </div>
+
+    <div style="margin-top:30px;display:flex;flex-direction:column;gap:6px">
+      <div onClick="{{ goHome }}" style="{{ navHome }}" style-hover="background:#141a2e">
+        <div style="{{ navHomeBar }}"></div>
+        <div style="{{ navHomeIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Home24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navHomeText }}">Accueil</div>
+      </div>
+      <div onClick="{{ goDisplay }}" style="{{ navDisplay }}" style-hover="background:#141a2e">
+        <div style="{{ navDisplayBar }}"></div>
+        <div style="{{ navDisplayIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Vue24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navDisplayText }}">Affichage</div>
+      </div>
+      <div onClick="{{ goSettings }}" style="{{ navSettings }}" style-hover="background:#141a2e">
+        <div style="{{ navSettingsBar }}"></div>
+        <div style="{{ navSettingsIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Settings24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navSettingsText }}">Réglages</div>
+      </div>
+      <div onClick="{{ goFix }}" style="{{ navFix }}" style-hover="background:#141a2e">
+        <div style="{{ navFixBar }}"></div>
+        <div style="{{ navFixIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Anomalie24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navFixText }}">Dépannage</div>
+      </div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <button style="display:flex;align-items:center;justify-content:center;gap:14px;height:54px;border:0;border-radius:10px;background:#0d1224;box-shadow:inset 0 0 0 1px #262d49;color:#dfe4f3;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+        <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Visibility24" size="{{ 22 }}" hint-size="22px,22px"></x-import></span>
+        Masquer la fenêtre
+      </button>
+      <button style="display:flex;align-items:center;justify-content:center;gap:14px;height:54px;border:0;border-radius:10px;background:rgba(193,0,0,.06);box-shadow:inset 0 0 0 1px #4a2130;color:#F87171;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #7a2b3c">
+        <span style="display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Close24" size="{{ 22 }}" hint-size="22px,22px"></x-import></span>
+        Quitter le programme
+      </button>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:236px;top:47px;right:0;bottom:0;padding:20px 26px 20px;box-sizing:border-box;display:flex;flex-direction:column">
+
+    <div style="display:flex;justify-content:flex-end">
+      <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 18px;border-radius:8px;background:#0f1428;box-shadow:inset 0 0 0 1px #2a3150">
+        <div style="width:9px;height:9px;border-radius:50%;background:#8B5CF6;box-shadow:0 0 10px rgba(139,92,246,.8)"></div>
+        <div style="font-size:13px;font-weight:700;letter-spacing:.6px;color:#e4e8f5">EN ATTENTE</div>
+      </div>
+    </div>
+
+    <div style="margin-top:6px;display:flex;gap:22px;align-items:flex-start">
+      <div style="width:34px;flex:none;display:flex;justify-content:center;color:#8B5CF6;margin-top:4px"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Anomalie24" size="{{ 30 }}" hint-size="30px,30px"></x-import></div>
+      <div>
+        <div style="font-size:26px;font-weight:500;color:#ffffff">Dépannage &amp; diagnostic</div>
+        <div style="margin-top:10px;font-size:15px;font-weight:500;color:#b6bdd3">Outils et informations pour diagnostiquer le fonctionnement de Flashwatch.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;border-radius:12px;background:#0e1226;box-shadow:inset 0 0 0 1px #232941;padding:18px 20px;flex:none">
+      <div style="display:flex;align-items:center;gap:16px">
+        <span style="display:flex;color:#8B5CF6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Notifications24" size="{{ 24 }}" hint-size="24px,24px"></x-import></span>
+        <div style="font-size:20px;font-weight:600;color:#ffffff">Zone du chat</div>
+      </div>
+      <div style="margin-top:12px;font-size:15px;font-weight:500;color:#b6bdd3">Trouvez automatiquement d’après le contenu du chat. Ces boutons servent quand elle ne l’est pas.</div>
+      <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <button style="display:flex;align-items:center;justify-content:center;gap:14px;height:52px;border:0;border-radius:8px;background:#150f34;box-shadow:inset 0 0 0 1px #6D28D9;color:#efeafd;font-family:Mulish, sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #8B5CF6, 0 8px 20px rgba(109,40,217,.25)">
+          <span style="display:flex;color:#c4b5fd"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Position24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+          Redetecter le chat
+        </button>
+        <button style="display:flex;align-items:center;justify-content:center;gap:14px;height:52px;border:0;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #262d49;color:#e4e8f5;font-family:Mulish, sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+          <span style="width:20px;height:20px;border-radius:3px;border:2px dashed #9aa2c0"></span>
+          Définir la zone manuellement
+        </button>
+      </div>
+      <button style="margin-top:16px;width:100%;display:flex;align-items:center;justify-content:center;gap:14px;height:52px;border:0;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #262d49;color:#e4e8f5;font-family:Mulish, sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+        <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Delete24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+        Oublier la zone enregistrée
+      </button>
+    </div>
+
+    <div style="margin-top:20px;border-radius:12px;background:#0e1226;box-shadow:inset 0 0 0 1px #232941;padding:18px 20px;flex:none">
+      <div style="display:flex;align-items:center;gap:16px">
+        <span style="display:flex;color:#8B5CF6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Scanner24" size="{{ 24 }}" hint-size="24px,24px"></x-import></span>
+        <div style="font-size:20px;font-weight:600;color:#ffffff">Cadrer les zones lues</div>
+      </div>
+      <div style="margin-top:12px;font-size:15px;font-weight:500;color:#b6bdd3">Chaque bouton pose un cadre à l’écran, que vous déplacez pendant la partie ; il affiche en direct ce que l’OCR lit dedans.</div>
+      <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+        <button style="display:flex;align-items:center;justify-content:center;gap:14px;height:52px;border:0;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #262d49;color:#e4e8f5;font-family:Mulish, sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+          <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Notifications24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+          Cadrer le chat
+        </button>
+        <button style="display:flex;align-items:center;justify-content:center;gap:14px;height:52px;border:0;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #262d49;color:#e4e8f5;font-family:Mulish, sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+          <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+          Cadrer le temps de partie
+        </button>
+        <button style="display:flex;align-items:center;justify-content:center;gap:14px;height:52px;border:0;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #262d49;color:#e4e8f5;font-family:Mulish, sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+          <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Rapport24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+          Cadrer le scoreboard
+        </button>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;border-radius:12px;background:#0e1226;box-shadow:inset 0 0 0 1px #232941;padding:18px 20px 20px;flex:1;min-height:0;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:16px;flex:none">
+        <span style="display:flex;color:#8B5CF6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Rapport24" size="{{ 24 }}" hint-size="24px,24px"></x-import></span>
+        <div style="font-size:20px;font-weight:600;color:#ffffff">Ce que l’application lit</div>
+      </div>
+
+      <div style="margin-top:16px;flex:1;min-height:0;display:flex;flex-direction:column;gap:12px">
+        <div style="flex:1;min-height:0;position:relative;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #232941;padding:12px 16px;box-sizing:border-box">
+          <div style="font-size:14px;font-weight:500;color:#b6bdd3">Lignes lues par l’OCR :</div>
+          <div style="margin-top:10px;font-size:15px;font-weight:500;color:#7e879f;font-style:italic">Aucune ligne détectée pour le moment…</div>
+          <div onClick="{{ copy1 }}" style="position:absolute;right:12px;top:12px;width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#9aa2c0;cursor:pointer" style-hover="background:#151b31;color:#ffffff"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24ContentCopy24" size="{{ 20 }}" hint-size="20px,20px"></x-import></div>
+        </div>
+
+        <div style="flex:1;min-height:0;position:relative;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #232941;padding:12px 16px;box-sizing:border-box">
+          <div style="max-width:960px;font-size:14px;font-weight:500;color:#b6bdd3;text-wrap:pretty">Lignes contenant un champion mais non interprétées. Si le jeu annonce les sorts avec une formulation différente, elle apparaît ici :</div>
+          <div style="margin-top:10px;font-size:15px;font-weight:500;color:#7e879f;font-style:italic">Aucune ligne détectée pour le moment…</div>
+          <div onClick="{{ copy2 }}" style="position:absolute;right:12px;top:12px;width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#9aa2c0;cursor:pointer" style-hover="background:#151b31;color:#ffffff"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24ContentCopy24" size="{{ 20 }}" hint-size="20px,20px"></x-import></div>
+        </div>
+
+        <div style="flex:1;min-height:0;position:relative;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #232941;padding:12px 16px;box-sizing:border-box">
+          <div style="max-width:960px;font-size:14px;font-weight:500;color:#b6bdd3;text-wrap:pretty">Sorts lus mais ignorés car le champion n’était pas affiché en rouge, donc pas un ennemi (ping sur son propre sort, sort d’un allié) :</div>
+          <div style="margin-top:10px;font-size:15px;font-weight:500;color:#7e879f;font-style:italic">Aucune ligne détectée pour le moment…</div>
+          <div onClick="{{ copy3 }}" style="position:absolute;right:12px;top:12px;width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#9aa2c0;cursor:pointer" style-hover="background:#151b31;color:#ffffff"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24ContentCopy24" size="{{ 20 }}" hint-size="20px,20px"></x-import></div>
+        </div>
+
+        <div style="flex:none;height:78px;position:relative;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #232941;padding:12px 16px;box-sizing:border-box">
+          <div style="font-size:14px;font-weight:500;color:#b6bdd3">Évènements confirmés :</div>
+          <div style="margin-top:10px;font-size:15px;font-weight:500;color:#7e879f;font-style:italic">Aucun évènement détecté pour le moment…</div>
+          <div onClick="{{ copy4 }}" style="position:absolute;right:12px;top:12px;width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#9aa2c0;cursor:pointer" style-hover="background:#151b31;color:#ffffff"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24ContentCopy24" size="{{ 20 }}" hint-size="20px,20px"></x-import></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;display:flex;justify-content:flex-end;flex:none">
+      <button style="display:flex;align-items:center;gap:14px;height:54px;padding:0 26px;border:0;border-radius:10px;background:#6D28D9;color:#fff;font-family:Mulish, sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-hover="box-shadow:0 10px 25px rgba(109,40,217,.35)">
+        <span style="display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Redirection24" size="{{ 22 }}" hint-size="22px,22px"></x-import></span>
+        Quitter (fermer le programme)
+      </button>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1353,&quot;height&quot;:1163}}">
+class Component extends DCLogic {
+  state = { nav: 'fix' };
+  nav(a) {
+    return 'position:relative;display:flex;align-items:center;gap:18px;height:60px;padding:0 18px;border-radius:10px;cursor:pointer;transition:background 200ms cubic-bezier(.4,0,.2,1);'
+      + (a ? 'background:#1a1440;box-shadow:inset 0 0 0 1px #3a2c7a;' : 'background:transparent;');
+  }
+  bar(a) { return 'position:absolute;left:0;top:12px;bottom:12px;width:4px;border-radius:0 3px 3px 0;background:#8B5CF6;opacity:' + (a ? 1 : 0) + ';'; }
+  icon(a) { return 'display:flex;color:' + (a ? '#c4b5fd' : '#8b93ad') + ';'; }
+  text(a) { return 'font-size:18px;font-weight:' + (a ? 700 : 500) + ';color:' + (a ? '#ffffff' : '#b9c0d6') + ';'; }
+  renderVals() {
+    const out = {
+      copy1: () => {}, copy2: () => {}, copy3: () => {}, copy4: () => {},
+      goHome: () => this.setState({ nav: 'home' }),
+      goDisplay: () => this.setState({ nav: 'display' }),
+      goSettings: () => this.setState({ nav: 'settings' }),
+      goFix: () => this.setState({ nav: 'fix' }),
+    };
+    [['Home', 'home'], ['Display', 'display'], ['Settings', 'settings'], ['Fix', 'fix']].forEach(([k, id]) => {
+      const a = this.state.nav === id;
+      out['nav' + k] = this.nav(a);
+      out['nav' + k + 'Bar'] = this.bar(a);
+      out['nav' + k + 'Icon'] = this.icon(a);
+      out['nav' + k + 'Text'] = this.text(a);
+    });
+    return out;
+  }
+}
+
+</script>
+</body>
+</html>

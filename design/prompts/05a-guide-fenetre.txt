@@ -1,0 +1,18 @@
+Generate a 4:5 image: a one-off setup wizard window, in the direction and exact
+palette you defined above. Structure, top to bottom:
+
+  - HEADER: a small square app mark, a title in the display face, a subtitle in
+    secondary ink underneath, and on the far right a small pill reading "STEP 2 OF 6"
+  - a large ILLUSTRATION PANEL filling the upper half: an inset rounded area with a
+    hairline border, holding a schematic diagram (see the next prompts for what goes
+    inside; here it can be a simple placeholder diagram of a screen with a strip at
+    its top edge)
+  - a step TITLE in the display face, large
+  - a PARAGRAPH of body text, two or three lines, comfortably measured
+  - a NOTE BOX: an inset panel with a hairline, holding two lines of quieter text
+  - FOOTER: a six-dot progress stepper centred, with the second dot active and a
+    connecting line through them; a quiet text link on the far left; a secondary
+    button and a primary button on the right
+
+Exact palette, radii and type sizes from your token table. Flat vector-style UI, no
+OS title bar, no device frame, no watermark, no logos, no photography.

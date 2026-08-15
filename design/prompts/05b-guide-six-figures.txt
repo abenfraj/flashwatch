@@ -1,0 +1,34 @@
+Generate a 1:1 image: a sheet of SIX schematic diagrams in a two-by-three grid, all
+sharing one consistent diagrammatic language, in the direction and exact palette you
+defined above. Each diagram sits in its own inset rounded panel with a small
+uppercase caption underneath. They are, in order:
+
+  1. WHAT IT DOES: a simplified computer screen seen head-on. In its lower left, a
+     small framed chat box containing three lines drawn as horizontal bars, one of
+     them in the danger/red colour. Along its top edge, a small overlay strip with
+     three circles on a rail. A dashed arrow rises from the chat box and points up at
+     the strip.
+  2. WINDOW MODE: a settings control as it would appear in a game's video options - a
+     small heading, then three stacked option rows. The first is marked with a red
+     cross and dimmed, the second is highlighted and marked with a positive-colour
+     tick, the third is neutral with an empty radio circle.
+  3. CLIENT LANGUAGE: two stacked message rows, each an inset panel containing one
+     line of monospaced text where the first word is in the danger/red colour and the
+     rest in primary ink. The upper row is highlighted as selected with the accent
+     colour; the lower one is dimmed. A tiny uppercase caption above each row.
+  4. CHAT AREA: the same simplified screen, with a rectangle in its lower left
+     outlined in the positive colour, three short tick marks in the left margin just
+     OUTSIDE that rectangle, three text-bar lines inside it, and a small caption
+     underneath it.
+  5. PLACING IT: the same simplified screen with a small overlay strip at its top
+     centre, four short arrows radiating outward from it, and a dashed ghost copy of
+     the same strip in the lower right of the screen with a small caption.
+  6. WHERE IT LIVES: the bottom right corner of a screen with a taskbar strip along
+     the bottom. Three small square icons sit near its right end; the leftmost of the
+     three is circled in the accent colour, and a dashed line rises from it to a
+     two-line label above.
+
+Rules for all six: geometric shapes, flat fills, hairlines and dashes only. No
+photography, no 3D, no isometric perspective, no gradients heavier than the direction
+allows, no recognisable game imagery, no logos, no character art, no watermark. Text
+inside the diagrams is minimal and may be simplified to short labels.

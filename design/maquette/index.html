@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flashwatch — maquette HTML</title>
+<style>
+  /* ═══════════════════════════════════════════════════════════════════════
+     LES JETONS DU PRODUIT — c'est la seule zone à modifier pour restyler.
+     Chaque nom correspond à une constante de src/theme.py ou à une clé des
+     THEMES de src/overlay.py, pour que le portage soit mécanique et non une
+     interprétation. Changer une valeur ici change toutes les surfaces plus bas.
+     ═══════════════════════════════════════════════════════════════════════ */
+  :root {
+    /* -- fonds et surfaces  →  theme.py : FIELD, FIELD_2, PANEL, PANEL_2 -- */
+    --fw-field:        #eef1f6;
+    --fw-field-2:      #e6ebf3;
+    --fw-panel:        #ffffff;
+    --fw-panel-2:      #f7f9fc;
+
+    /* -- filets  →  theme.py : LINE, LINE_STRONG -- */
+    --fw-line:         rgba(24, 36, 62, 0.14);
+    --fw-line-strong:  rgba(24, 36, 62, 0.30);
+
+    /* -- encres  →  theme.py : INK, INK_DIM, INK_FAINT -- */
+    --fw-ink:          #141a24;
+    --fw-ink-dim:      #4a5566;
+    --fw-ink-faint:    #606b7e;
+
+    /* -- l'accent de l'identité  →  theme.py : SIGNAL + ses lavis -- */
+    --fw-accent:       #06699f;
+    --fw-accent-wash:  rgba(6, 105, 159, 0.06);
+    --fw-accent-fill:  rgba(6, 105, 159, 0.12);
+    --fw-accent-edge:  rgba(6, 105, 159, 0.34);
+
+    /* -- les trois états, qui VEULENT dire quelque chose  →  overlay THEMES -- */
+    --fw-counting:     #141a24;
+    --fw-soon:         #8a4d00;
+    --fw-ready:        #0f6b3d;
+    --fw-danger:       #b02524;
+
+    /* -- l'overlay, posé sur le jeu  →  overlay THEMES + BAR_*_ALPHA -- */
+    --fw-overlay-panel:      rgba(250, 251, 253, 0.98);
+    --fw-overlay-alpha:      0.80;   /* en jeu */
+    --fw-overlay-alpha-rest: 0.30;   /* au repos */
+    --fw-overlay-rail:       rgba(108, 120, 140, 0.86);
+    --fw-overlay-row:        rgba(18, 28, 48, 0.085);
+    --fw-badge-backing:      rgba(255, 255, 255, 0.98);
+
+    /* -- typographies. Doivent être libres (OFL / Apache-2.0) pour être
+          embarquées dans l'exécutable. La cascade nomme d'abord l'idéal, puis
+          ce que Windows possède déjà. -- */
+    --fw-display: "Chakra Petch", "Segoe UI Semibold", "Segoe UI", sans-serif;
+    --fw-body:    "Barlow", "Segoe UI", system-ui, sans-serif;
+    --fw-mono:    "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+    /* -- géométrie  →  rayons et épaisseurs, en pixels -- */
+    --fw-radius-overlay: 9px;
+    --fw-radius-card:    8px;
+    --fw-radius-row:     6px;
+    --fw-radius-pill:    9px;
+    --fw-radius-input:   4px;
+    --fw-hairline:       1px;
+    --fw-ring:           2.8px;   /* anneau de progression des cartes */
+    --fw-portrait-ring:  1.8px;   /* liseré autour d'un portrait */
+    --fw-gauge:          2.6px;   /* jauge sous une rangée */
+
+    /* -- rythme d'espacement, cinq pas -- */
+    --fw-s1: 4px;  --fw-s2: 7px;  --fw-s3: 12px;  --fw-s4: 18px;  --fw-s5: 26px;
+
+    /* -- l'ombre PEINTE sous les chiffres de l'overlay. Pas un box-shadow :
+          en Qt c'est un second tracé décalé, donc décalage + alpha. -- */
+    --fw-text-shadow-offset: 1px;
+    --fw-text-shadow-alpha:  0.85;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     LE CHÂSSIS DE LA PAGE — volontairement à part. Restyler le produit ne doit
+     pas rendre cette page illisible, donc elle a ses propres variables.
+     ═══════════════════════════════════════════════════════════════════════ */
+  :root {
+    --doc-bg:     #16181d;
+    --doc-panel:  #1e2127;
+    --doc-ink:    #eef1f6;
+    --doc-dim:    #9aa3b2;
+    --doc-line:   rgba(255, 255, 255, 0.1);
+    --doc-mono:   "Cascadia Mono", Consolas, ui-monospace, monospace;
+    --doc-body:   system-ui, "Segoe UI", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--doc-bg);
+    color: var(--doc-dim);
+    font-family: var(--doc-body);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 120px; }
+
+  h1 {
+    font-family: var(--doc-body);
+    font-size: 26px;
+    color: var(--doc-ink);
+    margin: 0 0 6px;
+    letter-spacing: -0.3px;
+  }
+  .sub { max-width: 76ch; margin: 0 0 8px; }
+  .sub code, code {
+    font-family: var(--doc-mono);
+    font-size: 0.88em;
+    background: rgba(255, 255, 255, 0.07);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+  h2 {
+    font-family: var(--doc-body);
+    font-size: 13px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--doc-ink);
+    margin: 54px 0 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--doc-line);
+  }
+  h2 .num { color: var(--fw-accent); margin-right: 8px; }
+  .note { max-width: 82ch; margin: 10px 0 22px; }
+  .caption {
+    font-family: var(--doc-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--doc-dim);
+    margin-top: 8px;
+  }
+  .stage {
+    background: var(--doc-panel);
+    border: 1px solid var(--doc-line);
+    border-radius: 10px;
+    padding: 22px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+  }
+  /* Chaque scene porte le fond que son composant a dans le programme : le panneau
+     de l'overlay pour un cooldown, le fond de fenetre pour un widget. Juger un
+     chiffre fonce sur le gris de cette page ne prouve rien. */
+  .stage--overlay { background: var(--fw-overlay-panel); }
+  .stage--window { background: var(--fw-field); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; }
+  .controls { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .controls button {
+    font-family: var(--doc-mono);
+    font-size: 11px;
+    color: var(--doc-ink);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--doc-line);
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed="true"] {
+    border-color: var(--fw-accent);
+    color: var(--fw-accent);
+  }
+  .warn {
+    border-left: 2px solid var(--fw-soon);
+    padding: 2px 0 2px 14px;
+    margin: 18px 0;
+    max-width: 82ch;
+  }
+
+  /* ── la palette, lue en direct ─────────────────────────────────────────── */
+  .swatches { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); }
+  .swatch { border: 1px solid var(--doc-line); border-radius: 8px; overflow: hidden; }
+  .swatch .chip { height: 46px; }
+  .swatch .meta { padding: 7px 9px; font-family: var(--doc-mono); font-size: 10px; }
+  .swatch .name { color: var(--doc-ink); }
+  .swatch .val { color: var(--doc-dim); }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     LE PRODUIT. Tout ce qui suit n'utilise que des jetons --fw-*.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  /* ── le jeu simulé, derrière l'overlay ─────────────────────────────────── */
+  .game {
+    position: relative;
+    padding: 26px 20px;
+    border-radius: 10px;
+    background:
+      radial-gradient(120% 90% at 18% 20%, #2f4a5e 0%, #1b2a38 45%, #101a24 100%),
+      repeating-linear-gradient(72deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 16px);
+    background-blend-mode: normal, overlay;
+  }
+  .game.bright {
+    background:
+      radial-gradient(120% 90% at 30% 25%, #f4efe2 0%, #cdd8dd 45%, #9fb0b8 100%),
+      repeating-linear-gradient(72deg, rgba(0,0,0,0.05) 0 2px, transparent 2px 16px);
+  }
+  .game.dark {
+    background:
+      radial-gradient(120% 90% at 20% 30%, #16202a 0%, #0c1219 55%, #070a0e 100%),
+      repeating-linear-gradient(72deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 16px);
+  }
+
+  /* ── un cooldown : portrait + anneau + badge + compte à rebours ─────────── */
+  .cd { display: inline-flex; flex-direction: column; align-items: center; gap: var(--fw-s1); }
+  .cd .role {
+    font-family: var(--fw-body);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    color: var(--fw-ink-faint);
+  }
+  .cd .token { position: relative; width: 38px; height: 38px; }
+  /* L'anneau : un dégradé conique découpé en couronne. En Qt c'est drawArc()
+     du haut, dans le sens horaire — même géométrie, même lecture. */
+  .cd .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(var(--state) calc(var(--p) * 1turn), var(--fw-overlay-rail) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--fw-ring)), #000 calc(100% - var(--fw-ring)));
+            mask: radial-gradient(farthest-side, transparent calc(100% - var(--fw-ring)), #000 calc(100% - var(--fw-ring)));
+  }
+  .cd .portrait {
+    position: absolute;
+    inset: calc(var(--fw-ring) + 3px);
+    border-radius: 50%;
+    background: linear-gradient(160deg, #56606f, #333b47);
+    display: grid;
+    place-items: center;
+    font-family: var(--fw-body);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--fw-ink);
+  }
+  .cd.is-ready .portrait { box-shadow: inset 0 0 0 99px rgba(15, 107, 61, 0.18); }
+  .cd .badge {
+    position: absolute;
+    right: -3px;
+    bottom: -2px;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    background: var(--fw-badge-backing);
+    border: var(--fw-hairline) solid var(--fw-line);
+    display: grid;
+    place-items: center;
+    font-family: var(--fw-body);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--fw-accent);
+  }
+  .cd .chip {
+    position: absolute;
+    right: -5px;
+    bottom: -4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--fw-badge-backing);
+    border: var(--fw-hairline) solid var(--fw-line);
+    display: grid;
+    place-items: center;
+    font-family: var(--fw-body);
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--fw-ink);
+  }
+  .cd .time {
+    font-family: var(--fw-mono);
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--state);
+    /* Portable : en Qt, un second drawText décalé de --fw-text-shadow-offset. */
+    /* Un halo CLAIR sous des chiffres fonces. En Qt : le meme second drawText
+       decale, avec la couleur "shadow" du theme. */
+    text-shadow: var(--fw-text-shadow-offset) var(--fw-text-shadow-offset) 0
+                 rgba(255, 255, 255, var(--fw-text-shadow-alpha));
+  }
+  .st-counting { --state: var(--fw-counting); }
+  .st-soon     { --state: var(--fw-soon); }
+  .st-ready    { --state: var(--fw-ready); }
+
+  /* ── affichage 1 : la barre chrono ─────────────────────────────────────── */
+  .bar {
+    position: relative;
+    width: 560px;
+    height: 78px;
+    border-radius: var(--fw-radius-overlay);
+    background: color-mix(in srgb, var(--fw-overlay-panel) calc(var(--fw-overlay-alpha) * 100%), transparent);
+  }
+  .bar.at-rest {
+    background: color-mix(in srgb, var(--fw-overlay-panel) calc(var(--fw-overlay-alpha-rest) * 100%), transparent);
+  }
+  .bar .rail {
+    position: absolute;
+    left: 22px; right: 22px; top: 14px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--fw-overlay-rail);
+  }
+  .bar .rail::after {
+    content: "";
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 16%;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--fw-ready) 47%, transparent);
+  }
+  .bar .tick { position: absolute; top: 10px; width: 1px; height: 11px; background: var(--fw-overlay-rail); }
+  .bar .marker { position: absolute; top: 21px; transform: translateX(-50%); }
+  /* La tige qui relie le rail au portrait : c'est elle qui dit « ce jeton est
+     à CE point de la piste ». En Qt : un drawLine dans la couleur d'état. */
+  .bar .marker::before {
+    content: "";
+    position: absolute;
+    left: 50%; top: -7px;
+    width: 1px; height: 7px;
+    background: var(--state);
+  }
+  .bar .marker .cd .role { display: none; }
+  .bar .hint {
+    position: absolute;
+    left: 0; right: 0; top: 26px;
+    text-align: center;
+    font-family: var(--fw-body);
+    font-size: 11px;
+    color: var(--fw-ink-faint);
+  }
+  .bar.unlocked { outline: 2px solid var(--fw-soon); outline-offset: -1px; }
+  .grip { position: absolute; right: 4px; bottom: 3px; width: 14px; height: 14px; opacity: 0.75; }
+  .grip i { position: absolute; right: 0; bottom: 0; height: 1px; background: var(--fw-line-strong); transform-origin: 100% 100%; transform: rotate(-45deg); }
+
+  /* ── affichage 2 : les cartes fixes ────────────────────────────────────── */
+  .cards {
+    display: flex;
+    gap: var(--fw-s2);
+    justify-content: center;
+    align-items: flex-start;
+    width: 460px;
+    height: 104px;
+    padding: 10px 12px;
+    border-radius: var(--fw-radius-overlay);
+    background: color-mix(in srgb, var(--fw-overlay-panel) calc(var(--fw-overlay-alpha) * 100%), transparent);
+  }
+
+  /* ── affichage 3 : les rangées compactes ───────────────────────────────── */
+  .rows {
+    width: 300px;
+    padding: 10px;
+    border-radius: var(--fw-radius-overlay);
+    background: var(--fw-overlay-panel);
+    border: var(--fw-hairline) solid var(--fw-line);
+  }
+  .rows .group {
+    font-family: var(--fw-body);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.7px;
+    color: var(--fw-ink-faint);
+    margin: 6px 0 3px 2px;
+  }
+  .rows .line {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--fw-s2);
+    padding: 6px 8px 9px;
+    border-radius: var(--fw-radius-row);
+    background: var(--fw-overlay-row);
+    margin-bottom: 4px;
+  }
+  .rows .line .names { flex: 1; min-width: 0; }
+  .rows .line .champ {
+    font-family: var(--fw-body);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fw-ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .rows .line .spell { font-family: var(--fw-body); font-size: 10px; color: var(--fw-ink-dim); }
+  .rows .line .time { font-family: var(--fw-mono); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--state); }
+  .rows .line .gauge {
+    position: absolute;
+    left: 8px; right: 8px; bottom: 3px;
+    height: var(--fw-gauge);
+    border-radius: 2px;
+    background: var(--fw-overlay-rail);
+    overflow: hidden;
+  }
+  .rows .line .gauge i { display: block; height: 100%; width: calc(var(--p) * 100%); background: var(--state); }
+  .rows .line .token { width: 26px; height: 26px; position: relative; }
+  .rows .line .portrait { inset: 0; }
+  .rows .line .badge { position: static; width: 18px; height: 18px; }
+
+  /* ── la fenêtre de bureau ──────────────────────────────────────────────── */
+  .win {
+    width: 620px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: var(--fw-hairline) solid var(--fw-line);
+    background: var(--fw-field);
+    font-family: var(--fw-body);
+  }
+  .win .head {
+    display: flex; align-items: center; gap: var(--fw-s3);
+    padding: 11px 14px;
+    background: var(--fw-panel-2);
+  }
+  .win .mark {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: #161a24;
+    border: 2px solid var(--fw-accent);
+    position: relative; flex: none;
+  }
+  .win .mark::before, .win .mark::after {
+    content: ""; position: absolute; background: #f0f8ff; border-radius: 1px;
+  }
+  .win .mark::before { left: 50%; top: 22%; width: 2px; height: 30%; }
+  .win .mark::after  { left: 50%; top: 48%; width: 22%; height: 2px; }
+  .win .name { font-family: var(--fw-display); font-size: 17px; font-weight: 700; color: var(--fw-ink); }
+  .win .ver { font-family: var(--fw-mono); font-size: 10px; color: var(--fw-ink-faint); }
+  .win .tag { font-size: 12px; color: var(--fw-ink-faint); }
+  .win .body { display: flex; min-height: 330px; }
+  .win .nav {
+    width: 142px; flex: none;
+    background: var(--fw-panel-2);
+    border-right: var(--fw-hairline) solid var(--fw-line);
+    padding: 10px 0;
+  }
+  .win .nav a {
+    display: block;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--fw-ink-dim);
+    border-left: 2px solid transparent;
+    text-decoration: none;
+  }
+  .win .nav a.on {
+    color: var(--fw-accent);
+    background: var(--fw-accent-wash);
+    border-left-color: var(--fw-accent);
+    font-weight: 600;
+  }
+  .win .content { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: var(--fw-s3); }
+  .win .foot {
+    display: flex; justify-content: space-between;
+    padding: 8px 14px 12px;
+    border-top: var(--fw-hairline) solid var(--fw-line);
+  }
+
+  .pill {
+    font-family: var(--fw-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 4px 9px;
+    border-radius: var(--fw-radius-pill);
+    border: var(--fw-hairline) solid var(--fw-line);
+    color: var(--fw-ink-dim);
+  }
+  .pill.ok   { color: var(--fw-ready); border-color: color-mix(in srgb, var(--fw-ready) 34%, transparent); background: color-mix(in srgb, var(--fw-ready) 13%, transparent); }
+  .pill.warn { color: var(--fw-soon);  border-color: color-mix(in srgb, var(--fw-soon) 34%, transparent);  background: color-mix(in srgb, var(--fw-soon) 13%, transparent); }
+  .pill.bad  { color: var(--fw-danger);border-color: color-mix(in srgb, var(--fw-danger) 32%, transparent);background: color-mix(in srgb, var(--fw-danger) 12%, transparent); }
+
+  .card {
+    border: var(--fw-hairline) solid var(--fw-line);
+    border-radius: var(--fw-radius-card);
+    background: linear-gradient(180deg, var(--fw-panel), var(--fw-panel-2));
+    padding: 12px 14px 13px;
+    display: flex; flex-direction: column; gap: var(--fw-s2);
+  }
+  .card .title { font-family: var(--fw-display); font-size: 14px; font-weight: 600; color: var(--fw-ink); }
+  .card .hint { font-size: 12px; color: var(--fw-ink-faint); }
+  .hr { height: 1px; background: var(--fw-line); }
+  .readout { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+  .readout .v { font-family: var(--fw-mono); color: var(--fw-ink); font-variant-numeric: tabular-nums; }
+
+  .btn {
+    font-family: var(--fw-mono);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: var(--fw-ink);
+    background: rgba(255, 255, 255, 0.03);
+    border: var(--fw-hairline) solid var(--fw-line);
+    border-radius: var(--fw-radius-input);
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  .btn.primary { color: var(--fw-field); background: var(--fw-accent); border-color: var(--fw-accent); font-weight: 700; }
+  .btn.danger:hover { color: var(--fw-danger); border-color: var(--fw-danger); }
+  .btn.ghost { color: var(--fw-ink-dim); background: transparent; }
+
+  /* L'interrupteur, dessiné comme en Qt : une pastille avec un arrêt net de
+     dégradé qui tient lieu de bouton. */
+  .sw { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; color: var(--fw-ink-dim); }
+  .sw i {
+    width: 32px; height: 17px; border-radius: var(--fw-radius-pill);
+    border: var(--fw-hairline) solid var(--fw-line);
+    background: linear-gradient(90deg, var(--fw-ink-faint) 0 52%, rgba(120,140,175,0.18) 52% 100%);
+    flex: none;
+  }
+  .sw.on { color: var(--fw-ink); }
+  .sw.on i {
+    border-color: var(--fw-accent-edge);
+    background: linear-gradient(90deg, var(--fw-accent-fill) 0 48%, var(--fw-accent) 48% 100%);
+  }
+
+  .field {
+    font-family: var(--fw-mono);
+    font-size: 11px;
+    color: var(--fw-ink);
+    background: rgba(255, 255, 255, 0.03);
+    border: var(--fw-hairline) solid var(--fw-line);
+    border-radius: var(--fw-radius-input);
+    padding: 5px 9px;
+    display: flex; justify-content: space-between; gap: 10px;
+    min-width: 150px;
+  }
+  .slider { height: 2px; background: var(--fw-line-strong); border-radius: 1px; position: relative; width: 170px; }
+  .slider::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 62%; background: var(--fw-accent); border-radius: 1px; }
+  .slider i { position: absolute; left: 62%; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--fw-ink); border: 1px solid var(--fw-field); transform: translateX(-50%); }
+
+  .tile {
+    display: flex; gap: var(--fw-s3); align-items: center;
+    border: var(--fw-hairline) solid var(--fw-line);
+    border-radius: 7px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .tile.on { border-color: var(--fw-accent); background: var(--fw-accent-fill); }
+  .tile .thumb {
+    width: 112px; height: 54px; flex: none;
+    border-radius: 4px;
+    background: rgba(9, 11, 16, 0.66);
+    position: relative;
+  }
+  .tile .t-name { font-family: var(--fw-body); font-size: 13px; font-weight: 600; color: var(--fw-ink); }
+  .tile.on .t-name { color: var(--fw-accent); }
+  .tile .t-hint { font-size: 11px; color: var(--fw-ink-faint); }
+  /* Les trois croquis de vignette, en géométrie pure comme dans ui.py */
+  .thumb .th-rail { position: absolute; left: 10px; right: 10px; top: 40%; height: 2px; background: var(--fw-ink-faint); }
+  .thumb .th-dot { position: absolute; top: calc(40% - 3px); width: 7px; height: 7px; border-radius: 50%; }
+  .thumb .th-ring { position: absolute; top: 30%; width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--fw-ink-faint); }
+  .thumb .th-row { position: absolute; left: 8px; right: 8px; height: 2px; background: var(--fw-ink-faint); }
+
+  .disclosure {
+    font-family: var(--fw-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--fw-ink-faint);
+    border-top: var(--fw-hairline) solid var(--fw-line);
+    padding: 9px 2px 2px;
+  }
+
+  /* ── le guide ──────────────────────────────────────────────────────────── */
+  .guide { width: 560px; }
+  .guide .figure {
+    height: 150px;
+    border: var(--fw-hairline) solid var(--fw-line);
+    border-radius: var(--fw-radius-card);
+    background: rgba(9, 11, 16, 0.74);
+    display: grid; place-items: center;
+    color: var(--fw-ink-faint);
+    font-family: var(--fw-mono);
+    font-size: 11px;
+  }
+  .guide .step-title { font-family: var(--fw-display); font-size: 18px; font-weight: 700; color: var(--fw-ink); margin-top: var(--fw-s3); }
+  .guide .step-body { font-size: 13px; color: var(--fw-ink-dim); margin-top: 6px; }
+  .stepper { display: flex; align-items: center; gap: 0; margin: var(--fw-s4) auto 0; width: max-content; }
+  .stepper i { width: 8px; height: 8px; border-radius: 50%; background: #3c4658; }
+  .stepper i.on { background: var(--fw-accent); }
+  .stepper span { width: 14px; height: 1px; background: var(--fw-line-strong); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Flashwatch — maquette HTML</h1>
+  <p class="sub">Toutes les surfaces du programme, dessinées en HTML/CSS et pilotées
+    par les <b>jetons en haut de la feuille de style</b>. Chaque jeton porte le nom
+    de la constante correspondante dans <code>src/theme.py</code> ou
+    <code>src/overlay.py</code> : changer une valeur ici restyle toute la page, et
+    le portage vers Qt devient mécanique plutôt qu'interprétatif.</p>
+  <p class="sub">Ce n'est pas ce que le programme exécute — il reste en Qt, pour les
+    raisons expliquées dans <code>CONTRAINTES-QT.md</code>. C'est l'atelier où l'on
+    décide à quoi il ressemble.</p>
+
+  <div class="warn">
+    <b style="color:var(--doc-ink)">Trois propriétés utilisées ici ne se portent pas
+    telles quelles</b>, et sont annotées en commentaire dans la feuille de style :
+    <code>text-shadow</code> devient un second tracé décalé, <code>conic-gradient</code>
+    devient un <code>drawArc</code>, <code>mask</code> devient un <code>setClipPath</code>.
+    Tout le reste — dégradés, rayons, alphas, filets, états — existe à l'identique en Qt.
+    Ce qui n'y existe pas et ne doit donc <b style="color:var(--doc-ink)">pas</b> être
+    ajouté : <code>backdrop-filter</code>, <code>box-shadow</code> sur un widget,
+    <code>transition</code>, <code>transform</code>.
+  </div>
+
+  <h2><span class="num">01</span> La palette, lue en direct</h2>
+  <p class="note">Les valeurs affichées sont calculées depuis la feuille de style :
+    elles ne peuvent donc pas mentir sur ce qui est réellement appliqué.</p>
+  <div class="stage"><div class="swatches" id="swatches"></div></div>
+
+  <h2><span class="num">02</span> Un cooldown, dans ses six états</h2>
+  <p class="note">La planche la plus importante : c'est elle qui décide de la
+    lisibilité en combat. Les six doivent se distinguer <b>sans lire les
+    libellés</b>.</p>
+  <div class="stage stage--overlay">
+    <div class="row" style="gap:34px">
+      <div>
+        <div class="cd st-counting"><span class="role">TOP</span>
+          <span class="token"><span class="ring" style="--p:.06"></span><span class="portrait">DA</span><span class="badge">F</span></span>
+          <span class="time">4:42</span></div>
+        <div class="caption">à peine lancé</div>
+      </div>
+      <div>
+        <div class="cd st-counting"><span class="role">MID</span>
+          <span class="token"><span class="ring" style="--p:.57"></span><span class="portrait">AH</span><span class="badge">TP</span></span>
+          <span class="time">2:34</span></div>
+        <div class="caption">à mi-course</div>
+      </div>
+      <div>
+        <div class="cd st-soon"><span class="role">ADC</span>
+          <span class="token"><span class="ring" style="--p:.9"></span><span class="portrait">JI</span><span class="badge">H</span></span>
+          <span class="time">0:24</span></div>
+        <div class="caption">bientôt prêt</div>
+      </div>
+      <div>
+        <div class="cd st-ready is-ready"><span class="role">SUP</span>
+          <span class="token"><span class="ring" style="--p:1"></span><span class="portrait">TH</span><span class="badge">E</span></span>
+          <span class="time">READY</span></div>
+        <div class="caption">disponible</div>
+      </div>
+      <div>
+        <div class="cd st-counting"><span class="role">MID</span>
+          <span class="token"><span class="ring" style="--p:.57"></span><span class="portrait">AH</span><span class="badge">TP</span><span class="chip">?</span></span>
+          <span class="time">2:34</span></div>
+        <div class="caption">sort deviné</div>
+      </div>
+      <div>
+        <div class="cd st-counting"><span class="role">MID</span>
+          <span class="token"><span class="ring" style="--p:.32"></span><span class="portrait">AH</span><span class="badge">R</span></span>
+          <span class="time">~1:08</span></div>
+        <div class="caption">ultime estimé</div>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="num">03</span> Les trois affichages, sur le jeu</h2>
+  <p class="note">Le fond est un jeu simulé, pas un aplat noir : c'est la seule
+    façon de juger. Bascule sur <b>fond clair</b> — c'est l'épreuve qui tue les
+    directions trop peu contrastées.</p>
+  <div class="controls" id="bgControls">
+    <button type="button" data-bg="" aria-pressed="true">fond moyen</button>
+    <button type="button" data-bg="dark" aria-pressed="false">fond sombre</button>
+    <button type="button" data-bg="bright" aria-pressed="false">fond clair</button>
+  </div>
+
+  <div class="stage">
+    <div class="game" data-game>
+      <div class="bar">
+        <span class="rail"></span>
+        <span class="tick" style="left:22px"></span>
+        <span class="tick" style="right:22px"></span>
+        <span class="marker st-counting" style="left:9%">
+          <span class="cd st-counting"><span class="token"><span class="ring" style="--p:.06"></span><span class="portrait">DA</span><span class="badge">F</span></span><span class="time">4:42</span></span>
+        </span>
+        <span class="marker st-counting" style="left:39%">
+          <span class="cd st-counting"><span class="token"><span class="ring" style="--p:.32"></span><span class="portrait">AH</span><span class="badge">R</span></span><span class="time">~1:08</span></span>
+        </span>
+        <span class="marker st-counting" style="left:58%">
+          <span class="cd st-counting"><span class="token"><span class="ring" style="--p:.57"></span><span class="portrait">VI</span><span class="badge">S</span></span><span class="time">0:47</span></span>
+        </span>
+        <span class="marker st-soon" style="left:86%">
+          <span class="cd st-soon"><span class="token"><span class="ring" style="--p:.9"></span><span class="portrait">JI</span><span class="badge">H</span></span><span class="time">0:24</span></span>
+        </span>
+        <span class="marker st-ready" style="left:96%">
+          <span class="cd st-ready is-ready"><span class="token"><span class="ring" style="--p:1"></span><span class="portrait">TH</span><span class="badge">E</span></span><span class="time">READY</span></span>
+        </span>
+      </div>
+      <div class="caption">barre chrono — 560 × 78, la position sur le rail EST la progression</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="game" data-game>
+      <div class="cards">
+        <div class="cd st-counting"><span class="role">TOP</span><span class="token"><span class="ring" style="--p:.06"></span><span class="portrait">DA</span><span class="badge">F</span></span><span class="time">4:42</span></div>
+        <div class="cd st-counting"><span class="role">JGL</span><span class="token"><span class="ring" style="--p:.48"></span><span class="portrait">VI</span><span class="badge">S</span></span><span class="time">0:47</span></div>
+        <div class="cd st-counting"><span class="role">MID</span><span class="token"><span class="ring" style="--p:.32"></span><span class="portrait">AH</span><span class="badge">R</span></span><span class="time">~1:08</span></div>
+        <div class="cd st-counting"><span class="role">MID</span><span class="token"><span class="ring" style="--p:.57"></span><span class="portrait">AH</span><span class="badge">TP</span><span class="chip">?</span></span><span class="time">2:34</span></div>
+        <div class="cd st-soon"><span class="role">ADC</span><span class="token"><span class="ring" style="--p:.9"></span><span class="portrait">JI</span><span class="badge">H</span></span><span class="time">0:24</span></div>
+        <div class="cd st-ready is-ready"><span class="role">SUP</span><span class="token"><span class="ring" style="--p:1"></span><span class="portrait">TH</span><span class="badge">E</span></span><span class="time">READY</span></div>
+      </div>
+      <div class="caption">cartes fixes — 460 × 104, rien ne bouge, l'anneau se referme</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="game" data-game style="display:flex; gap:26px; align-items:flex-start">
+      <div>
+        <div class="rows">
+          <div class="group">TOP</div>
+          <div class="line st-counting"><span class="token"><span class="portrait">DA</span></span><span class="badge">F</span><span class="names"><span class="champ">Darius</span><br><span class="spell">Saut éclair</span></span><span class="time">4:42</span><span class="gauge" style="--p:.06"><i></i></span></div>
+          <div class="group">JUNGLE</div>
+          <div class="line st-counting"><span class="token"><span class="portrait">VI</span></span><span class="badge">S</span><span class="names"><span class="champ">Viego</span><br><span class="spell">Châtiment</span></span><span class="time">0:47</span><span class="gauge" style="--p:.48"><i></i></span></div>
+          <div class="group">MID</div>
+          <div class="line st-counting"><span class="token"><span class="portrait">AH</span></span><span class="badge">R</span><span class="names"><span class="champ">Ahri</span><br><span class="spell">Assaut spirituel</span></span><span class="time">~1:08</span><span class="gauge" style="--p:.32"><i></i></span></div>
+          <div class="line st-counting"><span class="token"><span class="portrait">AH</span></span><span class="badge">TP</span><span class="names"><span class="champ">Ahri</span><br><span class="spell">Téléportation</span></span><span class="time">2:34</span><span class="gauge" style="--p:.57"><i></i></span></div>
+          <div class="group">ADC</div>
+          <div class="line st-soon"><span class="token"><span class="portrait">JI</span></span><span class="badge">H</span><span class="names"><span class="champ">Jinx</span><br><span class="spell">Soins</span></span><span class="time">0:24</span><span class="gauge" style="--p:.9"><i></i></span></div>
+          <div class="group">SUPPORT</div>
+          <div class="line st-ready"><span class="token"><span class="portrait">TH</span></span><span class="badge">E</span><span class="names"><span class="champ">Thresh</span><br><span class="spell">Fatigue</span></span><span class="time">READY</span><span class="gauge" style="--p:1"><i></i></span></div>
+        </div>
+        <div class="caption">rangées compactes — 300 de large</div>
+      </div>
+      <div>
+        <div class="bar at-rest">
+          <span class="rail"></span>
+          <span class="tick" style="left:22px"></span>
+          <span class="tick" style="right:22px"></span>
+        </div>
+        <div class="caption">au repos — l'état visible 90 % du temps</div>
+        <div class="bar unlocked" style="margin-top:22px">
+          <span class="rail"></span>
+          <span class="hint">Flashwatch — déverrouillé, glissez pour déplacer</span>
+          <span class="grip"><i style="width:8px"></i><i style="width:13px; bottom:4px"></i><i style="width:18px; bottom:8px"></i></span>
+        </div>
+        <div class="caption">pendant le placement</div>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="num">04</span> La fenêtre de contrôle</h2>
+  <p class="note">La page <b>Affichage</b>, celle qui porte le choix des trois
+    affichages. Les vignettes sont à leur taille réelle : 112 × 54.</p>
+  <div class="stage">
+    <div class="win">
+      <div class="head">
+        <span class="mark"></span>
+        <span style="flex:1">
+          <span class="name">Flashwatch</span> <span class="ver">v0.9.0</span><br>
+          <span class="tag">Timers des sorts ennemis, lus à l'écran</span>
+        </span>
+        <span class="pill ok">EN PARTIE</span>
+      </div>
+      <div class="body">
+        <div class="nav">
+          <a href="#">Accueil</a>
+          <a href="#" class="on">Affichage</a>
+          <a href="#">Réglages</a>
+          <a href="#">Dépannage</a>
+        </div>
+        <div class="content">
+          <div class="card">
+            <span class="title">Essayer sans lancer de partie</span>
+            <span class="hint">Des sorts d'exemple s'affichent en continu, dans tous les états. Ça s'arrête tout seul quand une vraie partie démarre.</span>
+            <span><button class="btn primary" type="button">Afficher des sorts d'exemple</button></span>
+          </div>
+          <div class="card">
+            <span class="title">Choisissez votre affichage</span>
+            <span class="hint">Les trois montrent la même information. Prenez celui que votre œil lit le plus vite en combat.</span>
+            <div class="tile on">
+              <span class="thumb">
+                <span class="th-rail"></span>
+                <span class="th-dot" style="left:18px; background:var(--fw-counting)"></span>
+                <span class="th-dot" style="left:52px; background:var(--fw-soon)"></span>
+                <span class="th-dot" style="left:86px; background:var(--fw-ready)"></span>
+              </span>
+              <span><span class="t-name">Barre chrono</span><br><span class="t-hint">L'icône entre à gauche au lancement et arrive à droite quand le sort revient.</span></span>
+            </div>
+            <div class="tile">
+              <span class="thumb">
+                <span class="th-ring" style="left:22px; border-color:var(--fw-counting)"></span>
+                <span class="th-ring" style="left:48px; border-color:var(--fw-soon)"></span>
+                <span class="th-ring" style="left:74px; border-color:var(--fw-ready)"></span>
+              </span>
+              <span><span class="t-name">Cartes fixes</span><br><span class="t-hint">Une carte par sort, à une place qui ne bouge jamais, avec un anneau de progression.</span></span>
+            </div>
+            <div class="tile">
+              <span class="thumb">
+                <span class="th-row" style="top:14px"></span>
+                <span class="th-row" style="top:26px; background:var(--fw-soon)"></span>
+                <span class="th-row" style="top:38px; background:var(--fw-ready)"></span>
+              </span>
+              <span><span class="t-name">Rangées compactes</span><br><span class="t-hint">Une ligne par sort, avec une jauge de progression. Le plus lisible, le plus haut.</span></span>
+            </div>
+          </div>
+          <div class="card">
+            <span class="title">Position à l'écran</span>
+            <span class="hint">L'affichage se pose où vous voulez. Chaque affichage garde sa propre position.</span>
+            <span><button class="btn" type="button">Déplacer / redimensionner</button></span>
+            <div class="disclosure">▸  OPTIONS AVANCÉES</div>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <button class="btn ghost" type="button">Masquer la fenêtre</button>
+        <button class="btn danger" type="button">Quitter (fermer le programme)</button>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="num">05</span> Les composants, isolés</h2>
+  <p class="note">Qt style les widgets un par un : cette planche est celle qui se
+    traduit le plus directement en feuille de style.</p>
+  <div class="stage stage--window">
+    <div class="row" style="gap:26px; align-items:center">
+      <span><button class="btn primary" type="button">Action principale</button><div class="caption">primary</div></span>
+      <span><button class="btn" type="button">Action</button><div class="caption">normal</div></span>
+      <span><button class="btn ghost" type="button">Discret</button><div class="caption">ghost</div></span>
+      <span><button class="btn danger" type="button">Quitter</button><div class="caption">danger</div></span>
+      <span><span class="sw on"><i></i> Activé</span><div class="caption">switch on</div></span>
+      <span><span class="sw"><i></i> Désactivé</span><div class="caption">switch off</div></span>
+      <span><span class="field">Français (client FR) <b style="color:var(--fw-ink-dim)">▾</b></span><div class="caption">select</div></span>
+      <span><span class="field">200 ms <b style="color:var(--fw-ink-dim)">⌃⌄</b></span><div class="caption">number</div></span>
+      <span><span class="slider"><i></i></span><div class="caption">slider</div></span>
+      <span><span class="pill">EN ATTENTE</span> <span class="pill ok">EN PARTIE</span> <span class="pill warn">ESSAI</span> <span class="pill bad">PROBLÈME</span><div class="caption">pastilles d'état</div></span>
+      <span style="min-width:230px"><span class="readout"><span>Zone de chat :</span><span class="v">556×285 @ 39,537</span></span><div class="caption">readout</div></span>
+    </div>
+  </div>
+
+  <h2><span class="num">06</span> Le guide</h2>
+  <div class="stage">
+    <div class="win guide">
+      <div class="head">
+        <span class="mark"></span>
+        <span style="flex:1"><span class="name">Guide d'installation</span><br><span class="tag">Trois minutes, une fois pour toutes</span></span>
+        <span class="pill">ÉTAPE 2 SUR 6</span>
+      </div>
+      <div class="content" style="padding:16px 18px 18px">
+        <div class="figure">la figure de l'étape, dessinée au QPainter</div>
+        <div class="step-title">Passez League en fenêtre sans bordure</div>
+        <div class="step-body">En plein écran exclusif, Windows interdit à tout overlay
+          de s'afficher par-dessus le jeu. C'est la seule chose que Flashwatch ne peut
+          pas contourner.</div>
+        <div class="card" style="margin-top:4px"><span class="hint">Dans League :
+          Paramètres, onglet Vidéo, Mode d'affichage, « Fenêtre sans bordure ».</span></div>
+        <div class="stepper">
+          <i class="on"></i><span></span><i class="on"></i><span></span><i></i><span></span><i></i><span></span><i></i><span></span><i></i>
+        </div>
+      </div>
+      <div class="foot">
+        <button class="btn ghost" type="button">Passer le guide</button>
+        <span><button class="btn" type="button">Retour</button> <button class="btn primary" type="button">Suivant</button></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // La palette est lue depuis la feuille de style plutôt que recopiée à la main :
+  // une étiquette qui mentirait sur la couleur réellement appliquée serait pire
+  // que pas d'étiquette du tout.
+  const TOKENS = [
+    "--fw-field", "--fw-field-2", "--fw-panel", "--fw-panel-2",
+    "--fw-line", "--fw-line-strong",
+    "--fw-ink", "--fw-ink-dim", "--fw-ink-faint",
+    "--fw-accent", "--fw-accent-fill", "--fw-accent-edge",
+    "--fw-counting", "--fw-soon", "--fw-ready", "--fw-danger",
+    "--fw-overlay-panel", "--fw-overlay-rail", "--fw-overlay-row",
+    "--fw-badge-backing",
+  ];
+  const styles = getComputedStyle(document.documentElement);
+  document.getElementById("swatches").innerHTML = TOKENS.map((token) => {
+    const value = styles.getPropertyValue(token).trim();
+    return `<div class="swatch">
+      <div class="chip" style="background:${value}"></div>
+      <div class="meta"><div class="name">${token.replace("--fw-", "")}</div>
+      <div class="val">${value}</div></div></div>`;
+  }).join("");
+
+  // Le fond de jeu : trois luminosités, parce qu'un overlay ne se juge que posé
+  // sur ce qu'il devra recouvrir.
+  const controls = document.getElementById("bgControls");
+  controls.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    for (const other of controls.querySelectorAll("button")) {
+      other.setAttribute("aria-pressed", String(other === button));
+    }
+    for (const game of document.querySelectorAll("[data-game]")) {
+      game.className = "game" + (button.dataset.bg ? " " + button.dataset.bg : "");
+    }
+  });
+</script>
+
+</body>
+</html>

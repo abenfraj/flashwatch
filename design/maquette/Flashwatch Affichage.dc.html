@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/colors.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/typography.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/base.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fig-tokens.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fig-typography.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/styles.css">
+<script src="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/_ds_bundle.js"></script>
+<style>
+  body { margin: 0; background: #05070f; }
+  a { color: #a78bfa; text-decoration: none; }
+  a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<div style="width:1148px;height:1370px;position:relative;background:#0a0d1a;font-family:Mulish, sans-serif;color:#e8ebf5;overflow:hidden;box-shadow:inset 0 0 0 1px #1b2038">
+
+  <div style="height:50px;display:flex;align-items:center;padding-left:18px;background:#0d1120;box-shadow:inset 0 -1px 0 #1a2036">
+    <div style="display:flex;align-items:center;gap:12px;flex:1">
+      <div style="color:#8B5CF6;display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 20 }}" hint-size="20px,20px"></x-import></div>
+      <div style="font-size:16px;font-weight:600;color:#e4e8f5">Flashwatch — v0.0.0-dev</div>
+    </div>
+    <div style="display:flex;height:50px">
+      <div style="width:52px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:17px;cursor:pointer" style-hover="background:#151a2c">–</div>
+      <div style="width:52px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:13px;cursor:pointer" style-hover="background:#151a2c">□</div>
+      <div style="width:52px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:17px;cursor:pointer" style-hover="background:#c0392b;color:#fff">✕</div>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:0;top:50px;width:220px;bottom:0;background:#0b0f1c;box-shadow:inset -1px 0 0 #1a2036;display:flex;flex-direction:column;padding:30px 14px 20px;box-sizing:border-box">
+    <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
+      <div style="width:68px;height:68px;border-radius:50%;box-shadow:inset 0 0 0 3px #7C3AED;display:flex;align-items:center;justify-content:center;color:#8B5CF6">
+        <x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 38 }}" hint-size="38px,38px"></x-import>
+      </div>
+      <div style="margin-top:18px;font-size:24px;font-weight:700;color:#f2f4fb">Flashwatch</div>
+      <div style="margin-top:6px;font-size:15px;font-weight:600;color:#8B5CF6">v0.0.0-dev</div>
+      <div style="margin-top:14px;font-size:14px;line-height:22px;font-weight:500;color:#9ba3bd;text-wrap:pretty">Timers des sorts ennemis, lus à l’écran</div>
+    </div>
+
+    <div style="margin-top:26px;display:flex;flex-direction:column;gap:4px">
+      <div onClick="{{ goHome }}" style="{{ navHome }}" style-hover="background:#141a2e">
+        <div style="{{ navHomeBar }}"></div>
+        <div style="{{ navHomeIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Home24" size="{{ 22 }}" hint-size="22px,22px"></x-import></div>
+        <div style="{{ navHomeText }}">Accueil</div>
+      </div>
+      <div onClick="{{ goDisplay }}" style="{{ navDisplay }}" style-hover="background:#141a2e">
+        <div style="{{ navDisplayBar }}"></div>
+        <div style="{{ navDisplayIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Vue24" size="{{ 22 }}" hint-size="22px,22px"></x-import></div>
+        <div style="{{ navDisplayText }}">Affichage</div>
+      </div>
+      <div onClick="{{ goSettings }}" style="{{ navSettings }}" style-hover="background:#141a2e">
+        <div style="{{ navSettingsBar }}"></div>
+        <div style="{{ navSettingsIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Settings24" size="{{ 22 }}" hint-size="22px,22px"></x-import></div>
+        <div style="{{ navSettingsText }}">Réglages</div>
+      </div>
+      <div onClick="{{ goFix }}" style="{{ navFix }}" style-hover="background:#141a2e">
+        <div style="{{ navFixBar }}"></div>
+        <div style="{{ navFixIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Anomalie24" size="{{ 22 }}" hint-size="22px,22px"></x-import></div>
+        <div style="{{ navFixText }}">Dépannage</div>
+      </div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <button style="display:flex;align-items:center;justify-content:center;gap:12px;height:52px;border:0;border-radius:10px;background:#0d1224;box-shadow:inset 0 0 0 1px #262d49;color:#dfe4f3;font-family:Mulish, sans-serif;font-size:15px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+        <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Visibility24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+        Masquer la fenêtre
+      </button>
+      <button style="display:flex;align-items:center;justify-content:center;gap:12px;height:52px;border:0;border-radius:10px;background:rgba(193,0,0,.06);box-shadow:inset 0 0 0 1px #4a2130;color:#F87171;font-family:Mulish, sans-serif;font-size:15px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #7a2b3c">
+        <span style="display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Close24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+        Quitter le programme
+      </button>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:220px;top:50px;right:0;bottom:0;padding:18px 22px 20px;box-sizing:border-box;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
+
+    <div style="position:relative;border-radius:12px;background:#10142a;box-shadow:inset 0 0 0 1px #262c4c;padding:18px 20px;flex:none">
+      <div style="position:absolute;right:26px;top:-8px;display:flex;align-items:center;gap:10px;height:38px;padding:0 20px;border-radius:10px;background:#0f1428;box-shadow:inset 0 0 0 1px #2a3150">
+        <div style="width:10px;height:10px;border-radius:50%;background:#8B5CF6;box-shadow:0 0 10px rgba(139,92,246,.8)"></div>
+        <div style="font-size:13px;font-weight:700;letter-spacing:.6px;color:#e4e8f5">EN ATTENTE</div>
+      </div>
+      <div style="display:flex;gap:20px;align-items:flex-start">
+        <div style="width:52px;height:52px;flex:none;border-radius:12px;background:#241a4d;box-shadow:inset 0 0 0 1px #453a80;display:flex;align-items:center;justify-content:center;color:#c4b5fd">
+          <x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Scanner24" size="{{ 24 }}" hint-size="24px,24px"></x-import>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:23px;font-weight:600;color:#ffffff">Essayer sans lancer de partie</div>
+          <div style="margin-top:10px;font-size:14px;line-height:22px;font-weight:500;color:#c1c8dc;text-wrap:pretty">Des sorts d’exemple s’affichent en continu, dans tous les états : fraîchement lancé, à mi-course, bientôt prêt, déjà dispo. De quoi comparer les trois affichages, essayer un thème et poser la barre où vous voulez. Ça s’arrête tout seul quand une vraie partie démarre.</div>
+          <button style="margin-top:16px;display:flex;align-items:center;gap:12px;height:44px;padding:0 20px;border:0;border-radius:10px;background:#5B21B6;color:#fff;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-hover="box-shadow:0 10px 25px rgba(91,33,182,.35)">
+            <span style="display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Scanner24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+            Afficher des sorts d’exemple
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-radius:12px;background:#10142a;box-shadow:inset 0 0 0 1px #262c4c;padding:18px 20px;flex:none">
+      <div style="font-size:22px;font-weight:600;color:#ffffff">Choisissez votre affichage</div>
+      <div style="margin-top:10px;font-size:14px;font-weight:500;color:#c1c8dc">Les trois montrent exactement la même information. Prenez celui que votre oeil lit le plus vite en combat.</div>
+
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+        <div onClick="{{ pickBar }}" style="{{ rowBar }}" style-hover="box-shadow:inset 0 0 0 1px #6D28D9">
+          <div style="{{ radioBar }}"><div style="{{ radioBarDot }}"></div></div>
+          <div style="width:132px;height:56px;flex:none;border-radius:8px;background:#161b31;box-shadow:inset 0 0 0 1px #2a3150;padding:12px 14px;box-sizing:border-box;display:flex;align-items:center;gap:14px">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:14px;height:14px;border-radius:50%;background:#e5e7ef"></div><div style="width:22px;height:2px;background:#e5e7ef;opacity:.35"></div></div>
+            <div style="flex:1;height:2px;background:#3a4060"></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:14px;height:14px;border-radius:50%;background:#F59E0B"></div><div style="width:22px;height:2px;background:#F59E0B"></div></div>
+            <div style="flex:1;height:2px;background:#3a4060"></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:14px;height:14px;border-radius:50%;background:#34D399"></div><div style="width:22px;height:2px;background:#34D399"></div></div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:19px;font-weight:600;color:#ffffff">Barre chrono</div>
+            <div style="margin-top:6px;font-size:14px;line-height:22px;font-weight:500;color:#b6bdd3;text-wrap:pretty">L’icône entre à gauche au lancement du sort et arrive à droite quand il revient : la position dit tout, sans lire les chiffres.</div>
+          </div>
+        </div>
+
+        <div onClick="{{ pickCards }}" style="{{ rowCards }}" style-hover="box-shadow:inset 0 0 0 1px #6D28D9">
+          <div style="{{ radioCards }}"><div style="{{ radioCardsDot }}"></div></div>
+          <div style="width:132px;height:56px;flex:none;border-radius:8px;background:#161b31;box-shadow:inset 0 0 0 1px #2a3150;padding:10px 14px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div style="width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 3px #e5e7ef"></div><div style="width:26px;height:2px;background:#e5e7ef"></div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div style="width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 3px #F59E0B"></div><div style="width:26px;height:2px;background:#F59E0B"></div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div style="width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 3px #34D399"></div><div style="width:26px;height:2px;background:#34D399"></div></div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:19px;font-weight:600;color:#ffffff">Cartes fixes</div>
+            <div style="margin-top:6px;font-size:14px;line-height:22px;font-weight:500;color:#b6bdd3;text-wrap:pretty">Une carte par sort, à une place qui ne bouge jamais, avec un anneau de progression autour du portrait.</div>
+          </div>
+        </div>
+
+        <div onClick="{{ pickRows }}" style="{{ rowRows }}" style-hover="box-shadow:inset 0 0 0 1px #6D28D9">
+          <div style="{{ radioRows }}"><div style="{{ radioRowsDot }}"></div></div>
+          <div style="width:132px;height:56px;flex:none;border-radius:8px;background:#161b31;box-shadow:inset 0 0 0 1px #2a3150;padding:10px 12px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:8px"><div style="width:9px;height:9px;border-radius:50%;background:#e5e7ef"></div><div style="width:30px;height:2px;background:#565d80"></div><div style="flex:1;height:2px;background:#e5e7ef"></div></div>
+            <div style="display:flex;align-items:center;gap:8px"><div style="width:9px;height:9px;border-radius:50%;background:#F59E0B"></div><div style="width:30px;height:2px;background:#565d80"></div><div style="flex:1;height:2px;background:#F59E0B"></div></div>
+            <div style="display:flex;align-items:center;gap:8px"><div style="width:9px;height:9px;border-radius:50%;background:#34D399"></div><div style="width:30px;height:2px;background:#565d80"></div><div style="flex:1;height:2px;background:#34D399"></div></div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:19px;font-weight:600;color:#ffffff">Rangées compactes</div>
+            <div style="margin-top:6px;font-size:14px;line-height:22px;font-weight:500;color:#b6bdd3;text-wrap:pretty">Une ligne par sort : champion, sort, temps restant et une jauge de progression. Le plus lisible, le plus haut.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-radius:12px;background:#10142a;box-shadow:inset 0 0 0 1px #262c4c;padding:18px 20px;flex:none">
+      <div style="font-size:22px;font-weight:600;color:#ffffff">Position à l’écran</div>
+      <div style="margin-top:10px;font-size:14px;font-weight:500;color:#c1c8dc">L’affichage se pose où vous voulez : glissez-le n’importe où, redimensionnez-le par le coin en bas à droite.</div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+        <button style="display:flex;align-items:center;justify-content:center;gap:12px;height:46px;border:0;border-radius:10px;background:#0e1226;box-shadow:inset 0 0 0 1px #262d49;color:#e4e8f5;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+          <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Position24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+          Déplacer / redimensionner
+        </button>
+        <button style="display:flex;align-items:center;justify-content:center;gap:12px;height:46px;border:0;border-radius:10px;background:#0e1226;box-shadow:inset 0 0 0 1px #262d49;color:#e4e8f5;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+          <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Refresh24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+          Remettre en place
+        </button>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:12px;align-items:center">
+        <span style="display:flex;color:#8B5CF6;flex:none"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Info24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+        <div style="font-size:15px;line-height:24px;font-weight:500;color:#a9b0c8;text-wrap:pretty">Astuce : jouez en mode fenêtre sans bordure. En plein écran exclusif, Windows empêche tout overlay de s’afficher.</div>
+      </div>
+    </div>
+
+    <div style="border-radius:12px;background:#10142a;box-shadow:inset 0 0 0 1px #262c4c;padding:18px 20px 16px;flex:none">
+      <div style="font-size:22px;font-weight:600;color:#ffffff">Apparence</div>
+
+      <div style="margin-top:16px;display:flex;align-items:center;gap:22px">
+        <div style="width:78px;font-size:15px;font-weight:500;color:#c1c8dc">Thème</div>
+        <div style="flex:1;height:42px;border-radius:8px;background:#0e1226;box-shadow:inset 0 0 0 1px #262d49;display:flex;align-items:center;padding:0 18px;font-size:16px;font-weight:500;color:#e4e8f5;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+          <div style="flex:1">Néon</div>
+          <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24ChevronDown24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;display:flex;align-items:center;gap:22px">
+        <div style="width:78px;font-size:15px;font-weight:500;color:#c1c8dc">Opacité</div>
+        <div onClick="{{ setOpacity }}" style="flex:1;height:42px;display:flex;align-items:center;cursor:pointer">
+          <div style="position:relative;width:100%;height:5px;border-radius:3px;background:#2a3150">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:{{ opacityPct }};border-radius:3px;background:#8B5CF6"></div>
+            <div style="position:absolute;left:{{ opacityPct }};top:50%;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:#ffffff;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>
+          </div>
+        </div>
+        <div style="width:66px;height:36px;flex:none;border-radius:8px;background:#0e1226;box-shadow:inset 0 0 0 1px #262d49;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:#e4e8f5">{{ opacityLabel }}</div>
+      </div>
+
+      <div style="margin-top:10px;display:flex;align-items:center;gap:22px">
+        <div style="width:78px;font-size:15px;font-weight:500;color:#c1c8dc">Échelle</div>
+        <div style="flex:1;height:42px;border-radius:8px 0 0 8px;background:#0e1226;box-shadow:inset 0 0 0 1px #262d49;display:flex;align-items:center;padding:0 18px;font-size:16px;font-weight:500;color:#e4e8f5">{{ scaleLabel }}</div>
+        <div style="display:flex;flex:none">
+          <div onClick="{{ scaleDown }}" style="width:48px;height:42px;border-radius:0;background:#0e1226;box-shadow:inset 0 0 0 1px #262d49;display:flex;align-items:center;justify-content:center;color:#dfe4f3;font-size:20px;cursor:pointer" style-hover="background:#161c33">–</div>
+          <div onClick="{{ scaleUp }}" style="width:48px;height:42px;border-radius:0 8px 8px 0;background:#0e1226;box-shadow:inset 0 0 0 1px #262d49;display:flex;align-items:center;justify-content:center;color:#dfe4f3;font-size:20px;cursor:pointer" style-hover="background:#161c33">+</div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">
+        <div onClick="{{ tgOverlay }}" style="display:flex;align-items:center;gap:16px;cursor:pointer">
+          <div style="{{ swOverlay }}"><div style="{{ swOverlayKnob }}"></div></div>
+          <div style="font-size:16px;font-weight:500;color:#e4e8f5">Afficher l’overlay</div>
+        </div>
+        <div onClick="{{ tgInGame }}" style="display:flex;align-items:center;gap:16px;cursor:pointer">
+          <div style="{{ swInGame }}"><div style="{{ swInGameKnob }}"></div></div>
+          <div style="font-size:16px;font-weight:500;color:#e4e8f5">Afficher seulement pendant la partie</div>
+        </div>
+        <div onClick="{{ tgIdle }}" style="display:flex;align-items:center;gap:16px;cursor:pointer">
+          <div style="{{ swIdle }}"><div style="{{ swIdleKnob }}"></div></div>
+          <div style="font-size:16px;font-weight:500;color:#e4e8f5">Garder la barre visible au repos</div>
+        </div>
+        <div onClick="{{ tgRole }}" style="display:flex;align-items:center;gap:16px;cursor:pointer">
+          <div style="{{ swRole }}"><div style="{{ swRoleKnob }}"></div></div>
+          <div style="font-size:16px;font-weight:500;color:#e4e8f5">Trier par rôle</div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;display:flex;align-items:center;gap:12px;cursor:pointer;color:#c1c8dc" style-hover="color:#ffffff">
+        <span style="display:flex;color:#b9c0d6"><span style="width:9px;height:9px;display:inline-block;border-top:2px solid currentColor;border-right:2px solid currentColor;transform:rotate(45deg)"></span></span>
+        <div style="font-size:16px;font-weight:500">Options avancées</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1148,&quot;height&quot;:1370}}">
+class Component extends DCLogic {
+  state = {
+    nav: 'display', mode: 'rows', opacity: 85, scale: 2,
+    overlay: true, inGame: true, idle: true, role: true,
+  };
+  nav(a) {
+    return 'position:relative;display:flex;align-items:center;gap:16px;height:58px;padding:0 16px;border-radius:10px;cursor:pointer;transition:background 200ms cubic-bezier(.4,0,.2,1);'
+      + (a ? 'background:#1a1440;box-shadow:inset 0 0 0 1px #3a2c7a;' : 'background:transparent;');
+  }
+  bar(a) { return 'position:absolute;left:0;top:10px;bottom:10px;width:4px;border-radius:0 3px 3px 0;background:#8B5CF6;opacity:' + (a ? 1 : 0) + ';'; }
+  icon(a) { return 'display:flex;color:' + (a ? '#c4b5fd' : '#8b93ad') + ';'; }
+  text(a) { return 'font-size:17px;font-weight:' + (a ? 700 : 500) + ';color:' + (a ? '#ffffff' : '#b9c0d6') + ';'; }
+  row(a) {
+    return 'display:flex;align-items:center;gap:18px;padding:12px 16px;border-radius:10px;cursor:pointer;transition:box-shadow 200ms cubic-bezier(.4,0,.2,1);'
+      + (a ? 'background:#151038;box-shadow:inset 0 0 0 1px #7C3AED;' : 'background:#0e1226;box-shadow:inset 0 0 0 1px #232941;');
+  }
+  radio(a) {
+    return 'width:22px;height:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 2px ' + (a ? '#8B5CF6' : '#4a5175') + ';';
+  }
+  dot(a) { return 'width:10px;height:10px;border-radius:50%;background:#8B5CF6;opacity:' + (a ? 1 : 0) + ';'; }
+  sw(on) {
+    return 'width:44px;height:24px;flex:none;border-radius:100px;display:flex;align-items:center;padding:0 3px;box-sizing:border-box;transition:background 200ms cubic-bezier(.4,0,.2,1);background:' + (on ? '#7C3AED' : '#2a3150') + ';justify-content:' + (on ? 'flex-end' : 'flex-start') + ';';
+  }
+  knob() { return 'width:18px;height:18px;border-radius:50%;background:#ffffff;'; }
+  renderVals() {
+    const s = this.state;
+    const out = {
+      opacityPct: s.opacity + '%',
+      opacityLabel: s.opacity + '%',
+      scaleLabel: s.scale.toFixed(2).replace('.', ','),
+      setOpacity: (e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const p = Math.max(5, Math.min(100, Math.round(((e.clientX - r.left) / r.width) * 100)));
+        this.setState({ opacity: p });
+      },
+      scaleUp: () => this.setState({ scale: Math.min(4, +(this.state.scale + 0.25).toFixed(2)) }),
+      scaleDown: () => this.setState({ scale: Math.max(0.5, +(this.state.scale - 0.25).toFixed(2)) }),
+      pickBar: () => this.setState({ mode: 'bar' }),
+      pickCards: () => this.setState({ mode: 'cards' }),
+      pickRows: () => this.setState({ mode: 'rows' }),
+      goHome: () => this.setState({ nav: 'home' }),
+      goDisplay: () => this.setState({ nav: 'display' }),
+      goSettings: () => this.setState({ nav: 'settings' }),
+      goFix: () => this.setState({ nav: 'fix' }),
+      tgOverlay: () => this.setState({ overlay: !s.overlay }),
+      tgInGame: () => this.setState({ inGame: !s.inGame }),
+      tgIdle: () => this.setState({ idle: !s.idle }),
+      tgRole: () => this.setState({ role: !s.role }),
+    };
+    [['Home', 'home'], ['Display', 'display'], ['Settings', 'settings'], ['Fix', 'fix']].forEach(([k, id]) => {
+      const a = s.nav === id;
+      out['nav' + k] = this.nav(a);
+      out['nav' + k + 'Bar'] = this.bar(a);
+      out['nav' + k + 'Icon'] = this.icon(a);
+      out['nav' + k + 'Text'] = this.text(a);
+    });
+    [['Bar', 'bar'], ['Cards', 'cards'], ['Rows', 'rows']].forEach(([k, id]) => {
+      const a = s.mode === id;
+      out['row' + k] = this.row(a);
+      out['radio' + k] = this.radio(a);
+      out['radio' + k + 'Dot'] = this.dot(a);
+    });
+    [['Overlay', 'overlay'], ['InGame', 'inGame'], ['Idle', 'idle'], ['Role', 'role']].forEach(([k, id]) => {
+      out['sw' + k] = this.sw(s[id]);
+      out['sw' + k + 'Knob'] = this.knob();
+    });
+    return out;
+  }
+}
+
+</script>
+</body>
+</html>

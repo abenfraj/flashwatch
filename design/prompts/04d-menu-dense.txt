@@ -1,0 +1,15 @@
+Generate a 3:2 image split into two halves, each showing the content column of the
+window (no header, no navigation, no footer - just the scrolling column).
+
+LEFT: a SETTINGS column - four cards in a row down the column, containing between
+them: a dropdown, five toggle switches with labels, a number field with a unit,
+a label/value row, one secondary button, and two collapsed disclosure rows.
+
+RIGHT: a TROUBLESHOOTING column - a paragraph of secondary text, then a card with
+three buttons in a small grid, then a card with three stacked wide buttons, then a
+card containing two INSET READ-ONLY TEXT AREAS of monospaced log lines, each with a
+small caption above it.
+
+The point of this image is density: it must show that eight cards in a column still
+read as a calm, ordered page rather than a wall. Exact palette from your token table.
+Flat vector-style UI, no device frame, no watermark, no logos.

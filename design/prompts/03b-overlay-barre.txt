@@ -1,0 +1,22 @@
+Generate a 16:9 image: a simulated game screen with the CHRONO TRACK overlay on it.
+
+Background: an abstract, blurred, dark fantasy game scene - cool blues and teals,
+some warm highlights, no recognisable characters, no creatures, no logos, no text.
+It exists only to prove the overlay stays legible on it.
+
+Overlay: a wide, shallow, translucent horizontal strip centred on the TOP EDGE of
+the frame, about a third of the screen's width and very shallow - roughly a 7:1
+width-to-height ratio. Inside it, left to right:
+  - a thin horizontal rail spanning almost the full width, with a small tick at each
+    end, and its rightmost sixth tinted with the "ready" colour
+  - four cooldown tokens hanging BELOW the rail, each connected to it by a short
+    vertical stem in its own state colour, placed at different points along the rail:
+    one near the left, one at the middle, two near the right
+  - each token: circular grey portrait with initials, small circular spell badge on
+    its lower right, and the countdown in tabular numerals directly underneath -
+    "4:42", "2:34", "0:24" in the warning colour, "READY" in the positive colour
+Use the exact palette and radii from your token table. The strip is translucent: the
+game scene must be faintly visible through its backing.
+
+Flat vector-style UI over a painterly abstract background. No device frame, no
+cursor, no watermark, no UI other than this strip.

@@ -1,0 +1,14 @@
+For the mark we chose, give me its geometry as numbers, expressed on a 64x64 unit box
+so it can be scaled by code. I need, as a list:
+
+  - every circle: centre x/y, radius, fill colour, stroke colour, stroke width
+  - every arc: centre, radius, start angle and sweep in degrees, stroke width, cap
+    style (flat or round)
+  - every straight segment: both endpoints, stroke width, cap style
+  - every polygon: its points in order, fill colour
+  - the drawing order, from back to front
+  - which elements should be DROPPED below 20 px, if any, so the small version stays
+    clean
+
+Angles in degrees, counter-clockwise from three o'clock. Colours as hex. No prose, no
+SVG markup - just the numbered list of primitives.

@@ -1,0 +1,215 @@
+LES SIX ÉCRANS DE L'ONBOARDING — PROMPTS D'IMAGES
+=================================================
+
+À utiliser APRÈS avoir collé 01-contexte.txt puis un 02-direction-*.txt, dans la
+même conversation : ces prompts s'appuient sur la table de jetons que GPT a rendue.
+
+Un prompt = une image. Copie-les un par un, entre les lignes de séparation.
+Plusieurs essais par écran : le premier jet est rarement le bon.
+
+Le fil conducteur, et c'est lui qui fait la différence avec l'ancien guide : tout
+se règle **dans le Practice Tool**. Une vraie fenêtre de jeu, un vrai chat, aucun
+enjeu, disponible à la demande — c'est le seul endroit où l'utilisateur peut
+vérifier que l'outil marche sans attendre une partie classée.
+
+Note sur l'écran 2 : on demande une **recréation schématique** du réglage vidéo de
+League avec ses libellés exacts, pas une fausse capture d'écran. Une image qui
+imite l'interface de Riot pose un problème d'image, et elle vieillit à chaque
+patch. Un diagramme aux bons mots se navigue tout aussi bien.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ÉCRAN 1 — BIENVENUE, ET DIRECTION LE PRACTICE TOOL
+═══════════════════════════════════════════════════════════════════════════════
+
+Generate a 4:5 image: the first screen of a six-step setup wizard for the app,
+using the exact token table, typefaces, radii and stroke widths you defined
+earlier.
+
+Window chrome, top to bottom:
+  - a header strip: the small app mark on the left, the title "Bienvenue sur
+    Flashwatch" in the display face, a one-line subtitle under it in secondary ink,
+    and on the far right a small pill reading "ÉTAPE 1 SUR 6"
+  - a large inset illustration panel with a hairline border, filling the upper half
+  - a step title, large, in the display face
+  - a paragraph of body text, three lines, comfortably measured
+  - a note box: an inset panel with a hairline holding two quieter lines
+  - a footer: a six-dot step indicator with a connecting line, first dot active; a
+    quiet text link on the far left; a secondary button and a primary button right
+
+Inside the illustration panel, a schematic diagram of the League client's play
+menu, drawn as flat geometry and NOT as a screenshot: a rounded panel holding a
+vertical list of four game-mode entries as plain labelled rows, where the fourth
+row is highlighted with the accent colour and an accent-coloured pointer, its
+label reading "Outil d'entraînement". Above the list, two small breadcrumb chips
+reading "JOUER" and "ENTRAÎNEMENT" joined by a chevron. The other three rows are
+dimmed and unlabelled. To the right of the highlighted row, a short accent-coloured
+caption reading "aucun enjeu, à la demande".
+
+Keep the diagram abstract: no Riot artwork, no champion art, no game logos, no
+photographic textures. Flat vector-style UI, no device frame, no OS title bar, no
+cursor, no watermark. Text may be imperfect; the structure and the treatment are
+what matter.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ÉCRAN 2 — LE MODE D'AFFICHAGE, AVEC LE RÉGLAGE MONTRÉ
+═══════════════════════════════════════════════════════════════════════════════
+
+Generate a 4:5 image: the second screen of the same wizard, same chrome, same
+palette, the pill reading "ÉTAPE 2 SUR 6" and the second dot active.
+
+Inside the illustration panel, a schematic RECREATION of League's video settings
+row — flat geometry, clearly a diagram and not a screenshot of the real client.
+Compose it as:
+  - a breadcrumb of three small chips at the top: a gear glyph, then "PARAMÈTRES",
+    then "VIDÉO", joined by chevrons
+  - under it, a settings row: the label "Mode d'affichage" on the left in primary
+    ink, and on the right a control showing three stacked options as labelled rows:
+      · "Plein écran"  — dimmed, marked with a red cross in the danger colour, and
+        a small caption to its right reading "overlay impossible"
+      · "Sans bordure" — highlighted with the accent colour, marked with a tick in
+        the positive colour, and a caption reading "à choisir"
+      · "Fenêtré"      — neutral, an empty radio circle, no caption
+  - a thin accent-coloured pointer or bracket drawing the eye to the middle option
+
+Use those exact French labels. The whole point of the figure is that a player can
+navigate to this setting by matching words, so the words must be the client's own.
+
+Flat vector-style UI, no device frame, no watermark, no Riot artwork or logos.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ÉCRAN 3 — LA LANGUE DU CLIENT
+═══════════════════════════════════════════════════════════════════════════════
+
+Generate a 4:5 image: the third screen of the same wizard, same chrome and palette,
+pill reading "ÉTAPE 3 SUR 6", third dot active.
+
+Inside the illustration panel: two stacked message rows, each an inset panel with a
+hairline, each holding one line of monospaced text where the first word is in the
+danger colour and the rest in primary ink:
+  - upper row:  "Ahri a utilisé Saut éclair"   with a tiny caption above it
+    reading "client en français"
+  - lower row:  "Ahri used Flash"              with a tiny caption above it
+    reading "client en anglais"
+The upper row is highlighted as the selected one with the accent colour; the lower
+row is dimmed.
+
+Below the illustration panel, between the paragraph and the note box, add a real
+control: a labelled dropdown, closed, showing "Français (client FR)".
+
+The figure has to make one point without a sentence: these are two spellings of the
+same event, and the app has to be told which one the game will print.
+
+Flat vector-style UI, no device frame, no watermark, no logos.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ÉCRAN 4 — CHOISIR L'AFFICHAGE, ET LE VOIR APPARAÎTRE
+═══════════════════════════════════════════════════════════════════════════════
+
+Generate a 16:9 image, and this one is a SPLIT COMPOSITION rather than a plain
+wizard screen. Same palette and type as before.
+
+LEFT THIRD — the wizard window, narrower than before but with the same chrome:
+header with the pill "ÉTAPE 4 SUR 6", a step title, two lines of body text, and
+then THREE SELECTABLE TILES stacked vertically. Each tile is a wide rounded row
+with a small schematic thumbnail on its left and a title plus one line of secondary
+text on its right. The thumbnails are:
+  a) a horizontal rail with three small circles on it at different positions
+  b) three circles in a row, each wrapped in a partial progress ring
+  c) three stacked rows, each with a small circle, two short lines and a thin bar
+The SECOND tile is selected, unmistakably, in the direction's own vocabulary.
+
+RIGHT TWO THIRDS — a simulated Practice Tool screen: an abstract, blurred,
+dark-ish game scene, cool blues and teals, no recognisable characters or logos,
+with a plain chat box in its lower left and, along its TOP CENTRE, the overlay
+display that corresponds to the SELECTED tile — the fixed-cards one: a compact
+light strip holding five cards, each a tiny uppercase role label, a circular grey
+portrait with two initials, a progress ring closing around it, a small circular
+spell badge, and a countdown underneath ("4:42", "2:34", "1:08", "0:24" in the
+warning colour, "READY" in the positive colour).
+
+Draw a soft accent-coloured connector — a curve or a dotted line — from the
+selected tile in the left panel to the overlay on the right, so the causality is
+unmistakable: choosing it here puts it on screen there, immediately.
+
+Flat vector-style UI over a painterly abstract background. No device frame, no
+watermark, no Riot artwork, no cursor.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ÉCRAN 5 — LE POSER OÙ ON VEUT
+═══════════════════════════════════════════════════════════════════════════════
+
+Generate a 16:9 image: the same simulated Practice Tool screen filling the frame,
+with a small wizard panel docked in the LOWER LEFT corner, compact — header pill
+"ÉTAPE 5 SUR 6", a short title, one line of text, and a single primary button
+reading "J'ai fini, verrouiller".
+
+On the game screen itself:
+  - the chosen overlay display, near the top centre, drawn with a visible outline
+    in the warning colour to say it is unlocked, and a small resize grip in its
+    bottom-right corner made of three diagonal hairlines
+  - four short arrows radiating outward from it, in the accent colour
+  - a dashed ghost copy of the same display in the upper right of the screen, with
+    a small caption reading "ou n'importe où ailleurs"
+  - a faint dashed path linking the placed copy to the ghost copy
+
+The figure says one thing: it is a window, it goes anywhere, and it is being placed
+right now inside a real game rather than on an empty desktop.
+
+Flat vector-style UI over a painterly abstract background. No device frame, no
+watermark, no logos.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ÉCRAN 6 — LA PREUVE, DANS LE CHAT
+═══════════════════════════════════════════════════════════════════════════════
+
+Generate a 16:9 image: the same simulated Practice Tool screen, with the wizard
+panel docked lower left — pill "ÉTAPE 6 SUR 6", a short title, one line of text, an
+inset monospaced field holding the line "Attendez Darius Saut éclair - 245 sec."
+and a small secondary button beside it reading "Copier".
+
+On the game screen:
+  - the chat box in the lower left, open, showing three lines: two dimmed neutral
+    lines and, as the newest line, the same monospaced sentence in the player's own
+    text colour
+  - the overlay along the top centre, now holding exactly ONE cooldown: a portrait,
+    its spell badge, and the countdown "4:05"
+  - a dashed accent-coloured arrow rising from the chat line to that single
+    cooldown, with a short caption along it reading "lu à l'écran"
+
+This is the end-to-end proof, and the composition has to carry it: the sentence
+typed down there produced the timer up there. One cooldown, not five — a single
+cause and a single effect.
+
+Flat vector-style UI over a painterly abstract background. No device frame, no
+watermark, no logos.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+APRÈS LES SIX
+═══════════════════════════════════════════════════════════════════════════════
+
+L'écran final — « tout est prêt », avec l'icône dans la zone de notification — est
+déjà couvert par la sixième figure de 05b-guide-six-figures.txt. Pas besoin de le
+regénérer.
+
+Comment juger, écran par écran :
+
+  1. Est-ce qu'on comprend qu'il faut aller quelque part, et où ? Si le diagramme
+     du menu ne se lit pas comme un menu, il ne sert à rien.
+  2. Est-ce que les trois mots « Plein écran / Sans bordure / Fenêtré » sont
+     lisibles et dans le bon ordre ? C'est la seule chose que l'utilisateur va
+     chercher des yeux dans son client.
+  3. Est-ce que les deux lignes de chat se lisent comme la même phrase dans deux
+     langues, et pas comme deux messages différents ?
+  4. Est-ce que le lien de cause à effet saute aux yeux sans lire la légende ?
+     C'est tout l'intérêt de cet écran.
+  5. Est-ce que l'affichage a l'air *saisissable* ? S'il ressemble à une image
+     collée, la poignée et le contour sont ratés.
+  6. Un seul cooldown à l'arrivée. Si l'image en montre cinq, la démonstration est
+     perdue : on ne sait plus lequel vient de la ligne tapée.

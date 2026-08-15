@@ -1,0 +1,37 @@
+Here is a self-contained HTML mockup of every surface of the desktop app described
+in my previous message. Read it, then restyle it.
+
+WHAT TO CHANGE
+Only the tokens in the first :root block - the ones prefixed --fw-. Their names map
+one-to-one onto constants in the app's source, so the names must not change: no
+renaming, no removing, no adding. Keep every one of them, change their values.
+
+You may also change the small number of CSS rules that shape a component's
+structure (a border radius here, a gradient direction there, the weight of a rule)
+- but every rule you touch must stay reproducible with: flat fills, linear/radial/
+conical gradients, per-pixel alpha, rounded rectangles, circles, arcs, clipping to
+paths, hairlines, and a hand-painted offset shadow. Nothing else exists in Qt.
+
+WHAT NOT TO CHANGE
+- The second :root block, prefixed --doc-. That is the page's own chrome and it
+  must stay readable whatever you do to the product.
+- The HTML structure, the class names, and the text content.
+- The three state colours must remain instantly distinguishable from each other at
+  a glance: counting, soon (under 30 seconds), ready. They carry meaning, not
+  decoration.
+
+WHAT TO ADD, NOWHERE
+No backdrop-filter, no box-shadow on a widget, no transition, no transform, no
+web font URL, no external asset, no photography, no JavaScript.
+
+THE TEST THAT MATTERS
+The overlay sits over a live game. Section 03 of the page has a background switcher:
+medium, dark and bright. Your palette must keep the countdown readable on ALL
+THREE. The current one fails on bright - fix that as part of the direction rather
+than ignoring it.
+
+DELIVERABLE
+The complete modified HTML file, in one code block, ready to save over the original.
+Then, underneath it, a short list of what you changed and why - one line per
+decision - and explicitly name anything you had to compromise on because of the Qt
+constraints.

@@ -1,0 +1,8 @@
+Generate a 21:9 image: four alternative treatments of a six-step progress indicator
+for a wizard, stacked vertically and each labelled with a small uppercase caption.
+Same direction and palette as above. The current position is the second of six in all
+four treatments. Explore genuinely different ideas within the direction - not four
+variations of a dot row - and keep every one of them buildable from circles,
+rectangles, arcs and hairlines.
+
+Flat vector-style UI, exact palette, no device frame, no watermark.

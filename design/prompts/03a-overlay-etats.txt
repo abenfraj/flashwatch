@@ -1,0 +1,26 @@
+Generate a 1:1 image: a component state sheet for a single cooldown token, in the
+direction and the exact palette you defined above.
+
+The token is a circular champion portrait with a thin progress ring closing around
+it clockwise from the top, a small circular spell badge overlapping its lower right,
+and a countdown in tabular numerals underneath.
+
+Show the SAME token six times, in a clean two-row grid of three, each labelled in a
+small uppercase caption underneath:
+  1. JUST CAST - ring almost empty, countdown "4:42", neutral colour
+  2. HALFWAY - ring about half closed, countdown "2:34", neutral colour
+  3. NEARLY BACK - ring nearly closed, countdown "0:24", warning colour
+  4. READY - ring fully closed, countdown reads "READY", positive colour, plus
+     whatever restrained emphasis the direction gives to "act on this now"
+  5. UNCERTAIN - same as 2, with a small circular "?" chip sitting inside the
+     bottom-right corner of the SPELL BADGE, not near the countdown
+  6. ESTIMATE - same as 2, but the countdown reads "~1:08" and the spell badge shows
+     an ability rather than a summoner spell
+
+The portrait is a plain grey circle with two initials in it - no character art, no
+faces, no fantasy iconography. The spell badge is a plain abstract glyph.
+
+Flat vector-style UI design, crisp edges, rendered at large size so the ring
+thickness, the badge overlap and the numeral treatment are all clearly readable.
+Dark neutral background, generous margins, no device frame, no browser chrome, no
+watermark, no logo, no lorem paragraphs.

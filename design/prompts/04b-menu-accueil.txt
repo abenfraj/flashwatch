@@ -1,0 +1,22 @@
+Generate a 4:5 image: the full control window, in the direction and palette you
+defined, showing its HOME page. Structure, top to bottom:
+
+  - HEADER: a small square app mark on the left, then the product name in the display
+    face with a tiny version number beside it, a one-line tagline underneath in
+    secondary ink, and on the far right a small state pill reading "IN GAME" in the
+    positive colour.
+  - BODY, split into two columns: a narrow vertical NAVIGATION column on the left
+    with four entries - Home, Display, Settings, Troubleshooting - the first one
+    selected; and a wider scrolling content column on the right containing three
+    stacked cards:
+      1. a status card: a bold headline sentence, a line of secondary text, a hairline,
+         then five label/value rows where the values are in tabular monospaced figures
+      2. a card with a title, two lines of secondary text and one primary button
+      3. a card with a title, two lines of secondary text, a monospaced line of text
+         inside an inset field, and a small secondary button beside it
+  - FOOTER: a ghost button on the left, a danger-styled button on the right.
+
+Exact palette, radii and type sizes from your token table. Flat vector-style UI, no
+operating-system title bar, no device frame, no cursor, no watermark, no logos, no
+photography. Text content does not matter and may be lorem - the structure and the
+treatment do.

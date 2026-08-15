@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/colors.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/typography.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/base.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fig-tokens.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fig-typography.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/styles.css">
+<script src="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/_ds_bundle.js"></script>
+<style>
+  body { margin: 0; background: #05070f; }
+  a { color: #a78bfa; text-decoration: none; }
+  a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<div style="width:1354px;height:1163px;position:relative;background:#0a0d1a;font-family:Mulish, sans-serif;color:#e8ebf5;overflow:hidden;box-shadow:inset 0 0 0 1px #1b2038">
+
+  <div style="height:52px;display:flex;align-items:center;padding-left:20px;background:#0d1120;box-shadow:inset 0 -1px 0 #1a2036">
+    <div style="display:flex;align-items:center;gap:12px;flex:1">
+      <div style="color:#8B5CF6;display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 20 }}" hint-size="20px,20px"></x-import></div>
+      <div style="font-size:17px;font-weight:600;color:#e4e8f5">Flashwatch — v0.0.0-dev</div>
+    </div>
+    <div style="display:flex;height:52px">
+      <div style="width:56px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:18px;cursor:pointer" style-hover="background:#151a2c">–</div>
+      <div style="width:56px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:14px;cursor:pointer" style-hover="background:#151a2c">□</div>
+      <div style="width:56px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:18px;cursor:pointer" style-hover="background:#c0392b;color:#fff">✕</div>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:0;top:52px;width:258px;bottom:0;background:#0b0f1c;box-shadow:inset -1px 0 0 #1a2036;display:flex;flex-direction:column;padding:32px 16px 22px;box-sizing:border-box">
+    <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
+      <div style="width:74px;height:74px;border-radius:50%;box-shadow:inset 0 0 0 3px #7C3AED;display:flex;align-items:center;justify-content:center;color:#8B5CF6">
+        <x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 40 }}" hint-size="40px,40px"></x-import>
+      </div>
+      <div style="margin-top:20px;font-size:26px;font-weight:700;color:#f2f4fb">Flashwatch</div>
+      <div style="margin-top:6px;font-size:16px;font-weight:600;color:#8B5CF6">v0.0.0-dev</div>
+      <div style="margin-top:16px;font-size:15px;line-height:23px;font-weight:500;color:#9ba3bd;text-wrap:pretty">Timers des sorts ennemis, lus à l’écran</div>
+    </div>
+
+    <div style="margin-top:30px;display:flex;flex-direction:column;gap:6px">
+      <div onClick="{{ goHome }}" style="{{ navHome }}" style-hover="background:#141a2e">
+        <div style="{{ navHomeBar }}"></div>
+        <div style="{{ navHomeIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Home24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navHomeText }}">Accueil</div>
+      </div>
+      <div onClick="{{ goDisplay }}" style="{{ navDisplay }}" style-hover="background:#141a2e">
+        <div style="{{ navDisplayBar }}"></div>
+        <div style="{{ navDisplayIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Vue24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navDisplayText }}">Affichage</div>
+      </div>
+      <div onClick="{{ goSettings }}" style="{{ navSettings }}" style-hover="background:#141a2e">
+        <div style="{{ navSettingsBar }}"></div>
+        <div style="{{ navSettingsIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Settings24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navSettingsText }}">Réglages</div>
+      </div>
+      <div onClick="{{ goFix }}" style="{{ navFix }}" style-hover="background:#141a2e">
+        <div style="{{ navFixBar }}"></div>
+        <div style="{{ navFixIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Anomalie24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navFixText }}">Dépannage</div>
+      </div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <button style="display:flex;align-items:center;justify-content:center;gap:14px;height:58px;border:0;border-radius:10px;background:#0d1224;box-shadow:inset 0 0 0 1px #262d49;color:#dfe4f3;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+        <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Visibility24" size="{{ 22 }}" hint-size="22px,22px"></x-import></span>
+        Masquer la fenêtre
+      </button>
+      <button style="display:flex;align-items:center;justify-content:center;gap:14px;height:58px;border:0;border-radius:10px;background:rgba(193,0,0,.06);box-shadow:inset 0 0 0 1px #4a2130;color:#F87171;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #7a2b3c">
+        <span style="display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Close24" size="{{ 22 }}" hint-size="22px,22px"></x-import></span>
+        Quitter le programme
+      </button>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:258px;top:52px;right:0;bottom:0;padding:18px 24px 20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px">
+
+    <div style="position:relative;border-radius:12px;background:#0e1226;box-shadow:inset 0 0 0 1px #232941;padding:18px 22px;flex:none">
+      <div style="position:absolute;right:22px;top:-8px;display:flex;align-items:center;gap:10px;height:38px;padding:0 20px;border-radius:10px;background:#0f1428;box-shadow:inset 0 0 0 1px #2a3150">
+        <div style="width:10px;height:10px;border-radius:50%;background:#8B5CF6;box-shadow:0 0 10px rgba(139,92,246,.8)"></div>
+        <div style="font-size:13px;font-weight:700;letter-spacing:.6px;color:#e4e8f5">EN ATTENTE</div>
+      </div>
+      <div style="display:flex;gap:20px;align-items:flex-start">
+        <div style="width:34px;flex:none;display:flex;justify-content:center;color:#8B5CF6;margin-top:2px"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Langue24" size="{{ 28 }}" hint-size="28px,28px"></x-import></div>
+        <div style="flex:1;max-width:1000px">
+          <div style="font-size:24px;font-weight:500;color:#ffffff">Langue du client</div>
+          <div style="margin-top:10px;font-size:15px;line-height:24px;font-weight:500;color:#b6bdd3;text-wrap:pretty">Langue du client League : elle décide des textes recherchés dans le chat et des noms de champions et de sorts téléchargés. L’interface suit le même choix.</div>
+          <div style="margin-top:16px;height:48px;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #262d49;display:flex;align-items:center;padding:0 20px;font-size:16px;font-weight:500;color:#e4e8f5;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+            <div style="flex:1">Français (client FR)</div>
+            <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24ChevronDown24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-radius:12px;background:#0e1226;box-shadow:inset 0 0 0 1px #232941;padding:18px 22px;flex:none">
+      <div style="display:flex;gap:20px;align-items:flex-start">
+        <div style="width:34px;flex:none;display:flex;justify-content:center;color:#8B5CF6;margin-top:2px"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Workflow24" size="{{ 28 }}" hint-size="28px,28px"></x-import></div>
+        <div style="flex:1">
+          <div style="font-size:24px;font-weight:500;color:#ffffff">Suivi</div>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+            <div onClick="{{ tgSpells }}" style="display:flex;align-items:center;gap:16px;cursor:pointer">
+              <div style="{{ swSpells }}"><div style="{{ swSpellsKnob }}"></div></div>
+              <div style="font-size:16px;font-weight:500;color:#e4e8f5">Sorts d’invocateur (exact)</div>
+            </div>
+            <div onClick="{{ tgUlt }}" style="display:flex;align-items:center;gap:16px;cursor:pointer">
+              <div style="{{ swUlt }}"><div style="{{ swUltKnob }}"></div></div>
+              <div style="font-size:16px;font-weight:500;color:#e4e8f5">Ultimes (approximatif, ~)</div>
+            </div>
+          </div>
+          <div style="margin-top:14px;font-size:15px;line-height:24px;font-weight:500;color:#a9b0c8;text-wrap:pretty">Les ultimes dépendent du rang et de l’accélération de compétences, invisibles à l’écran. Ils sont estimés d’après l’horloge de la partie et marqués d’un ~.</div>
+          <div style="margin-top:14px;height:1px;background:#232941"></div>
+          <div style="margin-top:14px;display:flex;align-items:center;gap:12px;cursor:pointer;color:#c4b5fd" style-hover="color:#ffffff">
+            <span style="display:flex"><span style="width:9px;height:9px;display:inline-block;border-top:2px solid currentColor;border-right:2px solid currentColor;transform:rotate(45deg)"></span></span>
+            <div style="font-size:16px;font-weight:500">Options avancées</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-radius:12px;background:#0e1226;box-shadow:inset 0 0 0 1px #232941;padding:18px 22px;flex:none">
+      <div style="display:flex;gap:20px;align-items:flex-start">
+        <div style="width:34px;flex:none;display:flex;justify-content:center;color:#8B5CF6;margin-top:2px"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Notifications24" size="{{ 28 }}" hint-size="28px,28px"></x-import></div>
+        <div style="flex:1">
+          <div style="font-size:24px;font-weight:500;color:#ffffff">Notifications</div>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+            <div onClick="{{ tgSound }}" style="display:flex;align-items:center;gap:16px;cursor:pointer">
+              <div style="{{ swSound }}"><div style="{{ swSoundKnob }}"></div></div>
+              <div style="font-size:16px;font-weight:500;color:#e4e8f5">Activer le son</div>
+            </div>
+            <div onClick="{{ tgReady }}" style="display:flex;align-items:center;gap:16px;cursor:pointer">
+              <div style="{{ swReady }}"><div style="{{ swReadyKnob }}"></div></div>
+              <div style="font-size:16px;font-weight:500;color:#e4e8f5">Signaler les sorts prêts</div>
+            </div>
+          </div>
+          <div style="margin-top:16px;display:flex;align-items:center;gap:20px">
+            <div style="width:110px;font-size:15px;font-weight:500;color:#c1c8dc">Alerte avant</div>
+            <div style="flex:1;height:48px;border-radius:8px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #262d49;display:flex;align-items:center;padding:0 0 0 20px;font-size:16px;font-weight:500;color:#e4e8f5">
+              <div style="flex:1">{{ alertLabel }}</div>
+              <div style="width:44px;height:48px;display:flex;flex-direction:column">
+                <div onClick="{{ alertUp }}" style="flex:1;display:flex;align-items:center;justify-content:center;color:#b9c0d6;cursor:pointer" style-hover="color:#ffffff"><span style="width:8px;height:8px;display:inline-block;border-top:2px solid currentColor;border-right:2px solid currentColor;transform:rotate(-45deg)"></span></div>
+                <div onClick="{{ alertDown }}" style="flex:1;display:flex;align-items:center;justify-content:center;color:#b9c0d6;cursor:pointer" style-hover="color:#ffffff"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24ChevronDown24" size="{{ 18 }}" hint-size="18px,18px"></x-import></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-radius:12px;background:#0e1226;box-shadow:inset 0 0 0 1px #232941;padding:18px 22px;flex:none">
+      <div style="display:flex;gap:20px;align-items:flex-start">
+        <div style="width:34px;flex:none;display:flex;justify-content:center;color:#8B5CF6;margin-top:2px"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24OnOff24" size="{{ 28 }}" hint-size="28px,28px"></x-import></div>
+        <div style="flex:1;max-width:1000px">
+          <div style="font-size:24px;font-weight:500;color:#ffffff">Démarrage</div>
+          <div onClick="{{ tgBoot }}" style="margin-top:14px;display:flex;align-items:center;gap:16px;cursor:pointer">
+            <div style="{{ swBoot }}"><div style="{{ swBootKnob }}"></div></div>
+            <div style="font-size:16px;font-weight:500;color:#e4e8f5">Lancer au démarrage de Windows</div>
+          </div>
+          <div style="margin-top:14px;font-size:15px;line-height:24px;font-weight:500;color:#a9b0c8;text-wrap:pretty">Le programme doit tourner avant le début de la partie : il ne peut pas rattraper les annonces écrites avant son lancement. Il démarre dans la zone de notification, sans fenêtre. Windows laisse aussi désactiver cette entrée dans le Gestionnaire des tâches, onglet Démarrage.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-radius:12px;background:#0e1226;box-shadow:inset 0 0 0 1px #232941;padding:18px 22px;flex:none">
+      <div style="display:flex;gap:20px;align-items:flex-start">
+        <div style="width:34px;flex:none;display:flex;justify-content:center;color:#8B5CF6;margin-top:2px"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Refresh24" size="{{ 28 }}" hint-size="28px,28px"></x-import></div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:flex-start;gap:20px">
+            <div style="flex:1">
+              <div style="font-size:24px;font-weight:500;color:#ffffff">Mises à jour</div>
+              <div onClick="{{ tgUpdate }}" style="margin-top:14px;display:flex;align-items:center;gap:16px;cursor:pointer">
+                <div style="{{ swUpdate }}"><div style="{{ swUpdateKnob }}"></div></div>
+                <div style="font-size:16px;font-weight:500;color:#e4e8f5">Vérifier au démarrage</div>
+              </div>
+              <div style="margin-top:16px;display:flex;align-items:center;gap:10px">
+                <div style="font-size:15px;font-weight:500;color:#a9b0c8">Version installée :</div>
+                <div style="font-family:'Roboto Mono', ui-monospace, monospace;font-size:15px;color:#e4e8f5">0.0.0-dev</div>
+              </div>
+            </div>
+            <button style="display:flex;align-items:center;gap:12px;height:52px;padding:0 22px;border:0;border-radius:10px;background:#130f2e;box-shadow:inset 0 0 0 1px #4a34a6;color:#e9e6fb;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer;flex:none;margin-top:38px" style-hover="box-shadow:inset 0 0 0 1px #7C3AED, 0 8px 20px rgba(109,40,217,.25)">
+              <span style="display:flex;color:#c4b5fd"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Refresh24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+              Vérifier maintenant
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1354,&quot;height&quot;:1163}}">
+class Component extends DCLogic {
+  state = {
+    nav: 'settings', alert: 11,
+    spells: true, ult: true, sound: true, ready: true, boot: false, update: true,
+  };
+  nav(a) {
+    return 'position:relative;display:flex;align-items:center;gap:18px;height:62px;padding:0 18px;border-radius:10px;cursor:pointer;transition:background 200ms cubic-bezier(.4,0,.2,1);'
+      + (a ? 'background:#1a1440;box-shadow:inset 0 0 0 1px #3a2c7a;' : 'background:transparent;');
+  }
+  bar(a) { return 'position:absolute;left:0;top:12px;bottom:12px;width:4px;border-radius:0 3px 3px 0;background:#8B5CF6;opacity:' + (a ? 1 : 0) + ';'; }
+  icon(a) { return 'display:flex;color:' + (a ? '#c4b5fd' : '#8b93ad') + ';'; }
+  text(a) { return 'font-size:18px;font-weight:' + (a ? 700 : 500) + ';color:' + (a ? '#ffffff' : '#b9c0d6') + ';'; }
+  sw(on) {
+    return 'width:46px;height:26px;flex:none;border-radius:100px;display:flex;align-items:center;padding:0 3px;box-sizing:border-box;transition:background 200ms cubic-bezier(.4,0,.2,1);background:' + (on ? '#7C3AED' : '#2a3150') + ';justify-content:' + (on ? 'flex-end' : 'flex-start') + ';';
+  }
+  knob() { return 'width:20px;height:20px;border-radius:50%;background:#ffffff;'; }
+  renderVals() {
+    const s = this.state;
+    const out = {
+      alertLabel: s.alert + ' s',
+      alertUp: () => this.setState({ alert: Math.min(60, this.state.alert + 1) }),
+      alertDown: () => this.setState({ alert: Math.max(1, this.state.alert - 1) }),
+      goHome: () => this.setState({ nav: 'home' }),
+      goDisplay: () => this.setState({ nav: 'display' }),
+      goSettings: () => this.setState({ nav: 'settings' }),
+      goFix: () => this.setState({ nav: 'fix' }),
+    };
+    [['Spells', 'spells'], ['Ult', 'ult'], ['Sound', 'sound'], ['Ready', 'ready'], ['Boot', 'boot'], ['Update', 'update']].forEach(([k, id]) => {
+      out['sw' + k] = this.sw(s[id]);
+      out['sw' + k + 'Knob'] = this.knob();
+      out['tg' + k] = () => this.setState((p) => ({ [id]: !p[id] }));
+    });
+    [['Home', 'home'], ['Display', 'display'], ['Settings', 'settings'], ['Fix', 'fix']].forEach(([k, id]) => {
+      const a = s.nav === id;
+      out['nav' + k] = this.nav(a);
+      out['nav' + k + 'Bar'] = this.bar(a);
+      out['nav' + k + 'Icon'] = this.icon(a);
+      out['nav' + k + 'Text'] = this.text(a);
+    });
+    return out;
+  }
+}
+
+</script>
+</body>
+</html>

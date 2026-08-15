@@ -1,0 +1,72 @@
+The direction we are going with is this one:
+
+DIRECTION E - TECHNICAL PAPER
+
+Ink on tracing paper, or its negative. A halftone grid. Dimension lines and
+registration marks borrowed from engineering drawing. Annotations in monospace. A
+single correction red. Portraits are circles ringed with a fine stroke, like parts
+referenced on a plan.
+
+Vocabulary to work from: blueprint, drafting grid, dimension lines, registration
+marks, Swiss technical, halftone, single red annotation, part callout.
+
+Why it fits: nobody does this on a game overlay, so it is memorable, and the rigour
+of technical drawing serves legibility. The risk is ground - a pale panel vanishes
+over a bright game, so this direction requires a more opaque panel, which must be
+stated explicitly.
+
+Commit to it fully. Do not hedge, do not blend it with anything else, and do not
+soften it into a generic dark dashboard. I need two things, in this order.
+
+FIRST, a token table I can paste straight into code. Give me exact hex values, one
+per role, no ranges and no "or". These are the roles the app actually uses:
+
+  field            the window's own ground
+  field_2          a slightly different ground, for headers and inset areas
+  panel            a card or panel surface
+  panel_2          the second stop of a panel's vertical gradient
+  line             a hairline separator
+  line_strong      a hairline that needs to be seen
+  ink              primary text
+  ink_dim          secondary text
+  ink_faint        labels, captions, disabled
+  accent           the one colour the identity is built on
+  accent_wash      the same accent at low alpha, as an rgba() string
+  counting         a countdown that is neither soon nor ready
+  soon             under 30 seconds
+  ready            back up
+  danger           destructive actions and errors
+  overlay_panel    the overlay's backing, as rgba() - it sits over a live game
+  overlay_rail     the chrono track's rail
+  overlay_row      the tint behind one row of the compact list
+  badge_backing    the opaque disc a spell icon sits on
+
+Also give me, as numbers:
+  - the overlay's backing opacity in play and at rest (two values, 0-1)
+  - corner radii: overlay, card, row, pill, badge
+  - stroke widths: hairline, panel border, progress ring, portrait ring
+  - a spacing scale of five steps in pixels
+  - the alpha of the painted shadow under the countdown text
+
+TYPOGRAPHY: three typefaces - a display face, a body face, and a face for numerals
+and small uppercase labels. Name real families that are free to embed (SIL OFL or
+Apache-2.0 only; say which licence each one is under). For each, give the weights
+used and the pixel sizes for: window title, card title, body text, small label,
+overlay countdown, overlay role label. The numerals MUST be tabular (state whether
+the family has tabular figures, because a countdown that changes width every second
+is unusable).
+
+TEXTURE AND EFFECTS: list what should be painted, and only things buildable with
+flat fills, gradients, alpha, rounded rectangles, circles, arcs, clipping and
+hand-painted shadows. For each effect, say in one line how it is built. If the
+direction implies something impossible here (background blur, real box-shadow,
+photographic texture), replace it with the closest thing that is paintable and say
+what you replaced.
+
+SECOND, and only after the table: generate one image. A 1:1 mood board for this
+direction, divided into clear zones: the palette as labelled swatches, a numerals
+specimen showing "4:23" "0:08" "READY" large, a few UI fragments (a pill, a card
+corner, a progress ring, a hairline separator, a small uppercase label), and a
+texture sample. Flat vector-style design presentation, no photography, no 3D, no
+device frames, no logos, no watermark. Dark neutral background with generous
+margins.

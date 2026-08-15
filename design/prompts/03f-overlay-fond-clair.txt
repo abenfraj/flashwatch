@@ -1,0 +1,7 @@
+Generate a 16:9 image: the same chrono track overlay from prompt 2, unchanged, but
+over a BRIGHT background - a pale, sunlit, high-key abstract scene, near-white in
+places, no recognisable characters or logos. Keep the overlay's palette exactly as
+defined; do not lighten or darken it to compensate.
+
+Flat vector-style UI over a painterly abstract background. No device frame, no
+watermark.

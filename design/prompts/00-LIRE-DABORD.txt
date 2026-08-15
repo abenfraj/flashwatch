@@ -1,0 +1,94 @@
+LES PROMPTS À COLLER DANS CHATGPT
+================================
+
+TU PRÉFÈRES UN SEUL FICHIER À GLISSER ? ../A-DEPOSER-DANS-CHATGPT.md contient tout
+ce qui suit, séquencé, avec les règles communes énoncées une fois. Ce dossier-ci
+sert à envoyer les prompts un par un, ou à en reprendre un seul plus tard.
+
+Un fichier = un prompt. Ouvre le fichier, tout sélectionner (Ctrl+A), copier
+(Ctrl+C), coller dans ChatGPT. Rien à modifier, rien à compléter.
+
+Tout se passe dans UNE SEULE conversation ChatGPT, dans cet ordre : chaque prompt
+s'appuie sur les réponses précédentes. Si tu ouvres une nouvelle conversation, il
+faut recommencer par le 01.
+
+Les prompts sont en anglais : les modèles d'images répondent nettement mieux au
+vocabulaire de style en anglais. Tu peux parler français à GPT entre deux prompts,
+ça ne change rien.
+
+
+ORDRE
+-----
+
+  1.  01-contexte.txt
+      Le brief. Une seule fois, en premier message. Sans lui, rien ne suit.
+
+  2.  02-direction-*.txt          ← CHOISIS-EN UN SEUL
+      instrument-de-vol / regie-esport / horlogerie / terminal-ambre /
+      papier-technique. Les cinq sont décrits en français dans
+      ../02-directions.md — lis-les, prends celui qui te parle.
+      Réponse attendue : une table de couleurs et de mesures, puis une planche
+      d'ambiance. GARDE LA TABLE : colle-la dans ../tokens-<direction>.md.
+
+  3.  03a-overlay-etats.txt
+      Le plus utile de tous. Un cooldown dans ses six états, sur une seule
+      planche. C'est ce qui décide de la lisibilité en combat.
+
+  4.  03b / 03c / 03d-overlay-*.txt
+      Les trois affichages, posés sur un jeu simulé.
+
+  5.  03e-overlay-repos-placement.txt
+      L'état au repos — celui qu'on voit 90 % du temps.
+
+  6.  03f-overlay-fond-clair.txt
+      L'épreuve du fond clair. Elle tue les directions trop peu contrastées.
+      La palette actuelle y échoue : à régler dans la nouvelle.
+
+  7.  04a-menu-composants.txt
+      Boutons, interrupteurs, champs, pastilles. Qt style les widgets un par un,
+      donc cette planche se traduit presque directement en feuille de style.
+
+  8.  04b / 04c / 04d / 04e-menu-*.txt
+      Les pages de la fenêtre, puis les surfaces denses, puis le bandeau.
+
+  9.  05a / 05b / 05c-guide-*.txt
+      Le guide d'installation et ses six figures. La 05b est la plus importante :
+      les six figures sur une planche, pour qu'elles aient le même langage.
+
+ 10.  06a-marque-candidats.txt, puis 06b-marque-tailles.txt
+      Des candidats d'icône, puis l'épreuve du 16 px qui en élimine la moitié.
+      Une fois le candidat choisi : 06c-marque-geometrie.txt, qui rend la forme
+      en chiffres — c'est ce format-là que le code utilise.
+
+ 11.  09-onboarding-ecrans.txt
+      LES SIX ÉCRANS DE L'ONBOARDING, réglé dans le Practice Tool : bienvenue,
+      mode d'affichage, langue, choix de l'affichage avec aperçu en direct,
+      placement, puis la preuve en tapant une ligne dans le chat. Six prompts
+      dans un seul fichier, séparés par des lignes. Voir ../09-onboarding-
+      practice-tool.md pour le pourquoi et comment juger.
+
+ 12.  08-restyler-la-maquette.txt
+      À part, et sans doute le plus rentable : donne-lui le fichier
+      ../maquette/index.html et il te le rend restylé, avec de vraies valeurs
+      plutôt qu'une image à interpréter.
+
+
+CE QUI COMPTE DANS LES RÉPONSES
+-------------------------------
+
+La table de jetons du 02 est plus utile que toutes les images réunies : elle donne
+des valeurs exactes, là où une image demande de prélever des couleurs à la pipette
+sur du JPEG compressé. Si GPT reste vague (« un gris chaud »), redemande le
+hexadécimal avant de continuer.
+
+Le texte des maquettes reviendra probablement massacré. C'est sans importance : les
+vraies chaînes viennent de src/i18n.py. Ce qu'on cherche, c'est la palette, les
+formes, la matière et la hiérarchie.
+
+
+OÙ METTRE LE RÉSULTAT
+---------------------
+
+  les images   →  ../reference/     (nommage dans ../07-restitution.md)
+  la table     →  ../tokens-<direction>.md
+  puis dis-moi :  « reproduis la direction <nom> »

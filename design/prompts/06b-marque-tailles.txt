@@ -1,0 +1,11 @@
+Generate a 16:9 image: take the two strongest candidates from the sheet you just made
+and show each one at four sizes, side by side on one row per candidate: 16 px, 24 px,
+32 px and 64 px, rendered at their true relative proportions on a dark neutral ground,
+with a small caption giving the size under each.
+
+Do not simplify the shape between sizes and do not enlarge the small ones - the whole
+point is to see what collapses. Then, under each row, add the same mark at 16 px
+placed inside a simulated Windows notification area: a narrow horizontal taskbar strip
+with two other neutral square icons and a small clock, so it can be judged in context.
+
+Flat vector-style presentation, no watermark, no photography.

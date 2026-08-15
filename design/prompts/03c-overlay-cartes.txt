@@ -1,0 +1,17 @@
+Same simulated game background as before, 16:9.
+
+Overlay: a compact translucent strip at the top centre, noticeably taller than the
+chrono track - roughly a 4.5:1 width-to-height ratio. Inside it, five cooldown cards
+in a single evenly spaced row, each one:
+  - a tiny uppercase role label above: TOP, JUNGLE, MID, ADC, SUPPORT
+  - a circular grey portrait with two initials
+  - a progress ring closing clockwise around that portrait, each card at a different
+    stage: barely started, a third, two thirds, nearly complete, complete
+  - a small circular spell badge overlapping the lower right of the portrait
+  - the countdown underneath in tabular numerals: "4:42", "2:34", "1:08", "0:24",
+    "READY"
+The card whose ring is complete gets the direction's restrained "ready" emphasis.
+Nothing in this layout slides or moves: it must read as a row of fixed instruments.
+
+Exact palette, ring thickness and radii from your token table. Flat vector-style UI
+over the painterly abstract background. No device frame, no watermark, no logos.

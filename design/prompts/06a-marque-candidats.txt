@@ -1,0 +1,15 @@
+Generate a 1:1 image: a sheet of SIX candidate app marks for this program, in the
+direction and exact palette you defined above.
+
+What the mark has to say, in order of importance: a measured interval, an instrument,
+a watchful reading of something. It must be abstract and geometric. It must NOT use
+any fantasy, gaming or medieval iconography, no eyes, no swords, no runes, no
+crosshairs, no stopwatch with a photographic bezel.
+
+Each candidate must be describable purely as circles, arcs, straight segments and
+simple polygons - no illustrative detail, no texture, no more than three colours.
+Arrange them in a two-by-three grid on the app's own ground, each in a square tile
+with a small uppercase caption underneath naming its idea in two words.
+
+Flat vector logo design presentation, crisp geometry, no watermark, no company name,
+no photography, no 3D, no mockup frames.

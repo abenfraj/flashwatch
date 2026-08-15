@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/colors.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/typography.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/base.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fig-tokens.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/tokens/fig-typography.css">
+<link rel="stylesheet" href="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/styles.css">
+<script src="_ds/xelians-design-system-9ef45a39-5b90-44d8-9de7-ebf1cc8fe155/_ds_bundle.js"></script>
+<script src="./image-slot.js"></script>
+<style>
+  body { margin: 0; background: #05070f; }
+  a { color: #a78bfa; text-decoration: none; }
+  a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<div style="width:1448px;height:1086px;position:relative;background:#0a0d1a;font-family:Mulish, sans-serif;color:#e8ebf5;overflow:hidden;box-shadow:inset 0 0 0 1px #1b2038">
+
+  <div style="height:48px;display:flex;align-items:center;padding:0 0 0 18px;background:#0d1120;box-shadow:inset 0 -1px 0 #1a2036">
+    <div style="display:flex;align-items:center;gap:12px;flex:1">
+      <div style="color:#8B5CF6;display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 20 }}" hint-size="20px,20px"></x-import></div>
+      <div style="font-size:17px;font-weight:600;color:#e4e8f5">Flashwatch — v0.0.0-dev</div>
+    </div>
+    <div style="display:flex;height:48px">
+      <div style="width:56px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:18px;cursor:pointer" style-hover="background:#151a2c">–</div>
+      <div style="width:56px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:14px;cursor:pointer" style-hover="background:#151a2c">□</div>
+      <div style="width:56px;display:flex;align-items:center;justify-content:center;color:#b9c0d6;font-size:18px;cursor:pointer" style-hover="background:#c0392b;color:#fff">✕</div>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:0;top:48px;width:237px;bottom:0;background:#0b0f1c;box-shadow:inset -1px 0 0 #1a2036;display:flex;flex-direction:column;padding:32px 16px 22px;box-sizing:border-box">
+    <div style="padding:0 18px">
+      <div style="width:76px;height:76px;border-radius:50%;box-shadow:inset 0 0 0 3px #7C3AED;display:flex;align-items:center;justify-content:center;color:#8B5CF6">
+        <x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 42 }}" hint-size="42px,42px"></x-import>
+      </div>
+      <div style="margin-top:24px;font-size:27px;font-weight:700;color:#f2f4fb;letter-spacing:-.2px">Flashwatch</div>
+      <div style="margin-top:6px;font-size:16px;font-weight:600;color:#8B5CF6">v0.0.0-dev</div>
+      <div style="margin-top:16px;height:1px;background:#232a44"></div>
+      <div style="margin-top:16px;font-size:15px;line-height:24px;font-weight:500;color:#9ba3bd;text-wrap:pretty">Timers des sorts ennemis, lus à l’écran</div>
+    </div>
+
+    <div style="margin-top:30px;display:flex;flex-direction:column;gap:6px">
+      <div onClick="{{ goHome }}" style="{{ navHome }}" style-hover="background:#141a2e">
+        <div style="{{ navHomeBar }}"></div>
+        <div style="{{ navHomeIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Home24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navHomeText }}">Accueil</div>
+      </div>
+      <div onClick="{{ goDisplay }}" style="{{ navDisplay }}" style-hover="background:#141a2e">
+        <div style="{{ navDisplayBar }}"></div>
+        <div style="{{ navDisplayIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Vue24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navDisplayText }}">Affichage</div>
+      </div>
+      <div onClick="{{ goSettings }}" style="{{ navSettings }}" style-hover="background:#141a2e">
+        <div style="{{ navSettingsBar }}"></div>
+        <div style="{{ navSettingsIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Settings24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navSettingsText }}">Réglages</div>
+      </div>
+      <div onClick="{{ goFix }}" style="{{ navFix }}" style-hover="background:#141a2e">
+        <div style="{{ navFixBar }}"></div>
+        <div style="{{ navFixIcon }}"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Anomalie24" size="{{ 24 }}" hint-size="24px,24px"></x-import></div>
+        <div style="{{ navFixText }}">Dépannage</div>
+      </div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <button style="display:flex;align-items:center;gap:14px;height:60px;padding:0 20px;border:0;border-radius:10px;background:#0d1224;box-shadow:inset 0 0 0 1px #262d49;color:#dfe4f3;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer;text-align:left" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+        <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Visibility24" size="{{ 22 }}" hint-size="22px,22px"></x-import></span>
+        Masquer la fenêtre
+      </button>
+      <button style="display:flex;align-items:center;gap:14px;height:60px;padding:0 20px;border:0;border-radius:10px;background:rgba(193,0,0,.06);box-shadow:inset 0 0 0 1px #4a2130;color:#F87171;font-family:Mulish, sans-serif;font-size:16px;font-weight:600;cursor:pointer;text-align:left" style-hover="box-shadow:inset 0 0 0 1px #7a2b3c">
+        <span style="display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Close24" size="{{ 22 }}" hint-size="22px,22px"></x-import></span>
+        Quitter le programme
+      </button>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:237px;top:48px;right:0;bottom:0;padding:22px 28px 0;box-sizing:border-box;overflow:hidden">
+
+    <div style="display:flex;justify-content:flex-end">
+      <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 22px;border-radius:10px;background:#0f1428;box-shadow:inset 0 0 0 1px #2a3150">
+        <div style="width:11px;height:11px;border-radius:50%;background:#8B5CF6;box-shadow:0 0 10px rgba(139,92,246,.8)"></div>
+        <div style="font-size:15px;font-weight:700;letter-spacing:.6px;color:#e4e8f5">EN ATTENTE</div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;position:relative;border-radius:14px;background:linear-gradient(100deg,#141034 0%,#12132e 42%,#101a33 100%);box-shadow:inset 0 0 0 1px #2b2f55;overflow:hidden">
+      <div style="position:absolute;inset:0;border-radius:14px;box-shadow:inset 0 0 0 1px #2b2f55;pointer-events:none;z-index:2"></div>
+      <div style="position:absolute;right:0;top:0;bottom:0;width:520px">
+        <image-slot id="fw-hero-art" shape="rect" fit="cover" src="uploads/pasted-1786742195093-0.png" placeholder="Image de fond (hero)"></image-slot>
+        <div style="position:absolute;inset:0;background:linear-gradient(90deg,#131033 0%, rgba(19,16,51,.75) 32%, rgba(19,16,51,0) 100%)"></div>
+      </div>
+      <div style="position:relative;padding:26px 30px 26px 26px">
+        <div style="display:flex;gap:22px;align-items:flex-start">
+          <div style="width:52px;height:52px;flex:none;border-radius:12px;background:#2b1a63;box-shadow:inset 0 0 0 1px #4b3a94;display:flex;align-items:center;justify-content:center;color:#c4b5fd">
+            <x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Play24" size="{{ 26 }}" hint-size="26px,26px"></x-import>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:27px;font-weight:600;color:#ffffff;letter-spacing:-.2px">Rien à faire : lancez une partie</div>
+            <div style="margin-top:16px;max-width:680px;font-size:16px;line-height:27px;font-weight:500;color:#c6ccdf;text-wrap:pretty">Flashwatch attend en arrière-plan. La barre apparaîtra toute seule dès que l’écran de jeu s’affiche, et se remplira au premier sort ennemi. Pour voir tout de suite à quoi elle ressemble et la placer : Affichage, puis “Afficher des sorts d’exemple”.</div>
+          </div>
+        </div>
+
+        <div style="margin-top:22px;border-radius:12px;background:rgba(9,12,28,.55);box-shadow:inset 0 0 0 1px #262c4c;display:grid;grid-template-columns:1fr 1px 1fr;max-width:1090px">
+          <div style="padding:20px 26px;display:flex;flex-direction:column;gap:18px">
+            <div style="display:flex;align-items:center;gap:16px">
+              <span style="display:flex;color:#c9a227"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Play24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+              <div style="width:120px;font-size:16px;font-weight:500;color:#dfe4f3">Jeu</div>
+              <div style="font-size:16px;font-weight:600;color:#E9A23B">League of Legends non détecté</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px">
+              <span style="display:flex;color:#8B5CF6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Notifications24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+              <div style="width:120px;font-size:16px;font-weight:500;color:#dfe4f3">Zone de chat</div>
+              <div style="font-size:16px;font-weight:500;color:#8b93ad">–</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px">
+              <span style="display:flex;color:#E9A23B"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+              <div style="width:120px;font-size:16px;font-weight:500;color:#dfe4f3">Timers actifs</div>
+              <div style="font-size:16px;font-weight:600;color:#dfe4f3">0</div>
+            </div>
+          </div>
+          <div style="background:#242a48"></div>
+          <div style="padding:20px 26px;display:flex;flex-direction:column;gap:24px">
+            <div style="display:flex;align-items:center;gap:16px">
+              <span style="display:flex;color:#8B5CF6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Update24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+              <div style="width:160px;font-size:16px;font-weight:500;color:#dfe4f3">Horloge estimée</div>
+              <div style="font-size:16px;font-weight:500;color:#8b93ad">–</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px">
+              <span style="display:flex;color:#38BDF8"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Scanner24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+              <div style="width:160px;font-size:16px;font-weight:500;color:#dfe4f3">OCR</div>
+              <div style="display:flex;gap:16px;font-size:16px;font-weight:500;color:#dfe4f3"><span>2336 analyses,</span><span>49 ms,</span><span>59% ignorées</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:22px">
+      <div style="border-radius:14px;background:linear-gradient(160deg,#161135 0%,#0f1226 100%);box-shadow:inset 0 0 0 1px #2b2f55;padding:26px 28px;display:flex;gap:22px;align-items:flex-start">
+        <div style="width:52px;height:52px;flex:none;border-radius:12px;background:#2b1a63;box-shadow:inset 0 0 0 1px #4b3a94;display:flex;align-items:center;justify-content:center;color:#c4b5fd">
+          <x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Rapport24" size="{{ 26 }}" hint-size="26px,26px"></x-import>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:24px;font-weight:600;color:#ffffff">Guide d’installation</div>
+          <div style="margin-top:16px;font-size:16px;line-height:27px;font-weight:500;color:#c6ccdf;text-wrap:pretty">Trois minutes : mode d’affichage de League, langue du client, cadrage du chat, position de la barre.</div>
+          <button style="margin-top:22px;display:flex;align-items:center;gap:14px;height:56px;padding:0 24px;border:0;border-radius:10px;background:#1b1440;box-shadow:inset 0 0 0 1px #6D28D9;color:#f0eefc;font-family:Mulish, sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #8B5CF6, 0 10px 25px rgba(109,40,217,.25)">
+            Ouvrir le guide
+            <span style="display:flex;color:#c4b5fd"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Redirection24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+          </button>
+        </div>
+      </div>
+
+      <div style="border-radius:14px;background:linear-gradient(160deg,#161135 0%,#0f1226 100%);box-shadow:inset 0 0 0 1px #2b2f55;padding:26px 28px;display:flex;gap:22px;align-items:flex-start">
+        <div style="width:52px;height:52px;flex:none;border-radius:12px;background:#2b1a63;box-shadow:inset 0 0 0 1px #4b3a94;display:flex;align-items:center;justify-content:center;color:#c4b5fd">
+          <div style="width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 2px #c4b5fd;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#c4b5fd">✓</div>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:24px;font-weight:600;color:#ffffff;text-wrap:pretty">Vérifier que ça marche, sans attendre un ennemi</div>
+          <div style="margin-top:14px;font-size:16px;line-height:27px;font-weight:500;color:#c6ccdf;text-wrap:pretty">Collez cette ligne dans le chat de la partie : un timer doit apparaître immédiatement. Si oui, la lecture de l’écran fonctionne et il ne reste qu’à attendre un vrai sort.</div>
+          <div style="margin-top:20px;display:flex;gap:16px;align-items:center">
+            <div style="flex:1;height:56px;border-radius:10px;background:#0b0f1e;box-shadow:inset 0 0 0 1px #262c4c;display:flex;align-items:center;padding:0 20px;font-family:'Roboto Mono', ui-monospace, monospace;font-size:15px;color:#c6ccdf;white-space:nowrap;overflow:hidden">Attendez Darius Saut éclair – 245 sec.</div>
+            <button onClick="{{ copyLine }}" style="display:flex;align-items:center;gap:12px;height:56px;padding:0 22px;border:0;border-radius:10px;background:#6D28D9;color:#fff;font-family:Mulish, sans-serif;font-size:17px;font-weight:600;cursor:pointer;flex:none" style-hover="box-shadow:0 10px 25px rgba(109,40,217,.35)">
+              {{ copyLabel }}
+              <span style="display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24ContentCopy24" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:22px;position:relative;border-radius:14px;background:linear-gradient(100deg,#141034 0%,#12132e 55%,#161a3a 100%);box-shadow:inset 0 0 0 1px #2b2f55;overflow:hidden">
+      <div style="position:absolute;inset:0;border-radius:14px;box-shadow:inset 0 0 0 1px #2b2f55;pointer-events:none;z-index:2"></div>
+      <div style="position:absolute;right:0;top:0;bottom:0;width:460px">
+        <image-slot id="fw-enemies-art" shape="rect" fit="cover" src="uploads/pasted-1786742352300-0.png" placeholder="Image de fond (ennemis)"></image-slot>
+        <div style="position:absolute;inset:0;background:linear-gradient(90deg,#131033 0%, rgba(19,16,51,.7) 34%, rgba(19,16,51,0) 100%)"></div>
+      </div>
+      <div style="position:relative;padding:26px 30px 28px 26px;display:flex;gap:22px;align-items:flex-start">
+        <div style="width:52px;height:52px;flex:none;border-radius:12px;background:#2b1a63;box-shadow:inset 0 0 0 1px #4b3a94;display:flex;align-items:center;justify-content:center;color:#c4b5fd">
+          <x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24PersonWithStatus24" size="{{ 26 }}" hint-size="26px,26px"></x-import>
+        </div>
+        <div style="flex:1;max-width:660px">
+          <div style="font-size:24px;font-weight:600;color:#ffffff">Ennemis repérés</div>
+          <div style="margin-top:16px;font-size:16px;line-height:27px;font-weight:500;color:#c6ccdf;text-wrap:pretty">Les champions apparaissent dès qu’un sort est détecté. Attribuez un rôle pour regrouper l’affichage.</div>
+          <div style="margin-top:20px;font-size:16px;line-height:27px;font-weight:500;color:#9ba3bd;text-wrap:pretty">Aucun ennemi repéré pour l’instant. Ils s’ajoutent tout seuls au premier sort détecté.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:22px;display:flex;justify-content:flex-end;gap:20px">
+      <button style="display:flex;align-items:center;gap:14px;height:62px;padding:0 26px;border:0;border-radius:10px;background:#0d1224;box-shadow:inset 0 0 0 1px #262d49;color:#dfe4f3;font-family:Mulish, sans-serif;font-size:18px;font-weight:600;cursor:pointer" style-hover="box-shadow:inset 0 0 0 1px #3a4268">
+        <span style="display:flex;color:#b9c0d6"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Refresh24" size="{{ 22 }}" hint-size="22px,22px"></x-import></span>
+        Réinitialiser les timers
+      </button>
+      <button style="display:flex;align-items:center;gap:14px;height:62px;padding:0 28px;border:0;border-radius:10px;background:#6D28D9;color:#fff;font-family:Mulish, sans-serif;font-size:18px;font-weight:700;cursor:pointer" style-hover="box-shadow:0 10px 25px rgba(109,40,217,.35)">
+        <span style="display:flex"><x-import component-from-global-scope="XeliansDesignSystem_9ef45a.Icon" name="X24Ic24Redirection24" size="{{ 22 }}" hint-size="22px,22px"></x-import></span>
+        Quitter (fermer le programme)
+      </button>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1448,&quot;height&quot;:1086}}">
+class Component extends DCLogic {
+  state = { nav: 'home', copied: false };
+  nav(active) {
+    return 'position:relative;display:flex;align-items:center;gap:18px;height:64px;padding:0 18px;border-radius:10px;cursor:pointer;transition:background 200ms cubic-bezier(.4,0,.2,1);'
+      + (active ? 'background:#1a1440;box-shadow:inset 0 0 0 1px #3a2c7a;' : 'background:transparent;');
+  }
+  bar(active) {
+    return 'position:absolute;left:0;top:12px;bottom:12px;width:4px;border-radius:0 3px 3px 0;background:#8B5CF6;opacity:' + (active ? 1 : 0) + ';';
+  }
+  icon(active) { return 'display:flex;color:' + (active ? '#c4b5fd' : '#8b93ad') + ';'; }
+  text(active) { return 'font-size:19px;font-weight:' + (active ? 700 : 500) + ';color:' + (active ? '#ffffff' : '#b9c0d6') + ';'; }
+  renderVals() {
+    const n = this.state.nav;
+    const mk = (k) => ({ ['nav' + k]: null });
+    const out = {
+      copyLabel: this.state.copied ? 'Copié' : 'Copier',
+      copyLine: () => {
+        this.setState({ copied: true });
+        setTimeout(() => this.setState({ copied: false }), 1400);
+      },
+      goHome: () => this.setState({ nav: 'home' }),
+      goDisplay: () => this.setState({ nav: 'display' }),
+      goSettings: () => this.setState({ nav: 'settings' }),
+      goFix: () => this.setState({ nav: 'fix' }),
+    };
+    [['Home', 'home'], ['Display', 'display'], ['Settings', 'settings'], ['Fix', 'fix']].forEach(([k, id]) => {
+      const a = n === id;
+      out['nav' + k] = this.nav(a);
+      out['nav' + k + 'Bar'] = this.bar(a);
+      out['nav' + k + 'Icon'] = this.icon(a);
+      out['nav' + k + 'Text'] = this.text(a);
+    });
+    return out;
+  }
+}
+
+</script>
+</body>
+</html>

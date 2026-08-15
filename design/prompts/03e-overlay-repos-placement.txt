@@ -1,0 +1,14 @@
+Generate a 3:2 image split into two clearly separated halves, same direction and
+palette, each half over the same abstract game background.
+
+LEFT HALF - AT REST: the chrono track with nothing on cooldown. Only its faint
+backing and its bare rail, drawn at very low opacity: enough to see the app is alive
+and where it sits, not enough to obscure the game. No text, no tokens.
+
+RIGHT HALF - BEING PLACED: the same strip, unlocked for positioning. It carries a
+visible outline in the direction's warning colour, a short centred hint line of text
+inside it, and a small resize grip in its bottom right corner - three diagonal
+hairlines.
+
+Label each half with a small uppercase caption outside the strip. Flat vector-style
+UI, exact palette from your token table, no device frame, no watermark.

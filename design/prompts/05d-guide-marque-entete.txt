@@ -1,0 +1,7 @@
+Generate a 21:9 image: just the header strip of the wizard window, three times,
+stacked, each with a different candidate app mark on the left at its real size
+(around 34 px tall relative to a 17 px title). Same direction and palette. The point
+is to check the mark still reads at that size next to text, so render the strips at
+their true relative proportions and do not enlarge the marks.
+
+Flat vector-style UI, no device frame, no watermark.

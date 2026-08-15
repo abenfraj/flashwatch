@@ -1,0 +1,9 @@
+Generate a 21:9 image: a single notification strip as it appears at the top of the
+window, in the direction and palette you defined. It contains a line of primary text
+announcing a new version, a second line of secondary text reassuring about settings
+being kept, then three buttons on one row: a primary one, a secondary one, and on the
+far right a quiet dismissive one.
+
+It must read as "worth reading before whatever you opened this window for", without
+resorting to a saturated alert bar. Flat vector-style UI, exact palette, no device
+frame, no watermark.

@@ -1,0 +1,24 @@
+Generate a 1:1 image: a component sheet for the desktop window, in the direction and
+exact palette you defined above. A tidy grid of isolated components on the window's
+own ground, each with a small uppercase caption underneath. Include:
+
+  - a CARD: a rounded panel with a title, a line of secondary text, and a hairline
+    separator across it
+  - a PRIMARY BUTTON and a SECONDARY/GHOST BUTTON, side by side, plus a DANGER
+    button, all three at rest
+  - the same primary button in a hover state and a disabled state
+  - a TOGGLE SWITCH in both states, with a label beside it
+  - a DROPDOWN / SELECT, closed, showing a value
+  - a NUMBER FIELD with a unit suffix ("200 ms") and small stepper arrows
+  - a SLIDER with its filled portion and its handle
+  - four STATE PILLS in a row: neutral, positive, warning, negative, each a small
+    uppercase word in a rounded outline
+  - a NAVIGATION COLUMN fragment: four stacked text entries, one of them selected,
+    the selection expressed with the direction's own vocabulary rather than a plain
+    filled rectangle
+  - a COLLAPSED DISCLOSURE row: a small triangle, an uppercase label, a hairline
+  - a MONOSPACED READOUT: a label on the left, a value in tabular figures on the
+    right
+
+Flat vector-style UI design presentation, crisp edges, no device frames, no browser
+chrome, no watermark, no logos, no photography. Generous spacing between components.

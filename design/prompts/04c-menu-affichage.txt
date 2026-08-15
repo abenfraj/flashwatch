@@ -1,0 +1,21 @@
+Generate a 4:5 image: the same window, same header and navigation, with the second
+navigation entry selected, showing the DISPLAY page. The content column contains:
+
+  - a card with a title, two lines of secondary text, and one prominent primary
+    button
+  - a card containing THREE SELECTABLE TILES stacked vertically. Each tile is a wide
+    rounded row with, on its left, a small schematic thumbnail of an overlay layout,
+    and on its right a title in primary ink plus two lines of secondary text. The
+    three thumbnails are:
+      a) a horizontal rail with three small circles on it at different positions
+      b) three circles in a row, each wrapped in a partial progress ring
+      c) three stacked rows, each with a small circle, two short text lines and a
+         thin progress bar
+    The FIRST tile is selected. Express that selection in the direction's own
+    vocabulary - it must be unmistakable next to the two unselected ones.
+  - a card titled with a position heading, two lines of secondary text, and two
+    buttons: one wide, one narrower under it
+  - a collapsed disclosure row at the bottom: a small triangle and an uppercase label
+
+Exact palette and radii from your token table. Flat vector-style UI, no OS title bar,
+no device frame, no watermark, no logos.
