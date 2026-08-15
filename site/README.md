@@ -18,6 +18,31 @@ Every download button on the page is built from those three, and points at
 `releases/latest/download/Flashwatch.exe` — the URL GitHub keeps aimed at your newest
 release. Publish a new release and the page needs no change.
 
+## The social card, and why its URL carries a version
+
+`og-image.jpg` is what Discord, Slack and the rest unfurl. It is drawn by
+`tools/make_og.py` from the hero artwork, the logo and the champion icons the
+program has already downloaded, at 1200 x 630 -- the size every scraper expects.
+
+Two things about it are easy to get wrong, and both cost a day to notice:
+
+**The URLs in the meta tags must be absolute.** A scraper reads the markup on its
+own and has no page to resolve `og-image.jpg` against, so a relative one is
+dropped and the link unfurls as plain text.
+
+**Discord caches embeds, and it caches them hard.** The cache is keyed on the
+exact URL string and ignores `Cache-Control` -- which this host already serves as
+`max-age=0, must-revalidate`. So after fixing anything about the card:
+
+* a URL Discord has never seen shows the new card immediately. `?v=2`, or
+  `/index.html`, or a trailing slash where there was none: all different keys;
+* the URL it *has* seen goes on showing the old embed until its entry expires by
+  itself, usually within a day. There is no way to purge it -- no endpoint, no
+  header, nothing this repository can serve;
+* the **image** is proxied and cached by URL too, so a redrawn card under the
+  same filename keeps unfurling as the old picture. That is what the `?v=` on the
+  `og:image` tag is for. Bump it whenever the card is redrawn.
+
 ## Where the 98 MB file goes: not here
 
 Put the binary in a **GitHub release**, not in this folder. Release assets are
