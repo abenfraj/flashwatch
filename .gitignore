@@ -11,7 +11,11 @@ dist/
 
 # Everything the program creates at runtime next to itself: settings, the
 # downloaded icon cache, the log. Machine-specific, and the icons are Riot's.
-assets/
+#
+# Anchored to the root on purpose. Unanchored, this pattern matches a folder
+# called "assets" at any depth -- which quietly swallowed design/maquette/assets,
+# where the artwork the logo is cut from lives.
+/assets/
 
 # Local tooling state.
 .claude/

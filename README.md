@@ -1,7 +1,16 @@
+<img src="resources/brand/flashwatch-round-256.png" alt="" width="96" align="left">
+
 # Flashwatch
 
 Overlay that tracks enemy summoner spell and ultimate cooldowns by reading the
 in-game chat with OCR. No key presses needed during a game.
+
+<br clear="left">
+
+The logo files under `resources/brand/` are cut from the artwork in
+`design/maquette/` by `tools/make_brand.py`, and are what the tray, the taskbar,
+both window headers, the executable and the site all wear. Run that script again
+if the artwork changes; nothing regenerates them at build time.
 
 ## How it stays safe
 
@@ -474,15 +483,101 @@ rank is inferred from the game clock and per-champion haste can be set in
 `assets/settings.json`. The planned scoreboard reader will fill that in from enemy
 items.
 
+## The setup guide
+
+Four things decide whether Flashwatch works at all, and not one of them can be
+worked out by poking at the interface: League has to be in **borderless**, the
+**client's language** decides the wording looked for in chat, the **chat area** is
+found automatically (worth saying, since the settings are full of buttons that
+suggest otherwise), and the **overlay** has three shapes and goes anywhere on
+screen — and none of it can be *proved* outside a game. So the first run walks
+through it in the Practice Tool: **seven screens** — the client's language,
+welcome, borderless, pick a display, place it, the proof, all set — a drawing
+each, about three minutes. It shows itself once, whether it is finished or closed,
+and stays one click away afterwards under **Accueil → Guide d'installation** or in
+the tray menu.
+
+It is a **direct port of `design/maquette/Onboarding *.dc.html`**, not an
+interpretation of them. Those files are absolutely-positioned CSS on a fixed
+1536 × 1024 canvas, so the window is a fixed 1536 × 1024 canvas too: one painted
+widget, one uniform scale applied at the top of `paintEvent`, and every number in
+it — 46, 158, 382, 896 — is the number in the mockup. Nothing is laid out by Qt, so
+nothing drifts from the design when a translation runs long or the window is
+resized, and the screens *are* the mockups rather than resembling them. The face is
+the mockups' own, **Mulish**, embedded from `resources/fonts` (SIL OFL, 212 KB),
+with sizes in pixels like the CSS.
+
+It is also the one dark surface in a light product, deliberately: it is read once,
+before anything else exists, and every figure in it depicts League, which is dark.
+
+There are **no child widgets** in it, and that is what lets step one — the client's
+language — change the language of steps two to seven without the window being torn
+down: every word is fetched from `tr()` at paint time, so switching language is a
+repaint. It used to be a rebuild, which closed and reopened the window under the
+reader's cursor and raised a tray notification behind it.
+
+Everything moves, and not for decoration. A guide is read in one order, so the
+stepper's line fills *forwards*, a page slides in from the side it came from, and a
+figure assembles in the order it should be read. Qt has no CSS transitions, so each
+of those is a number animated by hand and read inside a `paintEvent`. The cost is
+watched: an entrance lasts a few hundred milliseconds and stops, and the one
+looping animation runs at twelve frames a second, only on the visible step, and
+gives up after seven seconds — nothing here spins while League is being played.
+
+The drawings are painted, not shipped: no PNGs in a bundle that is already 99 MB,
+they follow the palette, and they redraw at any DPI. That includes the two figures
+that redraw League's own client — its menu path and its video options — which are
+schematics carrying the client's exact labels rather than screenshots: a capture
+would age with every patch and exist in one language only. The three overlay
+sketches are the same code the settings page draws, so a display chosen in the
+guide is recognised in the settings.
+
+## Light, and why
+
+The whole product is light: a cool near-white window, a deep blue accent, and an
+overlay that is a near-opaque **light** panel carrying dark numerals. That last part
+is the one that needed measuring rather than taste.
+
+A translucent panel over a game composites with whatever is behind it. A *dark* panel
+at 42% over a bright victory screen lands on mid grey, and the white countdown on it
+scores **3.56:1** — unreadable at a glance, exactly when a fight makes the screen
+busiest. A *light* panel has the opposite problem at the same opacity, so it is drawn
+at **80%** instead: it then composites to roughly the same light grey whatever is
+behind it, and the dark countdown clears **10:1 on every background**. The painted
+shadow flips with it — dark text wants a light halo, not a black one.
+
+The trade is honest: the light overlay hides a little more of the game than the dark
+one did. In exchange it is the only one of the three themes that never becomes
+illegible. **Sombre** and **Néon** are still there in *Réglages → Affichage* for
+anyone who prefers them, and the whole light palette is checked at 4.5:1 or better
+against both of its grounds — the ratios are in the comments in `src/theme.py`, so a
+future edit can be verified instead of eyeballed.
+
 ## Overlay
 
-Two layouts, switchable in **Settings → Réglages → Disposition**.
+Three displays, switchable in **Réglages → Affichage**. They show the same
+information; none of them is right for everyone, so the choice is the user's — and
+each one **goes anywhere on screen** and keeps **its own position and size**, so
+trying another cannot lose where the first was placed.
 
-**Barre en haut** (default) — a discreet strip at the top centre of the screen.
+**Barre chrono** (default) — a discreet strip at the top centre of the screen.
 Each spell on cooldown is a champion portrait with its spell badged on the corner,
 riding the track **left to right** as the cooldown runs down: it enters at the
 left the moment a spell is used and arrives at the right as it comes back up. So
-"who is nearly back" is readable without reading any numbers.
+"who is nearly back" is readable without reading any numbers. A stem drops from
+the rail to each portrait, and the far end of the rail is tinted green — that end
+means "back up".
+
+**Cartes fixes** — one card per cooldown at a place that never moves: portrait,
+**progress ring** closing around it, spell badge, countdown underneath. The ring
+turns the way every cooldown sweep in the game itself turns, so it is read rather
+than learned, and nothing sliding means nothing to find before it can be read.
+Cards wrap onto more rows if the window is made taller, and are dropped rather
+than stacked if there is no room — half a card is not information.
+
+**Rangées compactes** — one row per spell: champion, spell, time left, and a
+**gauge** that fills as the cooldown runs down. The most legible of the three and
+the tallest, which is the trade.
 
 The bar stays **off screen until you are in a game**: nothing is drawn on the
 desktop, in the client or in champion select. It appears when League's in-game
@@ -500,30 +595,105 @@ With nothing on cooldown the bar fades to just its track — faint, but enough t
 show the app is alive and where it sits. Untick **Afficher la barre vide** to make
 it fully invisible at rest instead.
 
-To check it without waiting for a game, use **Afficher un aperçu (test)** (tray
-menu or settings): it puts three fake 20-second timers on the bar so position,
-theme and scale can be judged immediately. The short times make a preview
-impossible to mistake for real data.
+## Trying it, and placing it, with League closed
 
-**Liste verticale** — the original panel, one row per spell.
+**Réglages → Affichage → Afficher des sorts d'exemple** (also in the tray) puts
+six fake cooldowns on the overlay and leaves them there. They cover every state at
+once — one just cast, one halfway, one inside the 30-second warning, one already
+**READY**, plus the `?` of a spell that was only inferred and the `~` of an
+ultimate whose rank is a guess — across all five roles, so what is being judged is
+the real thing at its busiest rather than three bars flashing past.
 
-Two spells used in the same second land on the same point of the track, so the
-markers are placed as a group: each is nudged sideways just enough to clear its
-neighbour, and the run is pushed back inside the bar's edges rather than piling up
-against them. If more cooldowns are running than the bar has room for, they are
+It **stays on until it is turned off**, which is the point: comparing the three
+displays, trying a theme, dragging the overlay to a corner and looking at it again
+does not fit in twenty seconds. Entries that run out come back with a full
+cooldown, so the colours keep crossing their thresholds while you watch.
+
+**It ends by itself the moment a real game appears**, clearing the fake cooldowns
+and putting click-through back. That is also what makes placing safe: press
+**Déplacer / redimensionner** (or **Le placer maintenant** in the guide), take as
+long as you like, and nothing has to race you back to a locked state — the state
+that actually matters is "not unlocked while playing", and starting a game is
+exactly when that is enforced. Nothing here can reach the timer logic: these
+entries never come from a parsed line, and the control window says **ESSAI** in its
+header for as long as the trial runs.
+
+On the chrono track, two spells used in the same second land on the same point, so
+the markers are placed as a group: each is nudged sideways just enough to clear
+its neighbour, and the run is pushed back inside the bar's edges rather than piling
+up against them. If more cooldowns are running than the bar has room for, they are
 spread evenly over its full width — crowded, but never one portrait hidden behind
 another. The time text remains the precise readout.
 
-Use **Recentrer la barre en haut de l'écran** after changing resolution, and
-uncheck **Verrouillé** to drag or resize it.
+**Placing it.** Press **Déplacer / redimensionner** in **Réglages → Affichage**
+(or untick *Verrouillé*): the display is outlined, drag it anywhere, pull the
+bottom-right corner to resize, then press the same button to lock it again. Locked
+means click-through — the overlay can never be clicked or take focus from the game.
+**Remettre en place** puts the current display back at its default spot, which is
+what you want after changing resolution.
+
+## The control window
+
+Four places down the side rather than four tabs of switches across the top:
+
+| | |
+| --- | --- |
+| **Accueil** | is it working — one sentence, the live readouts, the setup guide, and the one line to paste into chat to prove the whole pipeline. Enemies and their roles appear here as they are detected. |
+| **Affichage** | which of the three displays, where it sits, theme, opacity, scale. |
+| **Réglages** | language, what is tracked, sounds, startup, updates. |
+| **Dépannage** | the chat area, the zone frames, and every line the OCR read. |
+
+Nothing was removed in the rebuild; what changed is rank. The expert switches
+(click-through, cosmic insight, capture interval, enemy colour…) are folded into
+**Options avancées** sections that say what they are before they are opened, and
+every long explanation moved out of a control's own label into a dim line beneath
+it — which also fixed a real bug: a `QCheckBox` will not wrap its text, so a switch
+labelled with a full sentence set a floor of roughly 950 px under the window's
+width, and the `resize()` asking for less was simply ignored.
+
+The look is a port of `design/maquette/Flashwatch *.dc.html`, one file per place,
+and a literal one: every length, type size and gap in `ui.py` is the number in
+those files, and the palette is `theme.MENU`, filled the same way.
+
+**One canvas, one scale.** The maquettes are a fixed 1448 × 1086 page, so the
+window is a fixed 1448 × 1086 page too, fitted to the screen through a single
+multiplier — the same thing `onboarding.py` does for the guide. Nothing is
+elastic: at 100% it is the maquette pixel for pixel, and at 91% it is the same
+drawing at 91%. That is why every number goes through `ControlWindow.s()`, why
+the stylesheet is *generated* at a scale rather than written at one, and why the
+maximise button grows the canvas instead of stretching a frame around it.
+
+The four files disagree about the frame — three canvas sizes, title bars of 47,
+48, 50 and 52 px — so the frame is `Flashwatch App.dc.html`'s, the largest and
+most complete, and each page keeps its own numbers inside it. One number could
+not be kept: the rail's buttons are `padding: 0 20px` inside a 205 px button, and
+"Quitter le programme" at 16 px with a 22 px icon does not fit that. The HTML
+overflows its own rail; a button cannot, so it is 12 px and 15 px type there.
+
+Four things the maquettes draw that Qt has no way to style are done in Python
+instead — the **switches** are painted, because QSS can colour a checkbox but
+cannot slide a knob across it; the **chevrons and steppers** on fields are
+painted by the widgets that own them, because Qt's own arrows are style-drawn and
+an `image:` would need a file this program does not ship; the **icons** come out
+of `icons.py` as geometry, for the same reason; and the **window chrome** is ours,
+because the maquettes draw their own title bar.
+
+Two pictures are the exception to "nothing ships as an image": the illustrations
+behind the home page's headline and its enemies card, downscaled into
+`resources/art` at 640 px — 75 KB the pair, against a 99 MB executable. They are
+faded out towards the text by erasing their own alpha rather than by laying a
+wash over them, which is the difference between a picture that dissolves into the
+card and one with a visible seam down it.
 
 ## Layout
 
 ```
 src/
   main.py            entry point, threading and wiring
-  overlay.py         transparent click-through overlay
+  overlay.py         transparent click-through overlay, three displays
   ui.py              control window, settings, debug view, region picker
+  icons.py           the window's line-art icons, drawn rather than shipped
+  onboarding.py      the first-run setup guide: one painted 1536x1024 canvas
   zone_overlay.py    test-mode frame: place the OCR zone by hand, live
   ocr.py             capture loop, OCR, work-avoidance layers
   chat_detector.py   locates the chat without hardcoded coordinates
@@ -534,13 +704,17 @@ src/
   cooldowns.py       cooldown table
   i18n.py            every user-facing string, French and English
   settings.py        persisted configuration
+  single_instance.py one copy at a time; a second launch opens the first's window
   audio.py           notification tones
 build.py             packages everything into one .exe to send
 site/
-  index.html         download page: install guide, docs, live overlay mock
+  index.html         download page: install guide, docs, live overlay mock —
+                     same palette and same face as the window, one file, no build
 tools/
   diagnose.py        in-game capture + OCR dump for troubleshooting
 tests/               runnable checks, see below
+resources/fonts/     Mulish, the interface's face (SIL OFL), shipped in the .exe
+resources/art/       the home page's two illustrations, 75 KB the pair
 assets/cache/        downloaded icons and data (created on first run)
 ```
 
@@ -560,6 +734,8 @@ Each file is a standalone script that exits non-zero on failure:
 .venv\Scripts\python tests\test_zone_frame.py         # the test-mode frame and its empty middle
 .venv\Scripts\python tests\test_enemy_colour.py       # red name = enemy, over every backdrop
 .venv\Scripts\python tests\test_bar_layout.py         # markers never overlap on the bar
+.venv\Scripts\python tests\test_display_choice.py     # three displays, one position each
+.venv\Scripts\python tests\test_onboarding.py         # the guide runs once, and changes what it says it does
 .venv\Scripts\python tests\test_english_client.py     # the same messages, EN client
 .venv\Scripts\python tests\test_language.py           # the catalogue and the switch
 .venv\Scripts\python tests\test_timer_stability.py    # nothing may move a set timer

@@ -121,11 +121,16 @@ def _keep_binary(dest):
     return True
 
 
+# The guide's face. Mulish is SIL OFL, so it can be shipped; without it the
+# window falls back to whatever Windows has and the setup guide stops matching
+# the design it was drawn from. 212 KB, next to a 99 MB executable.
+own_datas = {own_datas!r}
+
 analysis = Analysis(
     [{entry!r}],
     pathex=[{src!r}],
     binaries=ocr_binaries,
-    datas=ocr_datas,
+    datas=ocr_datas + own_datas,
     hiddenimports=ocr_hidden + ["keyboard"],
     excludes={excludes!r},
     noarchive=False,
@@ -174,6 +179,19 @@ def write_spec(one_file: bool, icon: Path | None,
         drop_binaries=DROP_BINARIES, drop_plugin_dirs=DROP_PLUGIN_DIRS,
         drop_data=DROP_DATA, entry=str(ENTRY), src=str(ROOT / "src"),
         excludes=EXCLUDES,
+        # What the program *ships*, as opposed to what it writes: the interface
+        # font, and the two illustrations the control window's home page puts
+        # behind its headline (75 KB the pair -- everything else in this window
+        # is drawn).
+        own_datas=[(str(path), "resources/fonts")
+                   for path in sorted((ROOT / "resources" / "fonts").glob("*.ttf"))]
+        + [(str(path), "resources/art")
+           for path in sorted((ROOT / "resources" / "art").glob("*.jpg"))]
+        # The logo the tray, the taskbar and both window headers wear. The .ico
+        # is stamped on the executable instead of bundled -- Windows reads that
+        # one off the file itself, before the program runs.
+        + [(str(path), "resources/brand")
+           for path in sorted((ROOT / "resources" / "brand").glob("*.png"))],
     )
     tail = (SPEC_ONEFILE if one_file else SPEC_ONEDIR).format(
         name=NAME, icon=str(icon) if icon is not None else None,
@@ -185,16 +203,22 @@ def write_spec(one_file: bool, icon: Path | None,
 
 
 def make_icon() -> Path | None:
-    """Draw the tray icon into an .ico, so the file has a face of its own.
+    """The .ico PyInstaller stamps on the executable.
 
-    Reads its geometry from src/theme.py, the same numbers main.py draws the
-    tray icon from and the same ones the download page's favicon uses. This
-    function used to hold its own copy, and the two had already diverged --
-    identical docstrings, different shapes.
+    The shipped logo when there is one -- ``tools/make_brand.py`` writes it with
+    every size Windows asks for, and it is the same picture the tray and the
+    window headers load at runtime, so the file's face and the running
+    program's cannot disagree.
 
-    An unbranded dark disc with a clock hand. Deliberately nothing resembling
-    Riot's artwork.
+    Failing that, the mark is drawn from the geometry in src/theme.py, which is
+    what main.py falls back to as well. This function used to hold its own copy
+    of those numbers and the two had already diverged -- identical docstrings,
+    different shapes.
     """
+    shipped = ROOT / "resources" / "brand" / "flashwatch.ico"
+    if shipped.exists():
+        return shipped
+
     try:
         from PIL import Image, ImageDraw
     except ImportError:
