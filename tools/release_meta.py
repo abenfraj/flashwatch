@@ -101,8 +101,11 @@ def next_version(current: tuple[int, int, int] | None, bump: str) -> tuple[int, 
 def format_notes(version: str, commits: list[str], previous: str | None) -> str:
     """The release body, as a user reading the download page will see it."""
     interesting = [c for c in commits if not BORING.match(c)]
-    # Strip the bump markers: they are instructions to this script, not news.
-    interesting = [re.sub(r"\s*\[(minor|major)\]\s*", " ", c, flags=re.I).strip()
+    # Strip the markers: they are instructions to the workflow and to this
+    # script, not news. "[skip release]" was missing from this list and duly
+    # turned up in a published changelog, which is how it earned its place.
+    interesting = [re.sub(r"\s*\[(minor|major|skip release)\]\s*", " ", c,
+                          flags=re.I).strip()
                    for c in interesting]
 
     lines = ["## Nouveautés"]
