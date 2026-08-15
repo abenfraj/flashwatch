@@ -53,6 +53,10 @@ jobs:
       # what it was before. Nothing here has to be undone to build unsigned.
       SIGN_CERT: ${{ secrets.WINDOWS_CERT_BASE64 }}
       SIGN_PASS: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+      # The other route, and the one that costs nothing: SignPath's foundation
+      # signs open-source projects for free. Unset here too, and equally inert
+      # until it is not -- see the step near the end of this job.
+      SIGNPATH_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -141,6 +145,40 @@ jobs:
           Remove-Item $pfx -Force
           & $tool verify /pa /v dist/Flashwatch.exe
           if ($LASTEXITCODE -ne 0) { throw 'the signature did not verify' }
+
+      # ── SignPath, for open source ──────────────────────────────────────
+      # Free for projects with a public repository and a recognised licence,
+      # which this one now has. The certificate belongs to the foundation and
+      # its private key never leaves their HSM: what is verified is not an
+      # identity but the *origin* of the binary, which is why the artifact has
+      # to be uploaded first and handed over by id. A build made anywhere else
+      # cannot be signed with it, which is the point.
+      #
+      # Four values turn this on, and nothing has to be undone to leave it off:
+      #   secrets.SIGNPATH_API_TOKEN, vars.SIGNPATH_ORGANIZATION_ID,
+      #   vars.SIGNPATH_PROJECT_SLUG, vars.SIGNPATH_POLICY_SLUG
+      - name: Upload the unsigned build for SignPath
+        if: env.SIGNPATH_TOKEN != ''
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: flashwatch-unsigned
+          path: dist/Flashwatch.exe
+
+      - name: Sign it
+        if: env.SIGNPATH_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          # Straight back over the unsigned one, so every step after this --
+          # the size check, the release upload -- sees the signed executable
+          # without knowing anything happened.
+          output-artifact-directory: dist
 
       - name: Check what came out
         run: |
