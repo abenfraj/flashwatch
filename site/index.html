@@ -5,13 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flashwatch — enemy cooldowns, read off the screen</title>
 <meta name="description" content="Windows overlay that reads the League of Legends chat and shows enemy summoner spell cooldowns. No injection, no memory reading: only the pixels already on screen.">
-<meta name="theme-color" content="#0a0d1a">
-<meta property="og:title" content="Flashwatch">
-<meta property="og:description" content="Enemy cooldowns, read off the screen. Nothing installed, nothing injected.">
+<link rel="canonical" href="https://flashwatch.vercel.app/">
+<!-- The colour Discord paints down the side of the unfurl. It is also the
+     browser chrome on Android, and the accent is the better answer for both
+     than the near-black the page is made of. -->
+<meta name="theme-color" content="#8B5CF6">
+
+<!-- What a link to this page unfurls into.
+     Absolute URLs, and not because the specification is fussy: a scraper reads
+     the markup on its own and has no page to resolve "og-image.jpg" against, so
+     a relative one is simply dropped and the card comes out as text.
+     The image is 1200 x 630 -- the size every scraper expects -- declared with
+     its dimensions so the space is reserved before it arrives, and paired with
+     summary_large_image, which is what turns a thumbnail into a banner. -->
+<meta property="og:site_name" content="Flashwatch">
+<meta property="og:url" content="https://flashwatch.vercel.app/">
+<meta property="og:title" content="Flashwatch — enemy cooldowns, read off the screen">
+<meta property="og:description" content="A Windows overlay that reads the League of Legends match chat and counts enemy summoner spells for you. One file, no installation, nothing injected into the game — and nothing to press while you play.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="logo.png">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="logo.png">
+<meta property="og:locale" content="en_GB">
+<meta property="og:image" content="https://flashwatch.vercel.app/og-image.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Flashwatch bar over a League of Legends game: four champion portraits on a track, with the time left on each summoner spell.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Flashwatch — enemy cooldowns, read off the screen">
+<meta name="twitter:description" content="A Windows overlay that reads the match chat and counts enemy summoner spells. One file, no installation, nothing injected.">
+<meta name="twitter:image" content="https://flashwatch.vercel.app/og-image.jpg">
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      À MODIFIER AVANT DE PUBLIER : une seule ligne, chercher GITHUB_USER
