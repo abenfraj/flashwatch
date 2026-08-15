@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flashwatch — LoL summoner spell timer overlay for Windows</title>
 <meta name="description" content="Free League of Legends overlay that tracks enemy summoner spell and flash cooldowns automatically. It reads the match chat on screen — no installation, no injection, nothing to press in game.">
+<!-- Google Search Console. The DNS method is not available on a shared
+     vercel.app subdomain, so the ownership proof is this tag; removing it
+     un-verifies the property. -->
+<meta name="google-site-verification" content="ELc59Tz1u41mi2a-9MZ-DhHYsM42x-Qxzx__eb3O92E">
 <link rel="canonical" href="https://flashwatch.vercel.app/">
 <meta property="og:locale:alternate" content="fr_FR">
 <!-- The colour Discord paints down the side of the unfurl. It is also the
@@ -24,7 +28,7 @@
 <meta property="og:title" content="Flashwatch — enemy cooldowns, read off the screen">
 <meta property="og:description" content="A Windows overlay that reads the League of Legends match chat and counts enemy summoner spells for you. One file, no installation, nothing injected into the game — and nothing to press while you play.">
 <meta property="og:type" content="website">
-<meta property="og:locale" content="en_GB">
+<meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://flashwatch.vercel.app/og-image.jpg?v=1.0.0">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
@@ -922,6 +926,14 @@ footer .sep{margin-left:auto}
     },
     {
       "@type": "Question",
+      "name": "Is it just a Flash timer?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No — it is a timer for every summoner spell. Flash is the one everybody counts, so it is the one people ask about, but Teleport, Heal, Ignite, Exhaust, Barrier, Cleanse, Ghost and Smite are tracked exactly the same way, from the same announcement, with the cooldown the game gives each of them. Ultimates too, if you want them."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "What about enemy ultimates?",
       "acceptedAnswer": {
         "@type": "Answer",
@@ -979,7 +991,7 @@ footer .sep{margin-left:auto}
       <div>
         <div class="kicker rise" data-i18n="hero.kicker">Overlay · League of Legends · Windows</div>
         <h1 class="rise" data-i18n="hero.h1">Enemy cooldowns,<br><em>read off the screen</em>.</h1>
-        <p class="lede rise" data-i18n="hero.lede">The program reads the match chat, recognises the summoner spells the enemy team has used, and shows a discreet bar at the top of your screen. No key to press, nothing to configure mid-game.</p>
+        <p class="lede rise" data-i18n="hero.lede">A free summoner spell timer for League of Legends. The program reads the match chat, recognises what the enemy team has used — Flash, Teleport, Heal, ultimates — and shows a discreet bar at the top of your screen. No key to press, nothing to configure mid-game.</p>
       </div>
 
       <div class="hero-side rise">
@@ -1099,7 +1111,7 @@ footer .sep{margin-left:auto}
       <div class="sec-num">01</div>
       <div>
         <h2 data-i18n="what.h2">Three things, done on their own</h2>
-        <p class="lede" data-i18n="what.lede">You start the program before playing and forget about it. It detects the match, finds the chat, and hides itself once you are out of game.</p>
+        <p class="lede" data-i18n="what.lede">An enemy cooldown tracker you start before playing and then forget about. It detects the match, finds the chat, and hides itself once you are out of game.</p>
       </div>
     </div>
     <div class="tri">
@@ -1492,6 +1504,10 @@ clean test.</pre>
         <div class="a">In an <code>assets</code> folder created <b>next to the executable</b>: settings, cached icons and the <code>flashwatch.log</code> file. The program is portable — move the folder and you keep everything. If the location is read-only, it falls back to <code>%LOCALAPPDATA%\Flashwatch</code>.</div>
       </details>
       <details>
+        <summary>Is it just a Flash timer?</summary>
+        <div class="a">No — it is a timer for every summoner spell. Flash is the one everybody counts, so it is the one people ask about, but Teleport, Heal, Ignite, Exhaust, Barrier, Cleanse, Ghost and Smite are tracked exactly the same way, from the same announcement, with the cooldown the game gives each of them. Ultimates too, if you want them.</div>
+      </details>
+      <details>
         <summary>What about enemy ultimates?</summary>
         <div class="a">Tracked too, but marked with a <span class="mono">~</span>: their cooldown depends on rank and ability haste, neither of which is visible on screen. The rank is inferred from the match clock, and the estimate is replaced by the exact value if a line states a remaining time.</div>
       </details>
@@ -1764,6 +1780,8 @@ parce qu'elle porte un temps restant, ce qui en fait un test net.</pre>`,
     "<div class=\"a\">Le programme s'en charge : la seconde copie te le dit et se retire, plutôt que de lire le même chat en double et de dessiner deux barres. Comme rien ne s'affiche pendant les deux ou trois premières secondes, un double-clic de trop est vite arrivé.</div></details>" +
     "<details><summary>Où sont mes réglages ?</summary>" +
     "<div class=\"a\">Dans un dossier <code>assets</code> créé <b>à côté de l'exécutable</b> : réglages, icônes en cache et journal <code>flashwatch.log</code>. Le programme est portable — déplace le dossier, tu gardes tout. Si l'emplacement est en lecture seule, il se rabat sur <code>%LOCALAPPDATA%\\Flashwatch</code>.</div></details>" +
+    "<details><summary>C'est juste un timer de Flash ?</summary>" +
+    "<div class=\"a\">Non — c'est un timer pour tous les sorts d'invocateur. Le Saut éclair est celui que tout le monde compte, donc celui dont on parle, mais Téléportation, Soin, Embrasement, Faiblesse, Barrière, Purification, Fantôme et Châtiment sont suivis exactement pareil, à partir de la même annonce, avec le cooldown que le jeu donne à chacun. Les ultimes aussi, si tu veux.</div></details>" +
     "<details><summary>Et les ultimes ennemis ?</summary>" +
     "<div class=\"a\">Suivis aussi, mais marqués d'un <span class=\"mono\">~</span> : leur cooldown dépend du rang et de l'accélération de compétences, invisibles à l'écran. Le rang est déduit de l'horloge de la partie, et l'estimation est remplacée par la valeur exacte si une ligne donne un temps restant.</div></details>" +
     "<details><summary>Ça marche en 1440p, en 4K, sur deux écrans ?</summary>" +
