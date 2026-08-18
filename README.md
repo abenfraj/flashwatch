@@ -7,10 +7,12 @@ in-game chat with OCR. No key presses needed during a game.
 
 <br clear="left">
 
-The logo files under `resources/brand/` are cut from the artwork in
-`design/maquette/` by `tools/make_brand.py`, and are what the tray, the taskbar,
-both window headers, the executable and the site all wear. Run that script again
-if the artwork changes; nothing regenerates them at build time.
+The logo files under `resources/brand/` are cut from the artwork at
+`design/brand/flashwatch-logo.png` by `tools/make_brand.py`, and are what the
+tray, the taskbar, both window headers, the executable and the site all wear.
+Replace that one file and run the script again if the artwork changes; nothing
+regenerates them at build time, and the painting itself stays out of
+`resources/` so it is not carried into the executable.
 
 ## How it stays safe
 

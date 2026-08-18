@@ -3,17 +3,29 @@
 
 Run by hand when the artwork changes, not at build time: the outputs are small,
 they are committed, and a build that regenerated them would need Pillow and the
-1.4 MB original in every clone. ::
+1 MB original in every clone. ::
 
     python tools/make_brand.py
 
-The source is a square painting on a near-black ground with a wide margin. Three
-things happen to it here, and each one is for a place it has to work in:
+The source is ``design/brand/flashwatch-logo.png``: a square painting of the
+mark on the brand's near-black ground. It is named rather than found. This used
+to take the most recent PNG in the maquette's asset folder, which worked exactly
+until a second image was dropped in there -- a folder sorted by modification
+time is not a decision about which picture is the logo.
 
-* **the margin comes off.** At 16 pixels in a system tray, a tenth of the icon
-  spent on empty ground is a tenth of very little;
-* **an alpha-cut variant** is written for the window headers, where the mark sits
-  on the interface's own panel and a navy tile around it would read as a
+It lives under ``design/`` and not beside its own outputs, because ``build.py``
+bundles every PNG in ``resources/brand/`` into the executable: the 1 MB painting
+nothing reads at runtime would be a megabyte in everyone's download.
+
+Three things happen to it here, and each one is for a place it has to work in:
+
+* **the frame comes off.** The artwork is a mark floating in a lot of ground,
+  and the ground is not the logo: at 16 pixels in a system tray, half an icon
+  spent on empty navy is half of very little. So the ink is *measured* and the
+  crop follows it, rather than a fixed share being taken off each edge -- which
+  is what the previous artwork got, and what left this one a speck in a square;
+* **an alpha-cut variant** is written for the window headers and the page, where
+  the mark sits on a surface of its own and square corners would read as a
   screenshot rather than as an icon;
 * **the .ico carries every size Windows asks for.** Left to scale one bitmap
   itself, Windows picks the nearest and does it badly.
@@ -23,37 +35,56 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "design" / "maquette" / "assets"
+SOURCE = ROOT / "design" / "brand" / "flashwatch-logo.png"
 OUT = ROOT / "resources" / "brand"
 SITE = ROOT / "site"
 
-# What is cropped off each edge, as a share of the source. Measured off the
-# artwork rather than guessed: below this the glow around the stopwatch starts
-# being clipped, which reads as a rendering fault at large sizes.
-MARGIN = 0.055
+# The ground the mark is painted on, sampled from the artwork's corners. Used to
+# find the ink, not to repaint anything: every output keeps the ground it came
+# with, so the tile in a taskbar is the picture the designer drew.
+GROUND = (0, 6, 27)
+
+# Anything this far from the ground counts as ink. Low, so the glow around the
+# blue arc is measured as part of the mark: cropping to the hard edges alone
+# clips the halo, which reads as a rendering fault at large sizes.
+INK = 10
+
+# How much ground is kept around the ink, as a share of the mark's own size. An
+# icon needs to breathe or it looks like it has burst its tile; much more than
+# this and it goes back to being a speck.
+PAD = 0.16
 
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 
-def newest_source() -> Path:
-    """The most recent PNG in the maquette's asset folder.
+def ink_box(image: Image.Image) -> tuple[int, int, int, int]:
+    """The smallest square, centred on the mark, that holds all of it.
 
-    Named by whatever produced it -- the file that arrived is called
-    ``ChatGPT Image 15 aout 2026, 21_03_33.png`` -- so it is found by date
-    rather than by a name nobody will remember to keep.
+    Square rather than tight: every output is square, and a rectangular crop
+    stretched to fit would make the stopwatch an oval. Centred on the *ink*
+    rather than on the frame, because the mark is not in the middle of its own
+    painting -- it sits high and to the left, and cropping around the frame's
+    centre would push it off its tile.
     """
-    candidates = sorted(SOURCE.glob("*.png"), key=lambda p: p.stat().st_mtime)
-    if not candidates:
-        raise SystemExit(f"no artwork in {SOURCE}")
-    return candidates[-1]
+    ground = Image.new("RGB", image.size, GROUND)
+    lit = ImageChops.difference(image.convert("RGB"), ground).convert("L")
+    box = lit.point(lambda value: 255 if value > INK else 0).getbbox()
+    if box is None:                       # a blank painting; nothing to measure
+        return (0, 0, image.width, image.height)
+    left, top, right, bottom = box
+    half = max(right - left, bottom - top) * (1 + PAD) / 2
+    x, y = (left + right) / 2, (top + bottom) / 2
+    # Kept inside the painting: past its edge there is no ground to show, and
+    # Pillow would hand back a transparent border instead.
+    half = min(half, x, y, image.width - x, image.height - y)
+    return (round(x - half), round(y - half), round(x + half), round(y + half))
 
 
 def trimmed(image: Image.Image) -> Image.Image:
-    cut = round(min(image.size) * MARGIN)
-    return image.crop((cut, cut, image.width - cut, image.height - cut))
+    return image.crop(ink_box(image))
 
 
 def rounded(image: Image.Image, radius_share: float = 0.22) -> Image.Image:
@@ -72,9 +103,11 @@ def rounded(image: Image.Image, radius_share: float = 0.22) -> Image.Image:
 
 
 def main() -> int:
-    source = newest_source()
-    print(f"source: {source.name} ({source.stat().st_size // 1024} KB)")
-    art = trimmed(Image.open(source).convert("RGBA"))
+    if not SOURCE.exists():
+        raise SystemExit(f"no artwork at {SOURCE.relative_to(ROOT)}")
+    print(f"source: {SOURCE.name} ({SOURCE.stat().st_size // 1024} KB)")
+    art = trimmed(Image.open(SOURCE).convert("RGBA"))
+    print(f"cropped to the mark: {art.width}x{art.height}")
 
     OUT.mkdir(parents=True, exist_ok=True)
     square = art.resize((256, 256), Image.LANCZOS)
