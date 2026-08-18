@@ -828,6 +828,10 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:14px 26px;align-items:center;
 footer a{color:var(--ink-faint);text-decoration:none}
 footer a:hover{color:var(--signal-pale)}
 footer .sep{margin-left:auto}
+footer .legal-row{display:block;margin-top:18px}
+footer .legal{padding-top:18px;border-top:1px solid var(--edge);
+  font-size:12.5px;line-height:1.65;font-weight:500;letter-spacing:0;
+  color:var(--ink-faintest);text-wrap:pretty}
 
 /* ══ reveals ════════════════════════════════════════════════════════════ */
 .rise{opacity:0;transform:translateY(18px)}
@@ -1557,6 +1561,13 @@ writes that sentence, and it carries a remaining time.</pre>
     <a href="#versions" data-i18n="nav.versions">Versions</a>
     <a href="#faq" data-i18n="nav.faq">FAQ</a>
   </div>
+  <!-- Riot's own wording, in full. The line above it says the same thing in
+       four words, which is what a footer row is for; this is the sentence they
+       ask to see, so it is set as its own paragraph rather than folded in
+       among the links where it would read as small print about nothing. -->
+  <div class="wrap legal-row">
+    <p class="legal" data-i18n="foot.riot">Flashwatch isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties, are trademarks or registered trademarks of Riot Games, Inc.</p>
+  </div>
 </footer>
 
 <script>
@@ -1797,6 +1808,11 @@ jamais cette phrase, et elle porte un temps restant.</pre>`,
   "cta.lede": "Windows 10/11 64 bits · aucune installation · gratuit",
   "cta.back": "Relire l'installation",
   "foot.disclaimer": "Non affilié à Riot Games",
+  "foot.riot": "Flashwatch n'est pas approuvé par Riot Games et ne reflète " +
+    "ni les opinions ni les positions de Riot Games ou de quiconque " +
+    "participe officiellement à la production ou à la gestion des propriétés " +
+    "de Riot Games. Riot Games et toutes les propriétés associées sont des " +
+    "marques commerciales ou des marques déposées de Riot Games, Inc.",
   "foot.dl": "Téléchargement",
   "doc.title": "Flashwatch — timer des sorts d'invocateur LoL pour Windows",
 };
