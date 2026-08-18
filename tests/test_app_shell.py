@@ -5,7 +5,7 @@ and the routes a user has to quit.
 The tray-menu check exists because of a bug that no amount of reading caught:
 QActions created as locals and handed to ``menu.addAction(action)`` are not owned
 by the menu in PySide6, so they were garbage-collected the moment the builder
-returned. The menu lost four entries including Quitter, leaving no way to stop
+returned. The menu lost four entries including Quit, leaving no way to stop
 the program. Only an assertion that survives a GC pass catches that.
 """
 import sys, io, os, gc, threading, traceback
@@ -68,8 +68,30 @@ handover = app_main.acquire_single_instance(TOKEN_NAME)
 check("releasing the token lets the next copy in", handover is not None)
 token = handover
 
+def _should_open(app, *, started_by_windows=False, open_window_on_launch=True):
+    """Ask the launch rule a question, with one input swapped.
+
+    The rule reads the command line and the settings, so the only way to put a
+    question to it is to substitute one of those and put it back. Restoring in a
+    ``finally`` because everything after this shares the same Application.
+    """
+    import autostart as autostart_module
+    was_flag = autostart_module.started_by_windows
+    was_setting = app.settings.get("open_window_on_launch")
+    autostart_module.started_by_windows = lambda *_a: started_by_windows
+    app.settings.set("open_window_on_launch", open_window_on_launch, save=False)
+    try:
+        return app._should_open_window()
+    finally:
+        autostart_module.started_by_windows = was_flag
+        app.settings.set("open_window_on_launch", was_setting, save=False)
+
+
 try:
     application = app_main.Application()
+    # Read here and nowhere else: everything below opens and hides this window,
+    # so "was it up when the program started?" only has an answer at this line.
+    window_on_first_run = application.control.isVisible()
     check("application constructed", True)
 except Exception:
     traceback.print_exc()
@@ -95,12 +117,35 @@ check("tray menu still populated after GC", len(labels) >= 8, f"{len(labels)} en
 def has(fragment):
     return any(fragment.lower() in label.lower() for label in labels)
 
-check("tray offers a way to quit the process", has("quitter"), str(labels))
-check("tray offers the settings window", has("parametres"))
-check("tray offers chat re-detection", has("redetecter"))
-check("tray offers a timer reset", has("reinitialiser"))
+check("tray offers a way to quit the process", has("quit"), str(labels))
+check("tray offers the settings window", has("settings"))
+check("tray offers chat re-detection", has("detect the chat"))
+check("tray offers a timer reset", has("reset the timers"))
 check("tray offers overlay visibility", has("overlay"))
 check("tray icon is visible", application.tray.isVisible())
+
+# ------------------------------------------------- what a launch looks like
+# A program that appears to do nothing when you double-click it is a program you
+# double-click again. The window is now part of launching -- but only of
+# *launching*: Windows starting this copy at login is not somebody asking to see
+# it, and a settings window every morning would be nagging.
+#
+# This run is a first run, so the guide owns it and no settings window appears;
+# that exception is checked below, with the rest of the guide. What is checked
+# here is the rule itself, and that a launch it says yes to really does put the
+# window up.
+check("a double-click asks for the window", _should_open(application))
+check("...and the setting can send it straight to the tray instead",
+      not _should_open(application, open_window_on_launch=False))
+check("...and a login never opens it, whatever the setting says",
+      not _should_open(application, started_by_windows=True)
+      and not _should_open(application, started_by_windows=True,
+                           open_window_on_launch=True))
+application.control.hide()
+application._open_window_if_wanted()
+check("and a launch the rule says yes to really shows it",
+      application.control.isVisible())
+application.control.hide()
 
 # ------------------------------------------------- routes to quit the app
 asked = {"count": 0}
@@ -428,6 +473,11 @@ application.run()
 # ------------------------------------------------------------- setup guide
 check("the guide shows itself on a fresh install",
       state.get("guide_on_first_run"))
+# ...and it is what a first run gets *instead of* the settings window, not as
+# well as it. The guide is the introduction and hands over to that window itself
+# when it is done; two windows at once on the very first launch is clutter at the
+# worst possible moment.
+check("and on that one launch it is the only window", not window_on_first_run)
 check("closing it counts as having seen it", state.get("guide_marked_seen"))
 check("and the application lets go of the window", state.get("guide_released"))
 check("it can still be reopened on demand",

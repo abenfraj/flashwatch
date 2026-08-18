@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "What chat-sample.png contains, so the self-test can score itself.",
+    "The image is a real frame of a real game -- not a synthetic one -- and a",
+    "deliberately unkind one: 1919x1079, the chat box closed so the messages are",
+    "drawn faint straight over the game world, and 13px glyphs because the frame",
+    "came off a stream that had already downscaled the game. If the reading chain",
+    "handles this it handles a native client comfortably.",
+    "",
+    "The chat is in English while the interface defaults to French, so the test",
+    "parses with the spell names below rather than with the user's own locale.",
+    "That is on purpose: the verdict then means 'the program works', not 'your",
+    "language setting is right', and it stays the same verdict on every install.",
+    "Champion names need no such table -- they resolve through the Data Dragon id,",
+    "which is the same in every language."
+  ],
+  "locale": "en_US",
+  "spell_names": {
+    "Flash": "Flash",
+    "Ghost": "Ghost",
+    "Heal": "Heal",
+    "Teleport": "Teleport",
+    "Ignite": "Ignite",
+    "Barrier": "Barrier",
+    "Cleanse": "Cleanse",
+    "Exhaust": "Exhaust",
+    "Smite": "Smite",
+    "Snowball": "Mark",
+    "Clarity": "Clarity"
+  },
+  "expected": [
+    {"champion": "Yasuo", "spell": "Exhaust", "line": "10:17 Nopsel (Viego): Yasuo used Exhaust"},
+    {"champion": "Karma", "spell": "Heal", "line": "10:18 Nopsel (Viego): Karma used Heal"}
+  ]
+}

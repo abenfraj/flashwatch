@@ -31,14 +31,16 @@ settings_module.CONFIG_PATH = tmp / "settings.json"
 if settings_module.CONFIG_PATH.exists():
     settings_module.CONFIG_PATH.unlink()
 
+from PySide6.QtCore import QPointF
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication
 
 import i18n
 from i18n import ENGLISH, FRENCH, tr
-from onboarding import STEPS, Onboarding
-from overlay import LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST
-from settings import Settings
+from onboarding import (STEP_TUNE, STEPS, Onboarding, TuneScreen,
+                        countdown_faces)
+from overlay import FACE_AUTO, LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST
+from settings import DEFAULTS, Settings
 from ui import ControlWindow
 
 results = []
@@ -68,8 +70,8 @@ check("a fresh install has not seen the guide",
 
 guide = Onboarding(settings)
 check("the guide opens on its first step", guide.step_index() == 0)
-check("it walks the seven screens the mockups lay out",
-      len(STEPS) == 7, str(STEPS))
+check("it walks the eight screens the mockups lay out, plus the tuning one",
+      len(STEPS) == 8 and STEP_TUNE in STEPS, str(STEPS))
 
 # Every step paints. The figures are drawn by hand, so this is the only thing
 # that separates "the diagram is wrong" from "the window will not open".
@@ -138,17 +140,22 @@ picker.pick_layout("nonsense")
 check("an unknown display is refused",
       settings.get("overlay_layout") == LAYOUT_CARDS)
 
+# The guide asks the question in English, because the question has to be written
+# in something before anyone has answered it.
+check("a fresh install starts the guide in English",
+      picker.current_language() == ENGLISH, picker.current_language())
+
 languages = []
 picker.language_changed.connect(languages.append)
-picker.pick_language(ENGLISH)
+picker.pick_language(FRENCH)
 check("choosing a language in the guide persists the League locale",
-      settings.get("locale") == "en_US", str(settings.get("locale")))
-check("and announces it", languages == [ENGLISH], str(languages))
+      settings.get("locale") == "fr_FR", str(settings.get("locale")))
+check("and announces it", languages == [FRENCH], str(languages))
 check("the picked language is the card drawn as chosen",
-      picker.current_language() == ENGLISH)
-picker.pick_language(ENGLISH)
+      picker.current_language() == FRENCH)
+picker.pick_language(FRENCH)
 check("picking the language already in use announces nothing twice",
-      languages == [ENGLISH], str(languages))
+      languages == [FRENCH], str(languages))
 
 # The window translates itself rather than being replaced -- which is what makes
 # choosing a language in step one not flash the screen.
@@ -175,6 +182,124 @@ check("the step counter is translated, in the title bar",
       english_guide.windowTitle())
 i18n.set_language(FRENCH)
 settings.set("locale", "fr_FR")
+
+# ------------------------------------------------------- tuning the display
+# Everything the settings window's appearance card offers, offered again on the
+# step where the preview is already on screen. What is checked here is the wiring
+# rather than the drawing: a control that paints but writes nothing is the whole
+# failure mode of a window with no widgets in it.
+i18n.set_language(ENGLISH)
+settings.update({"locale": "en_US", "overlay_layout": LAYOUT_BAR}, save=False)
+tuner = Onboarding(settings)
+tuner.show_step(STEPS.index(STEP_TUNE))
+app.processEvents()
+
+tuned = []
+tuner.settings_changed.connect(lambda: tuned.append(1))
+spots = {spot.key: spot for spot in TuneScreen().hots(tuner)}
+check("every setting on the step is reachable",
+      not [key for key in ("tune:theme:neon", "tune:overlay_opacity",
+                           "tune:overlay_scale", "tune:timer_font_scale",
+                           "tune:face:+", "tune:sort_by_role",
+                           "tune:bar_vertical", "tune:linger:+", "tune:reset")
+           if key not in spots],
+      str(sorted(spots)))
+
+spots["tune:theme:neon"].action()
+check("picking a theme writes it and announces it",
+      settings.get("theme") == "neon" and tuned, str(settings.get("theme")))
+
+before = bool(settings.get("sort_by_role"))
+spots["tune:sort_by_role"].action()
+check("a switch flips the setting it names",
+      bool(settings.get("sort_by_role")) is not before)
+
+spots["tune:linger:+"].action()
+check("the stepper counts up", settings.get("ready_linger_seconds") == 6,
+      str(settings.get("ready_linger_seconds")))
+
+# The list of faces is whatever this machine has installed, so the check is
+# that the cycler walks it and comes back round rather than that it lands on any
+# particular font: a build agent with no fonts at all has only "automatic", and
+# a cycler with one entry that stays put is right, not broken.
+faces = countdown_faces()
+spots["tune:face:+"].action()
+check("the countdown face steps to the next one this machine has",
+      settings.get("timer_font") == faces[1 % len(faces)],
+      f"{settings.get('timer_font')} out of {faces}")
+for _ in range(len(faces) - 1):
+    spots["tune:face:+"].action()
+check("...and wraps back round to automatic",
+      settings.get("timer_font") == FACE_AUTO, str(settings.get("timer_font")))
+
+# The sliders are dragged rather than clicked, and the pointer is allowed to
+# leave the strip: that is what makes both ends reachable.
+strip = spots["tune:overlay_opacity"]
+strip.drag(QPointF(strip.rect.right() + 200, strip.rect.center().y()))
+check("a slider dragged past its end lands on the maximum",
+      settings.get("overlay_opacity") == 1.0,
+      str(settings.get("overlay_opacity")))
+strip.drag(QPointF(strip.rect.left() - 200, strip.rect.center().y()))
+check("...and past the other end, on the minimum",
+      settings.get("overlay_opacity") == 0.35,
+      str(settings.get("overlay_opacity")))
+
+# The vertical track belongs to the track. Choosing another display takes the
+# switch away rather than leaving one that does nothing.
+tuner.pick_layout(LAYOUT_LIST)
+check("the vertical switch is offered for the track only",
+      "tune:bar_vertical" not in {spot.key for spot in TuneScreen().hots(tuner)})
+tuner.pick_layout(LAYOUT_BAR)
+
+# Reset asks first, and the question does not survive leaving the step.
+tuner.ask_reset()
+check("the reset button asks before it does anything",
+      tuner.confirm_reset and settings.get("theme") == "neon")
+confirm = {spot.key for spot in TuneScreen().hots(tuner)}
+check("and offers both answers",
+      {"tune:reset_yes", "tune:reset_no"} <= confirm, str(sorted(confirm)))
+tuner.cancel_reset()
+check("cancelling changes nothing",
+      not tuner.confirm_reset and settings.get("theme") == "neon")
+tuner.ask_reset()
+tuner.show_step(STEPS.index(STEP_TUNE) + 1)
+check("and walking away from the step drops the question",
+      not tuner.confirm_reset)
+
+tuner.show_step(STEPS.index(STEP_TUNE))
+tuner.ask_reset()
+tuner.reset_tune()
+check("confirming puts every setting on the step back",
+      not [key for key in TuneScreen.OWNED
+           if settings.get(key) != DEFAULTS[key]],
+      str([key for key in TuneScreen.OWNED
+           if settings.get(key) != DEFAULTS[key]]))
+check("...and only those: the display picked before it is untouched",
+      settings.get("overlay_layout") == LAYOUT_BAR)
+check("the question is answered once", not tuner.confirm_reset)
+
+# The settings window has to be able to re-read what the guide wrote, or it
+# would put its own stale values back the next time anything in it moved.
+settings.update({"theme": "neon", "overlay_opacity": 0.5,
+                 "ready_linger_seconds": 11}, save=False)
+window = ControlWindow(settings, FakeAssets())
+settings.update({"theme": "dark", "overlay_opacity": 0.75,
+                 "ready_linger_seconds": 3}, save=False)
+window.refresh_display_settings()
+check("the settings window re-reads what the guide changed",
+      window.combo_theme.currentData() == "dark"
+      and window.slider_opacity.value() == 75
+      and window.spin_ready_linger.value() == 3,
+      f"{window.combo_theme.currentData()}/{window.slider_opacity.value()}/"
+      f"{window.spin_ready_linger.value()}")
+window._on_settings_changed()
+check("...so writing from the window keeps the new values",
+      settings.get("theme") == "dark"
+      and round(float(settings.get("overlay_opacity")), 2) == 0.75,
+      str(settings.get("theme")))
+
+i18n.set_language(FRENCH)
+settings.set("locale", "fr_FR", save=False)
 
 # -------------------------------------------------- the control window's API
 # Everything main.py and the rest of the suite reach for, in one place: a rename

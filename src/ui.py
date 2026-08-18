@@ -68,16 +68,22 @@ from PySide6.QtWidgets import (QAbstractButton, QComboBox, QDoubleSpinBox,
 import autostart
 import icons
 from chat_detector import ChatRegion
-from i18n import ENGLISH, FRENCH, locale_for, tr
+from i18n import ENGLISH, FRENCH, language_for, locale_for, tr
 from overlay import LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST, LAYOUTS
 from theme import (DANGER, INK, INK_FAINT, MENU, PAINT, READY, SIGNAL, SOON,
                    art_path, control_qss, mark_pixmap, menu_family)
+from audio import PRESETS as audio_presets
+from overlay import FACE_AUTO, available_countdown_faces
+from roles import ROLES as lane_roles
 from version import __version__
-from zone_overlay import ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD
+from zone_overlay import (ZONE_CHAT, ZONE_CLOCK, ZONE_LOADING,
+                          ZONE_SCOREBOARD)
 
 log = logging.getLogger(__name__)
 
-ROLES = ["", "TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]
+# The lanes, plus a blank first entry for "not decided yet" -- which is what a
+# combo box has to open on before anything has been read or chosen.
+ROLES = ["", *lane_roles]
 # Ordered with the default first: a selector that opens on something other than
 # what is applied reads as a pending change.
 THEME_KEYS = {"light": "ui.theme_light", "dark": "ui.theme_dark",
@@ -948,10 +954,12 @@ class ControlWindow(QWidget):
     language_changed = Signal(str)
     hidden_to_tray = Signal()
     guide_requested = Signal()                # (re)open the setup guide
+    self_test_requested = Signal()            # read the shipped sample frame
     update_requested = Signal()               # install the offered version
     update_notes_requested = Signal()         # open the release page
     update_skipped = Signal()                 # do not offer this one again
     update_check_requested = Signal()         # look now, from the settings page
+    sfx_preview_requested = Signal()          # play the chosen cue, now
 
     def __init__(self, settings, assets) -> None:
         super().__init__(None)
@@ -967,6 +975,9 @@ class ControlWindow(QWidget):
         self._scale = 1.0
         self._maximised = False
         self._placed = False
+        # (result, started) of the last self-test, so the report can be redrawn
+        # at a new scale. None until the button has been pressed once.
+        self._test_result: tuple | None = None
 
         self.setWindowTitle(f"{tr('app.title')}  —  v{__version__}")
         # Frameless, because the maquettes draw the title bar. The window keeps
@@ -1195,6 +1206,8 @@ class ControlWindow(QWidget):
         self.title_bar.rescale(scale)
         self.setFixedSize(self.s(CANVAS.width()), self.s(CANVAS.height()))
         self._sync_nav_icons()
+        # Sets its own fonts, so it is redrawn here rather than replayed above.
+        self._render_test_report()
 
     # ------------------------------------------------------------------
     # Small builders
@@ -1642,51 +1655,149 @@ class ControlWindow(QWidget):
         return card
 
     def _build_test_card(self) -> QWidget:
-        """The one-line self-test.
+        """The self-test: the whole reading chain, on the shipped game frame.
 
-        It separates the two halves of the pipeline: if a timer appears, capture
-        and OCR work and the only thing left is waiting for a real enemy; if it
-        does not, the area or the language is wrong.
+        It separates the two halves of the pipeline. Everything downstream of the
+        capture -- segmentation, locating the chat, the wording, the cooldown
+        table, the overlay -- is proved or blamed by this button alone, with no
+        game running and nothing for the user to type. What it cannot prove is
+        that *this* screen is being captured correctly, so it says so rather than
+        letting a pass be read as more than it is; that is what framing the chat
+        during a game is for.
         """
         card, layout = self._card("hero_2", (28, 26, 28, 26), 0)
         row = self._row(22)
         row.addWidget(self._tile("check_circle"), 0, Qt.AlignTop)
         column = self._column(0)
-        column.addWidget(self.label(tr("ui.test_line_title"), 24, W600,
-                                    role="h2"))
+        column.addWidget(self.label(tr("ui.test_card"), 24, W600, role="h2"))
         self.space(column, 14)
-        column.addWidget(self.label(tr("ui.test_line_hint"), 16, W500,
-                                    role="body", line=27))
+        column.addWidget(self.label(tr("ui.test_hint"), 16, W500, role="body",
+                                    line=27))
         self.space(column, 20)
 
-        line_row = self._row(16)
-        line_box, line_layout = self._card("sunken", (20, 0, 20, 0), 0)
-        self.size_of(line_box, height=56)
-        line = self.label(tr("ui.test_line"), 15, W500, role="mono", wrap=False,
-                          mono=True)
-        # Allowed to be narrower than its own text and clipped rather than
-        # wrapped -- the maquette's `white-space:nowrap;overflow:hidden`.
-        line.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        line.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        line_layout.addWidget(line)
-        self.button_copy = self.button(tr("ui.copy"), "copy", role="primary",
-                                       height=56, size=17, colour="#ffffff")
-        self.button_copy.clicked.connect(self._on_copy_test_line)
-        line_row.addWidget(line_box, 1)
-        line_row.addWidget(self.button_copy)
-        column.addLayout(line_row)
+        button_row = self._row(16)
+        self.button_test = self.button(tr("ui.test_run"), "check_circle",
+                                       role="primary", height=56, size=17,
+                                       colour="#ffffff")
+        self.button_test.clicked.connect(self._on_test_clicked)
+        self.label_test_state = self.label("", 15, W500, role="dim", wrap=False)
+        button_row.addWidget(self.button_test)
+        button_row.addWidget(self.label_test_state, 1, Qt.AlignVCenter)
+        column.addLayout(button_row)
+
+        # The report, in its own inset panel, absent until there is one to show.
+        self.test_report = QFrame()
+        self.test_report.setProperty("role", "sunken")
+        self.test_report_layout = QVBoxLayout(self.test_report)
+        self.pad(self.test_report_layout, 20, 16, 20, 16)
+        self.gap(self.test_report_layout, 0)
+        self.test_report.setVisible(False)
+        self.space(column, 16)
+        column.addWidget(self.test_report)
+
         column.addStretch(1)
         row.addLayout(column, 1)
         layout.addLayout(row)
         return card
 
-    def _on_copy_test_line(self) -> None:
-        clipboard = QGuiApplication.clipboard()
-        if clipboard is not None:
-            clipboard.setText(tr("ui.test_line"))
-        # Confirmed on the button itself: a copy that says nothing is
-        # indistinguishable from a click that missed.
-        self.button_copy.setText(tr("ui.copied"))
+    def _on_test_clicked(self) -> None:
+        self.set_test_running()
+        self.self_test_requested.emit()
+
+    def set_test_running(self) -> None:
+        """Say the test is under way. Reading the sample takes about a second."""
+        self.button_test.setEnabled(False)
+        self.label_test_state.setText(tr("ui.test_running"))
+
+    def show_test_result(self, result, started: dict[tuple[str, str], str]) -> None:
+        """Draw the verdict.
+
+        ``started`` maps (champion_id, spell_key) onto the countdown a timer was
+        started at, so a spell that was recognised while its timer was already
+        running can say so instead of looking like a failure.
+        """
+        self.button_test.setEnabled(True)
+        self.button_test.setText(tr("ui.test_again"))
+        self.label_test_state.setText("")
+        # Kept so a change of window scale can redraw it; see _render_test_report
+        # for why these lines are not registered for scaling like every other one.
+        self._test_result = (result, dict(started))
+        self._render_test_report()
+
+    def _report_lines(self, result,
+                      started: dict[tuple[str, str], str]
+                      ) -> list[tuple[str, str, float, object, float]]:
+        """The report as (text, colour, size, weight, gap-above) rows."""
+        rows: list[tuple[str, str, float, object, float]] = []
+        if result.error:
+            rows.append((tr("ui.test_error", error=result.error),
+                         MENU["danger"], 16, W600, 0))
+        elif result.ok:
+            rows.append((tr("ui.test_pass"), MENU["ok"], 16, W600, 0))
+        elif result.region is None:
+            rows.append((tr("ui.test_fail_region"), MENU["danger"], 16, W600, 0))
+        elif not result.events:
+            rows.append((tr("ui.test_fail_parse"), MENU["danger"], 16, W600, 0))
+        else:
+            rows.append((tr("ui.test_fail_partial"), MENU["warn"], 16, W600, 0))
+
+        if result.region is not None:
+            rows.append((tr("ui.test_detail", region=result.region.describe(),
+                            lines=len(result.lines), chat=result.chat_rows,
+                            ms=result.elapsed_ms),
+                         MENU["dim"], 14, W500, 10))
+
+        for event in result.events:
+            key = (event.champion_id, event.spell_key)
+            if key in started:
+                rows.append((tr("ui.test_hit", champion=event.champion_name,
+                                spell=event.spell_name, time=started[key]),
+                             MENU["ok"], 14, W600, 8))
+            else:
+                rows.append((tr("ui.test_hit_existing",
+                                champion=event.champion_name,
+                                spell=event.spell_name),
+                             MENU["ink_3"], 14, W500, 8))
+        for want in result.missing:
+            rows.append((tr("ui.test_miss", champion=want.champion,
+                            spell=want.spell), MENU["danger"], 14, W600, 8))
+
+        rows.append((tr("ui.test_scope"), MENU["dim_2"], 14, W500, 14))
+        return rows
+
+    def _render_test_report(self) -> None:
+        """(Re)build the report panel at the current scale.
+
+        These labels set their own font rather than going through :meth:`label`,
+        which would register each one in the scaling table for the life of the
+        window -- and the panel is rebuilt on every run, so that table would grow
+        a dead entry per line per press. Re-rendered from the stored result when
+        the scale changes instead, which is the same work at the same moment.
+        """
+        if self._test_result is None:
+            return
+        result, started = self._test_result
+
+        while self.test_report_layout.count():
+            item = self.test_report_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        family = menu_family()
+        for text, colour, size, weight, gap in self._report_lines(result, started):
+            if gap and self.test_report_layout.count():
+                self.test_report_layout.addSpacing(self.s(gap))
+            label = QLabel(text)
+            label.setWordWrap(True)
+            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            font = QFont(family)
+            font.setPixelSize(max(6, round(size * self._scale)))
+            font.setWeight(weight)
+            label.setFont(font)
+            label.setStyleSheet(f"color:{colour}; background:transparent;")
+            self.test_report_layout.addWidget(label)
+        self.test_report.setVisible(True)
 
     # ------------------------------------------------------------------
     # Page 2: Affichage  --  Flashwatch Affichage.dc.html
@@ -1835,6 +1946,44 @@ class ControlWindow(QWidget):
                     lambda w, s: w.set_chevron(round(16 * s), round(16 * s)))
         look_layout.addLayout(self._labelled(tr("ui.scale"), self.spin_scale,
                                              78, 22))
+        self.space(look_layout, 10)
+
+        # The countdown's own face and size, apart from the overlay scale above.
+        # They are separate settings because they answer different questions: the
+        # scale is how big the whole thing is, and this is how much of that the
+        # number takes -- somebody who wants big portraits and a discreet readout
+        # cannot say so with one control.
+        self.combo_timer_font = Select()
+        self.combo_timer_font.addItem(tr("ui.timer_font_auto"), FACE_AUTO)
+        for family, _factor, _weight in available_countdown_faces():
+            self.combo_timer_font.addItem(family, family)
+        index = self.combo_timer_font.findData(
+            str(self.settings.get("timer_font", FACE_AUTO)))
+        self.combo_timer_font.setCurrentIndex(max(0, index))
+        self.combo_timer_font.setToolTip(tr("ui.timer_font_tip"))
+        self.combo_timer_font.currentIndexChanged.connect(
+            self._on_settings_changed)
+        self.size_of(self.combo_timer_font, height=42)
+        self.font(self.combo_timer_font, 16, W500)
+        self.custom(self.combo_timer_font,
+                    lambda w, s: w.set_chevron(round(20 * s), round(18 * s)))
+        look_layout.addLayout(self._labelled(tr("ui.timer_font"),
+                                             self.combo_timer_font, 78, 22))
+        self.space(look_layout, 10)
+
+        self.spin_timer_scale = Scale()
+        self.spin_timer_scale.setRange(0.4, 2.0)
+        self.spin_timer_scale.setSingleStep(0.05)
+        self.spin_timer_scale.setValue(
+            float(self.settings.get("timer_font_scale", 0.5)))
+        self.spin_timer_scale.setToolTip(tr("ui.timer_size_tip"))
+        self.spin_timer_scale.valueChanged.connect(self._on_settings_changed)
+        self.size_of(self.spin_timer_scale, height=42)
+        self.font(self.spin_timer_scale, 16, W500)
+        self.custom(self.spin_timer_scale,
+                    lambda w, s: w.set_chevron(round(16 * s), round(16 * s)))
+        look_layout.addLayout(self._labelled(tr("ui.timer_size"),
+                                             self.spin_timer_scale, 78, 22))
         self.space(look_layout, 16)
 
         switches = self._column(10)
@@ -1989,8 +2138,7 @@ class ControlWindow(QWidget):
         self.combo_language.addItem(tr("ui.language_fr"), FRENCH)
         self.combo_language.addItem(tr("ui.language_en"), ENGLISH)
         index = self.combo_language.findData(
-            ENGLISH if str(self.settings.get("locale", "fr_FR")).lower()
-            .startswith("en") else FRENCH)
+            language_for(str(self.settings.get("locale", "en_US"))))
         if index >= 0:
             self.combo_language.setCurrentIndex(index)
         self.combo_language.currentIndexChanged.connect(self._on_language_changed)
@@ -2010,8 +2158,19 @@ class ControlWindow(QWidget):
         self.check_ultimates = self._switch(tr("ui.track_ultimates"))
         self.check_ultimates.setChecked(bool(self.settings.get("track_ultimates")))
         self.check_ultimates.toggled.connect(self._on_settings_changed)
-        switches.addWidget(self.check_summoners)
-        switches.addWidget(self.check_ultimates)
+        self.check_chat_calls = self._switch(tr("ui.chat_calls"))
+        self.check_chat_calls.setToolTip(tr("ui.chat_calls_tip"))
+        self.check_chat_calls.setChecked(bool(self.settings.get("chat_calls",
+                                                                True)))
+        self.check_chat_calls.toggled.connect(self._on_settings_changed)
+        self.check_auto_roles = self._switch(tr("ui.auto_roles"))
+        self.check_auto_roles.setToolTip(tr("ui.auto_roles_tip"))
+        self.check_auto_roles.setChecked(bool(self.settings.get("auto_roles",
+                                                                True)))
+        self.check_auto_roles.toggled.connect(self._on_settings_changed)
+        for box in (self.check_summoners, self.check_ultimates,
+                    self.check_chat_calls, self.check_auto_roles):
+            switches.addWidget(box)
         tracking_column.addLayout(switches)
         self.space(tracking_column, 14)
         tracking_column.addWidget(self.label(tr("ui.ultimate_note"), 15, W500,
@@ -2078,6 +2237,36 @@ class ControlWindow(QWidget):
         self.font(self.spin_warn, 16, W500)
         audio_column.addLayout(self._labelled(tr("ui.audio_warn"),
                                               self.spin_warn, 110, 20))
+        self.space(audio_column, 14)
+
+        # The voice, and a way to hear it. A list of twenty-two names is useless
+        # without the button beside it: nobody knows what "gamelan" sounds like
+        # from the word, and choosing blind then waiting for a real cooldown to
+        # find out is not a choice, it is a lottery.
+        self.combo_sfx = Select()
+        for preset in audio_presets:
+            self.combo_sfx.addItem(tr(f"sfx.{preset.key}"), preset.key)
+        index = self.combo_sfx.findData(str(self.settings.get("audio_sfx",
+                                                              "chime")))
+        if index >= 0:
+            self.combo_sfx.setCurrentIndex(index)
+        self.combo_sfx.currentIndexChanged.connect(self._on_sfx_picked)
+        self.size_of(self.combo_sfx, height=48)
+        self.font(self.combo_sfx, 16, W500)
+        self.custom(self.combo_sfx,
+                    lambda w, s: w.set_chevron(round(20 * s), round(18 * s)))
+        sfx_row = self._row(12)
+        sfx_row.addWidget(self.label(tr("ui.audio_sfx"), 15, W500,
+                                     role="field_label", width=110, wrap=False),
+                          0, Qt.AlignVCenter)
+        sfx_row.addWidget(self.combo_sfx, 1)
+        self.button_sfx_preview = self.button(tr("ui.audio_preview"), "bell",
+                                              role="ghost", height=48, size=15,
+                                              weight=W500)
+        self.button_sfx_preview.setToolTip(tr("ui.audio_preview_tip"))
+        self.button_sfx_preview.clicked.connect(self.sfx_preview_requested.emit)
+        sfx_row.addWidget(self.button_sfx_preview, 0)
+        audio_column.addLayout(sfx_row)
         layout.addWidget(audio)
 
         startup, startup_column = self._settings_card("power", tr("ui.startup"))
@@ -2089,10 +2278,20 @@ class ControlWindow(QWidget):
         self.check_autostart.setChecked(autostart.is_enabled())
         self.check_autostart.toggled.connect(self._on_autostart_toggled)
         startup_column.addWidget(self.check_autostart)
+        self.space(startup_column, 10)
+        self.check_open_window = self._switch(tr("ui.open_window"))
+        self.check_open_window.setToolTip(tr("ui.open_window_tip"))
+        self.check_open_window.setChecked(
+            bool(self.settings.get("open_window_on_launch", True)))
+        self.check_open_window.toggled.connect(self._on_settings_changed)
+        startup_column.addWidget(self.check_open_window)
         self.space(startup_column, 14)
         self.label_autostart = self.label(tr("ui.autostart_note"), 15, W500,
                                           role="dim", line=24, width=1000)
         startup_column.addWidget(self.label_autostart)
+        self.space(startup_column, 8)
+        startup_column.addWidget(self.label(tr("ui.open_window_note"), 15, W500,
+                                            role="dim", line=24, width=1000))
         layout.addWidget(startup)
 
         updates, updates_column = self._settings_card("refresh",
@@ -2207,14 +2406,24 @@ class ControlWindow(QWidget):
         # One button per area the user can place by hand. Several can be open at
         # once: the clock and the scoreboard are usually framed in the same trip
         # into a game.
-        zone_row = self._row(16)
+        #
+        # Two rows of two rather than one row of four. The buttons carry a
+        # sentence each, and four across squeezes every label to an ellipsis on
+        # the window's own default width.
         self.buttons_test: dict[str, QPushButton] = {}
-        for zone, label_key, tip_key, glyph in (
+        zone_row = self._row(16)
+        for index, (zone, label_key, tip_key, glyph) in enumerate((
                 (ZONE_CHAT, "ui.test_mode", "ui.test_mode_tip", "bell"),
                 (ZONE_CLOCK, "ui.test_mode_clock", "ui.test_mode_clock_tip",
                  "clock"),
+                (ZONE_LOADING, "ui.test_mode_loading",
+                 "ui.test_mode_loading_tip", "branch"),
                 (ZONE_SCOREBOARD, "ui.test_mode_scoreboard",
-                 "ui.test_mode_scoreboard_tip", "report")):
+                 "ui.test_mode_scoreboard_tip", "report"))):
+            if index and index % 2 == 0:
+                zones_layout.addLayout(zone_row)
+                self.space(zones_layout, 12)
+                zone_row = self._row(16)
             button = self.button(tr(label_key), glyph, role="ghost", height=52,
                                  size=16, weight=W500)
             button.setCheckable(True)
@@ -2471,7 +2680,7 @@ class ControlWindow(QWidget):
         """
         if self._loading:
             return
-        language = self.combo_language.currentData() or FRENCH
+        language = self.combo_language.currentData() or ENGLISH
         self.settings.set("locale", locale_for(language))
         self.language_changed.emit(language)
 
@@ -2495,6 +2704,17 @@ class ControlWindow(QWidget):
             self.check_autostart.setChecked(actual)
             self.check_autostart.blockSignals(blocked)
 
+    def _on_sfx_picked(self, *_args) -> None:
+        """Save the chosen voice, then play it.
+
+        Picking from the list *is* the request to hear it -- the alternative is
+        choosing one and then having to press a second button to find out what
+        was chosen, which nobody does more than once.
+        """
+        self._on_settings_changed()
+        if not self._loading:
+            self.sfx_preview_requested.emit()
+
     def _on_settings_changed(self, *_args) -> None:
         if self._loading:
             return
@@ -2506,19 +2726,25 @@ class ControlWindow(QWidget):
             "theme": self.combo_theme.currentData(),
             "overlay_opacity": self.slider_opacity.value() / 100.0,
             "overlay_scale": self.spin_scale.value(),
+            "timer_font": self.combo_timer_font.currentData() or FACE_AUTO,
+            "timer_font_scale": self.spin_timer_scale.value(),
             "sort_by_role": self.check_sort_role.isChecked(),
             "hide_ready_entries": self.check_hide_ready.isChecked(),
             "ready_linger_seconds": self.spin_ready_linger.value(),
             "track_summoners": self.check_summoners.isChecked(),
             "track_ultimates": self.check_ultimates.isChecked(),
+            "chat_calls": self.check_chat_calls.isChecked(),
+            "auto_roles": self.check_auto_roles.isChecked(),
             "require_enemy_colour": self.check_enemy_colour.isChecked(),
             "assume_cosmic_insight": self.check_cosmic.isChecked(),
             "assume_ionian_boots": self.check_ionian.isChecked(),
             "audio_enabled": self.check_audio.isChecked(),
             "audio_on_ready": self.check_audio_ready.isChecked(),
             "audio_warn_seconds": self.spin_warn.value(),
+            "audio_sfx": self.combo_sfx.currentData() or "chime",
             "capture_interval_ms": self.spin_interval.value(),
             "update_check_enabled": self.check_updates.isChecked(),
+            "open_window_on_launch": self.check_open_window.isChecked(),
         })
         self.settings_changed.emit()
 
@@ -2555,6 +2781,43 @@ class ControlWindow(QWidget):
         """Re-read the chosen display, after something else changed it."""
         self._layout_key = self._current_layout()
         self._sync_layout_tiles()
+
+    def refresh_display_settings(self) -> None:
+        """Re-read every appearance control, after something else changed it.
+
+        The setup guide tunes the same settings this page does, and this page
+        writes *all* of its controls at once whenever one of them moves -- so a
+        window left open behind the guide would put its own stale values back
+        the next time anything here was touched. Cheap insurance: it is only
+        ever called when something outside has already written.
+        """
+        self.refresh_layout_choice()
+        loading, self._loading = self._loading, True
+        try:
+            for combo, key, fallback in (
+                    (self.combo_theme, "theme", "dark"),
+                    (self.combo_timer_font, "timer_font", FACE_AUTO)):
+                index = combo.findData(str(self.settings.get(key, fallback)))
+                if index >= 0:
+                    combo.setCurrentIndex(index)
+            self.slider_opacity.setValue(
+                int(round(float(self.settings.get("overlay_opacity", 0.92))
+                          * 100)))
+            self._sync_opacity_label(self.slider_opacity.value())
+            self.spin_scale.setValue(float(self.settings.get("overlay_scale", 1.0)))
+            self.spin_timer_scale.setValue(
+                float(self.settings.get("timer_font_scale", 0.5)))
+            self.spin_ready_linger.setValue(
+                int(self.settings.get("ready_linger_seconds", 5)))
+            for box, key in (
+                    (self.check_hide_until_game, "hide_until_in_game"),
+                    (self.check_idle_bar, "bar_show_when_idle"),
+                    (self.check_bar_vertical, "bar_vertical"),
+                    (self.check_sort_role, "sort_by_role"),
+                    (self.check_hide_ready, "hide_ready_entries")):
+                box.setChecked(bool(self.settings.get(key)))
+        finally:
+            self._loading = loading
 
     def closeEvent(self, event) -> None:
         """Closing this window hides it; the program keeps running.

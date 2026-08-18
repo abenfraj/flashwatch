@@ -98,7 +98,7 @@ class ChampionInfo:
 class RiotAssets:
     """Loads, caches and exposes the static game data the app needs."""
 
-    def __init__(self, locale: str = "fr_FR") -> None:
+    def __init__(self, locale: str = "en_US") -> None:
         self.locale = locale
         self.version: str | None = None
         self.champions: dict[str, ChampionInfo] = {}     # champion_id -> info
@@ -355,10 +355,19 @@ class RiotAssets:
         return (champion.name for champion in self.champions.values())
 
     def icon_for_champion(self, champion_id: str) -> Path | None:
+        """Where this champion's square icon is, if it has been downloaded.
+
+        Falls back to the conventional path, the way the spell lookup below
+        already does. ``icon_path`` is only filled in by the download pass, so
+        without this an icon cached by a *previous* run is invisible until the
+        current one has been through :meth:`download_icons` -- which is what left
+        the role reader with nothing to match against on start-up.
+        """
         champion = self.champions.get(champion_id)
         if champion and champion.icon_path and champion.icon_path.exists():
             return champion.icon_path
-        return None
+        path = CHAMPION_ICON_DIR / f"{champion_id}.png"
+        return path if path.exists() else None
 
     def icon_for_spell(self, canonical_or_ddragon_id: str) -> Path | None:
         spell = self.spells.get(canonical_or_ddragon_id)

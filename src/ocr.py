@@ -13,10 +13,11 @@ each measured on this machine at 1080p:
      chat does not register as a change. This is the common case by far.
 
   2. **Own text segmentation instead of the detection network** (1ms vs 265ms) --
-     RapidOCR's detector finds text boxes with a neural net; a morphological
-     gradient plus a horizontal close finds the same rows in chat, because chat
-     is rigidly left-aligned horizontal text on a dark ground. Measured at
-     480ms -> 168ms for a 5-line chat.
+     RapidOCR's detector finds text boxes with a neural net; two cheap
+     morphological masks plus a horizontal close find the same rows in chat,
+     because chat is rigidly left-aligned horizontal text. Measured at
+     480ms -> 168ms for a 5-line chat. See :meth:`OcrEngine.segment_rows` for why
+     it takes two masks and not one.
 
   3. **Per-row recognition cache** (1.1ms for an unchanged region) -- rows are
      keyed by an *exact* hash of their pixels, so a static chat panel is almost
@@ -42,6 +43,8 @@ import cv2
 import numpy as np
 
 import chat_detector
+import role_reader
+import self_test
 from chat_detector import ChatRegion
 from game_detector import GameDetector
 from message_parser import (MessageParser, SpellEvent, looks_like_chat_line,
@@ -92,6 +95,23 @@ MIN_SEGMENT_ASPECT = 2.0
 INITIAL_BRIDGE = 25
 BRIDGE_PER_HEIGHT = 2.6
 
+# Second row detector: a white-hat that keeps thin structure brighter than its
+# own surroundings. See :meth:`OcrEngine.stroke_segment_mask` for why a global
+# threshold cannot find faint chat and this can.
+#
+# The kernel is deliberately narrower than the one used for judging name colour
+# (STROKE_KERNEL, 5px): it has to respond to 13px glyphs on a 1080p stream as
+# well as 26px ones at 4K, and measured at 5px it lost two of the nine rows in
+# the real capture. The level is the white-hat response that counts as a stroke;
+# 18 was the widest plateau in the sweep -- 10 welded rows together, 26 started
+# dropping them.
+STROKE_SEGMENT_KERNEL = 3
+STROKE_SEGMENT_LEVEL = 18
+# When the two detectors have found the same row twice: how much of the shorter
+# box's height must overlap, and how far apart their left edges may sit.
+ROW_OVERLAP_SHARE = 0.6
+ROW_LEFT_SHARE = 0.5
+
 # Row cache, keyed by an *exact* hash of the row's pixels.
 #
 # This was originally a fuzzy match: a downscaled glyph mask compared with a
@@ -113,12 +133,28 @@ ROW_CACHE_SIZE = 512
 # re-exploring costs more CPU than reading a small region.
 CONFIRMED_TIMEOUT = 90.0
 
-# Extra zones the user places by hand: the game clock and the scoreboard.
+# Extra zones the user places by hand: the game clock, the scoreboard and the
+# loading screen's enemy row.
 PROBE_CLOCK = "clock"
 PROBE_SCOREBOARD = "scoreboard"
+PROBE_LOADING = "loading"
 # How often one is re-read. The clock only needs to be right to the second, and
 # the scoreboard barely changes, so this stays well below the chat cadence.
 PROBE_INTERVAL = 0.9
+
+# Reading the enemy's lanes. Slower again than a probe, and deliberately so: the
+# answer changes once per game, and the scoreboard pass costs about 40ms because
+# it examines several hundred window positions per lane. At this cadence that is
+# under 2% of one core, and it stops altogether the moment the team is known.
+ROLE_INTERVAL = 2.5
+
+# How long into a session the loading-screen area is still worth reading. After
+# that the frame holds the game world, and reading a card-sized band through the
+# OCR is the most expensive thing this module does -- see EXPLORE_MIN_INTERVAL for
+# the same problem on the chat band. The scoreboard has no such limit: it is
+# matched against icons rather than read, which costs almost nothing, and Tab can
+# be pressed at any point in a game.
+LOADING_WINDOW = 150.0
 
 # A region restored from a previous session, or one that has not produced a single
 # chat line yet this session, gets far less patience: the HUD may have been moved
@@ -291,6 +327,13 @@ class PipelineStatus:
         default_factory=dict)
     # Game clock read from the clock zone, in seconds, when it read cleanly.
     game_clock: float | None = None
+    # The enemy team as last read: ``{lane index: champion id}``, keyed by
+    # position because position is the role. Empty until two readings agree.
+    roles: dict[int, str] = field(default_factory=dict)
+    roles_source: str = ""
+    # One short line per role zone, for its framing tool: what the last look at
+    # that rectangle actually recognised.
+    role_notes: dict[str, str] = field(default_factory=dict)
 
     @property
     def skip_ratio(self) -> float:
@@ -352,62 +395,141 @@ class OcrEngine:
                           interpolation=interpolation)
 
     @staticmethod
-    def segment_rows(gray: np.ndarray) -> list[tuple[int, int, int, int]]:
-        """Find text rows without the detection network.
+    def _rows_from_mask(binary: np.ndarray,
+                        bridge_width: int) -> list[tuple[int, int, int, int]]:
+        """Bounding boxes of the text rows in a binary glyph mask."""
+        # The bridging kernel is one pixel tall on purpose: it can only join
+        # glyphs sitting on the same rows, so it can never weld two chat lines
+        # together. An earlier attempt to reunite fragments by unioning boxes
+        # vertically did exactly that -- it chained through scenery blobs until a
+        # 20px text row became a 50px box, and squashing that to a fixed height
+        # turned the text into mush.
+        bridge = cv2.getStructuringElement(cv2.MORPH_RECT, (bridge_width, 1))
+        merged = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, bridge)
+        contours, _ = cv2.findContours(merged, cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
+        found: list[tuple[int, int, int, int]] = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            if h < MIN_SEGMENT_HEIGHT or h > MAX_SEGMENT_HEIGHT:
+                continue
+            if w < h * MIN_SEGMENT_ASPECT:
+                continue
+            found.append((x, y, w, h))
+        return found
+
+    @classmethod
+    def _rebridge(cls, binary: np.ndarray,
+                  rows: list[tuple[int, int, int, int]]
+                  ) -> list[tuple[int, int, int, int]]:
+        """Re-run a mask's rows, bridged by the size of the text it just found.
+
+        A fixed word gap is wrong across resolutions, and too small a gap splits
+        faint text mid-sentence -- recognising one fragment of a ping yields a
+        useless partial line. So the first pass only has to discover how tall the
+        text is; this one bridges proportionally to that.
+        """
+        if not rows:
+            return rows
+        heights = sorted(row[3] for row in rows)
+        median = heights[len(heights) // 2]
+        wider = max(INITIAL_BRIDGE, min(220, int(median * BRIDGE_PER_HEIGHT)))
+        if wider > INITIAL_BRIDGE:
+            rows = cls._rows_from_mask(binary, wider) or rows
+        return rows
+
+    @classmethod
+    def gradient_rows(cls, gray: np.ndarray) -> list[tuple[int, int, int, int]]:
+        """Rows found from glyph edges, thresholded globally.
 
         Same primitive as chat_detector: a morphological gradient responds to
-        glyph edges regardless of text colour, and a wide horizontal close welds
-        the glyphs of one line together while leaving separate lines apart.
+        glyph edges regardless of text colour.
         """
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         gradient = cv2.morphologyEx(gray, cv2.MORPH_GRADIENT, kernel)
 
-        def rows_for(binary: np.ndarray,
-                     bridge_width: int) -> list[tuple[int, int, int, int]]:
-            # The bridging kernel is one pixel tall on purpose: it can only join
-            # glyphs sitting on the same rows, so it can never weld two chat
-            # lines together. An earlier attempt to reunite fragments by unioning
-            # boxes vertically did exactly that -- it chained through scenery
-            # blobs until a 20px text row became a 50px box, and squashing that
-            # to a fixed height turned the text into mush.
-            bridge = cv2.getStructuringElement(cv2.MORPH_RECT, (bridge_width, 1))
-            merged = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, bridge)
-            contours, _ = cv2.findContours(merged, cv2.RETR_EXTERNAL,
-                                           cv2.CHAIN_APPROX_SIMPLE)
-            found: list[tuple[int, int, int, int]] = []
-            for contour in contours:
-                x, y, w, h = cv2.boundingRect(contour)
-                if h < MIN_SEGMENT_HEIGHT or h > MAX_SEGMENT_HEIGHT:
-                    continue
-                if w < h * MIN_SEGMENT_ASPECT:
-                    continue
-                found.append((x, y, w, h))
-            return found
-
-        _, otsu = cv2.threshold(gradient, 0, 255,
-                                cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        rows = rows_for(otsu, INITIAL_BRIDGE)
+        _, binary = cv2.threshold(gradient, 0, 255,
+                                  cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        rows = cls._rows_from_mask(binary, INITIAL_BRIDGE)
 
         if not rows:
             # Otsu picks a global split, so a faint message over busy art can end
             # up below it and vanish entirely. Retry once from the gradient's own
             # statistics before concluding there is no text.
             level = float(gradient.mean() + gradient.std())
-            _, loose = cv2.threshold(gradient, max(8.0, level), 255,
-                                     cv2.THRESH_BINARY)
-            otsu = loose
-            rows = rows_for(loose, INITIAL_BRIDGE)
+            _, binary = cv2.threshold(gradient, max(8.0, level), 255,
+                                      cv2.THRESH_BINARY)
+            rows = cls._rows_from_mask(binary, INITIAL_BRIDGE)
 
-        if rows:
-            # Re-bridge using the text's own size. A fixed gap is wrong across
-            # resolutions, and too small a gap splits faint text mid-sentence --
-            # recognising one fragment of a ping yields a useless partial line.
-            heights = sorted(row[3] for row in rows)
-            median = heights[len(heights) // 2]
-            wider = max(INITIAL_BRIDGE, min(220, int(median * BRIDGE_PER_HEIGHT)))
-            if wider > INITIAL_BRIDGE:
-                rows = rows_for(otsu, wider) or rows
+        return cls._rebridge(binary, rows)
 
+    @staticmethod
+    def stroke_segment_mask(image_bgr: np.ndarray) -> np.ndarray:
+        """Thin bright strokes, judged against their own neighbourhood.
+
+        The gradient mask above is thresholded *globally*, and that is what it
+        cannot do anything about: one bright HUD element or a sunlit patch of
+        terrain raises the single threshold above the response of faint chat
+        drawn elsewhere in the same band, so the text is not merely missed, it is
+        invisible. Measured on a real 1080p frame with the chat box closed: Otsu
+        settled at 69 while the chat's own gradient sat below it, and no global
+        level separated the two -- lowering it welded the whole area into blobs
+        several lines tall.
+
+        A white-hat transform has no global threshold to get wrong. It keeps only
+        structure brighter than its own surroundings and thinner than the kernel,
+        which is what a glyph stroke is whatever sits behind it. The same
+        primitive already decides the colour of champion names in
+        :func:`stroke_mask`; this is it applied to finding the rows.
+
+        Computed on the max channel rather than the CLAHE grey: measured, the
+        equalised image loses exactly this case (0 chat rows found against 9), as
+        equalising a large band lifts the scenery along with the text.
+        """
+        value = image_bgr.max(axis=2)
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_RECT, (STROKE_SEGMENT_KERNEL, STROKE_SEGMENT_KERNEL))
+        hat = cv2.morphologyEx(value, cv2.MORPH_TOPHAT, kernel)
+        return ((hat >= STROKE_SEGMENT_LEVEL).astype(np.uint8) * 255)
+
+    @staticmethod
+    def _covers(box: tuple[int, int, int, int],
+                other: tuple[int, int, int, int]) -> bool:
+        """Whether two row boxes are the same row found twice."""
+        x, y, w, h = box
+        ox, oy, ow, oh = other
+        overlap = min(y + h, oy + oh) - max(y, oy)
+        return (overlap > ROW_OVERLAP_SHARE * min(h, oh)
+                and abs(x - ox) < max(w, ow) * ROW_LEFT_SHARE)
+
+    @classmethod
+    def segment_rows(cls, gray: np.ndarray, image_bgr: np.ndarray
+                     ) -> list[tuple[int, int, int, int]]:
+        """Find text rows without the detection network.
+
+        Two detectors, unioned, because neither alone finds every chat line and
+        each fails where the other works. Both were measured against the
+        synthetic suite (1080p to 4K, three HUD scales, windowed) *and* a real
+        capture of faint 13px chat:
+
+            gradient only  --  6/6 synthetic, 0 of 9 real rows
+            strokes only   --  1/6 synthetic, 9 of 9 real rows
+            both           --  6/6 synthetic, 9 of 9 real rows
+
+        So the stroke mask is an addition and never a replacement: on the
+        synthetic frames it splits or drops rows the gradient reads cleanly.
+
+        The union is not the cost it looks like. It offers ~2 more rows per band,
+        and the second mask's rows are often *tighter* than the gradient's, which
+        makes recognition -- the expensive step by far -- cheaper rather than
+        dearer: measured 338ms against 476ms at 1080p, 487ms against 908ms at
+        1440p.
+        """
+        rows = cls.gradient_rows(gray)
+        mask = cls.stroke_segment_mask(image_bgr)
+        strokes = cls._rebridge(mask, cls._rows_from_mask(mask, INITIAL_BRIDGE))
+        rows.extend(candidate for candidate in strokes
+                    if not any(cls._covers(candidate, known) for known in rows))
         rows.sort(key=lambda box: box[1])       # top to bottom == chat order
         return rows
 
@@ -485,7 +607,7 @@ class OcrEngine:
             return [], 0.0
         started = time.perf_counter()
         gray = self.preprocess(image_bgr)
-        rows = self.segment_rows(gray)
+        rows = self.segment_rows(gray, image_bgr)
 
         if not rows:
             return [], (time.perf_counter() - started) * 1000.0
@@ -627,10 +749,52 @@ class CaptureWorker(threading.Thread):
         # or -- for the clock -- because a saved one is in use.
         self._probes: dict[str, ChatRegion] = {}
         self._probe_read_at: dict[str, float] = {}
+        # Where the enemy team is listed, and the state of reading it. Kept apart
+        # from the probes above: a probe is read for the user to look at while
+        # they place it, whereas these are read for the application's own sake and
+        # must go on being read once the framing tool is closed.
+        self._role_regions: dict[str, ChatRegion] = {}
+        self._role_read_at: dict[str, float] = {}
+        # The previous reading of each zone, awaiting a second one that agrees.
+        self._role_candidate: dict[str, dict[int, str]] = {}
+        # Cleared when the application has learnt the whole team, so a settled
+        # game stops looking. Restored on every session change.
+        self._roles_wanted = True
+        self._session_started = time.monotonic()
+        self.icons = role_reader.IconMatcher(parser.assets)
+        # Self-test runs waiting to be served, with the callback to answer on.
+        self._self_tests: list = []
+        self._self_test_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     def stop(self) -> None:
         self._stop.set()
+
+    def request_self_test(self, callback) -> None:
+        """Ask for the shipped sample to be read, and answer ``callback``.
+
+        Served on this thread rather than the caller's for two reasons: the OCR
+        backend lives here already, so the test costs no second copy of it, and
+        reading the sample takes about half a second -- long enough to freeze a
+        window if it ran on the UI thread. The callback therefore arrives on the
+        capture thread, and it is the caller's job to hop back.
+        """
+        with self._self_test_lock:
+            self._self_tests.append(callback)
+
+    def _serve_self_tests(self) -> None:
+        with self._self_test_lock:
+            pending, self._self_tests = self._self_tests, []
+        for callback in pending:
+            try:
+                result = self_test.run(self.engine, self.parser.assets)
+            except Exception as exc:                  # noqa: BLE001 - must answer
+                log.exception("self-test failed")
+                result = self_test.SelfTestResult(error=str(exc))
+            try:
+                callback(result)
+            except Exception:                         # noqa: BLE001
+                log.exception("self-test callback failed")
 
     def request_redetect(self) -> None:
         """Ask for the chat region to be located again from scratch."""
@@ -658,6 +822,30 @@ class CaptureWorker(threading.Thread):
             self._probes[zone] = region
         log.info("probe %s: %s", zone,
                  region.describe() if region is not None else "off")
+
+    def set_role_region(self, zone: str, region: ChatRegion | None) -> None:
+        """Register (or drop) an area the enemy team is listed in."""
+        if region is None:
+            self._role_regions.pop(zone, None)
+            self._role_read_at.pop(zone, None)
+            self._role_candidate.pop(zone, None)
+            self.status.role_notes.pop(zone, None)
+        else:
+            self._role_regions[zone] = region
+
+    def set_roles_wanted(self, wanted: bool) -> None:
+        """Stop (or restart) looking, once the team is known or a game ends.
+
+        Starting again forgets what was found, and that is the point rather than
+        tidiness: the only reason to ask for another look is that the previous
+        answer no longer applies, and leaving it published would let the caller
+        re-adopt the *previous* game's team while waiting for the new one.
+        """
+        if wanted and not self._roles_wanted:
+            self._role_candidate.clear()
+            self.status.roles = {}
+            self.status.roles_source = ""
+        self._roles_wanted = wanted
 
     def set_manual_region(self, region: ChatRegion | None) -> None:
         self._region = region
@@ -695,6 +883,10 @@ class CaptureWorker(threading.Thread):
         while not self._stop.is_set():
             started = time.monotonic()
             try:
+                # Before the iteration, so a test asked for while League is absent
+                # is served on the very next tick rather than behind an early
+                # return.
+                self._serve_self_tests()
                 self._iterate()
             except Exception as exc:                  # noqa: BLE001 - loop must survive
                 log.exception("capture iteration failed")
@@ -724,6 +916,16 @@ class CaptureWorker(threading.Thread):
             self._verified_this_session = False
             if not self.settings.get("chat_region_locked"):
                 self._region = None
+            # A new game is a new enemy team, and the loading screen for it is
+            # about to be on screen. Both halves of that matter: looking starts
+            # again, and the window in which the loading area is worth reading
+            # opens from here.
+            self._session_started = time.monotonic()
+            self._roles_wanted = True
+            self._role_candidate.clear()
+            self.status.roles = {}
+            self.status.roles_source = ""
+            self.status.role_notes.clear()
 
         self.status.window_rect = state.window_rect
 
@@ -732,6 +934,11 @@ class CaptureWorker(threading.Thread):
         # the chat frame does, and the clock is worth reading whenever it is
         # configured.
         self._read_probes()
+        if state.running:
+            # Before the chat early-returns as well, and for a reason of its own:
+            # the loading screen is the only chance to learn the lanes, and no
+            # chat exists on it yet.
+            self._read_roles()
 
         # A hand-placed region needs no window: in test mode the user is aiming
         # the frame at whatever is on screen (a replay, a screenshot, the client)
@@ -870,6 +1077,70 @@ class CaptureWorker(threading.Thread):
                 if clock is None and rows:
                     log.debug("clock zone read %r, no clock in it",
                               [text for text, _b in rows])
+
+    # ------------------------------------------------------------------
+    def _read_roles(self) -> None:
+        """Look for the enemy team in the loading screen and the scoreboard.
+
+        Neither area is guaranteed to be showing what it is meant to show: the
+        loading screen is replaced by the game, and the scoreboard exists only
+        while Tab is held. So a reading is a *candidate* until an independent one
+        agrees with it, and only then does it reach the timers. That is the same
+        rule the game clock is held to, and for the same reason -- one look at a
+        moving background can produce anything.
+        """
+        if not self._role_regions or not self._roles_wanted:
+            return
+        if not self.settings.get("auto_roles", True):
+            return
+
+        now = time.monotonic()
+        for zone, region in list(self._role_regions.items()):
+            if now - self._role_read_at.get(zone, 0.0) < ROLE_INTERVAL:
+                continue
+            if (zone == PROBE_LOADING
+                    and now - self._session_started > LOADING_WINDOW):
+                continue
+            self._role_read_at[zone] = now
+            frame = self._grab(region.monitor)
+            if frame is None:
+                continue
+
+            rows = None
+            resolve = None
+            if zone == PROBE_LOADING:
+                # The loading screen prints champion names, so read them. The
+                # scoreboard does not, and putting it through the OCR would cost
+                # the most expensive pass in the module to recognise item names.
+                read, _elapsed = self.engine.read_rows(frame)
+                rows = read
+                resolve = self.parser.champion_named
+            elif not self.icons.ready:
+                self.icons.build()
+
+            slots = role_reader.read_team(frame, rows, self.icons, resolve)
+            self.status.role_notes[zone] = self._describe_roles(slots)
+            if not role_reader.usable(slots):
+                self._role_candidate.pop(zone, None)
+                continue
+
+            if self._role_candidate.get(zone) != slots:
+                self._role_candidate[zone] = slots
+                log.debug("%s zone: %s, waiting for a second reading to agree",
+                          zone, slots)
+                continue
+
+            if self.status.roles != slots:
+                log.info("enemy team from the %s: %s", zone, slots)
+            self.status.roles = dict(slots)
+            self.status.roles_source = zone
+
+    @staticmethod
+    def _describe_roles(slots: dict[int, str]) -> str:
+        if not slots:
+            return ""
+        return " ".join(f"{role_reader.ROLES[index][:3]}={slots[index]}"
+                        for index in sorted(slots))
 
     def _event_for_row(self, frame: np.ndarray, text: str,
                        box: tuple[int, int, int, int]

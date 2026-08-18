@@ -25,11 +25,12 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from cooldowns import format_remaining, get_cooldown
-from message_parser import SpellEvent
+from message_parser import MAX_CALL_LEAD, SpellEvent
 from riot_assets import RiotAssets
+from roles import ROLE_ORDER, ROLES, assign_slots
 
 log = logging.getLogger(__name__)
 
@@ -71,8 +72,6 @@ NEW_GAME_CONFIRM_WINDOW = 90.0   # how long an unconfirmed hint stays relevant
 # A clock read off the screen is believed once a second reading agrees with it.
 CLOCK_CONFIRM_WINDOW = 12.0      # how long the first reading stays usable
 CLOCK_CONFIRM_TOLERANCE = 2.5    # seconds of slack, on top of the time elapsed
-
-ROLE_ORDER = {"TOP": 0, "JUNGLE": 1, "MID": 2, "ADC": 3, "SUPPORT": 4, "": 5}
 
 # The spell key an ultimate is filed under. One per champion, since a champion has
 # exactly one, and the same sentinel the parser emits -- the trial mode builds
@@ -160,7 +159,14 @@ class TimerManager:
         # Keyed by certainty as well as by spell: an uncertain sighting must not
         # sit in this window blocking the confirmed line that follows it.
         self._last_blind: dict[tuple[str, str, bool], float] = {}
+        # champion id -> lane. Doubles as the enemy roster: whatever put a role
+        # here -- the loading screen, the scoreboard, Smite, or the user -- has
+        # said that this champion is in the game, which is what makes a call
+        # naming a lane resolvable.
         self._roles: dict[str, str] = {}
+        # Roles the user set by hand. Never overwritten by a reader: somebody who
+        # has corrected a lane has better information than the screen did.
+        self._manual_roles: set[str] = set()
         self._frames_seen = 0
         # (game_time, monotonic when observed) -- our estimate of the game clock.
         self._clock_ref: tuple[float, float] | None = None
@@ -181,6 +187,12 @@ class TimerManager:
         self._timers.clear()
         self._seen.clear()
         self._last_blind.clear()
+        # Roles go too, hand-set ones included. They describe *this* game's enemy
+        # team, and a reset means either a new game or the user asking for a clean
+        # slate -- carrying a stale roster into the next match would resolve
+        # "jgl flash 950" onto somebody who is not in it.
+        self._roles.clear()
+        self._manual_roles.clear()
         self._frames_seen = 0
         self._clock_ref = None
         self._new_game_hints.clear()
@@ -285,21 +297,37 @@ class TimerManager:
     # ------------------------------------------------------------------
     # Event intake
     # ------------------------------------------------------------------
-    def handle_events(self, events: list[SpellEvent]) -> list[ActiveTimer]:
-        """Feed parsed events in. Returns the timers that were newly started."""
+    def handle_events(self, events: list[SpellEvent], *,
+                      force: bool = False) -> list[ActiveTimer]:
+        """Feed parsed events in. Returns the timers that were newly started.
+
+        ``force`` ignores priming for these events and these only. It is for the
+        self-test, which asks for timers from a still image: priming ends by
+        counting *captured* frames, so with League closed it never ends and the
+        test would silently produce nothing. Scoped to the call rather than
+        switched off on the manager, because priming is still wanted for whatever
+        the capture loop reads next -- a test pressed in the first seconds of a
+        game must not turn that game's chat history into timers.
+        """
         started: list[ActiveTimer] = []
         # Oldest first, so the clock reference advances monotonically.
         for event in sorted(events, key=lambda e: (e.game_time is None, e.game_time or 0)):
-            timer = self._handle_event(event)
+            timer = self._handle_event(event, force=force)
             if timer is not None:
                 started.append(timer)
         return started
 
-    def _handle_event(self, event: SpellEvent) -> ActiveTimer | None:
+    def _handle_event(self, event: SpellEvent, *,
+                      force: bool = False) -> ActiveTimer | None:
         if event.kind == "summoner" and not self.settings.get("track_summoners"):
             return None
         if event.kind == "ultimate" and not self.settings.get("track_ultimates"):
             return None
+        if event.is_call:
+            resolved = self._resolve_call(event)
+            if resolved is None:
+                return None
+            event = resolved
 
         # Captured *before* this event advances the clock. The comparison of the
         # ping's own timestamp against where we already believed the game clock
@@ -330,10 +358,13 @@ class TimerManager:
                 return None
             self._last_blind[blind_key] = now
 
-        if self.priming:
+        if self.priming and not force:
             # Already-visible history: remembered, but never timed.
             log.debug("priming, ignoring %r", event.raw_line)
             return None
+
+        if event.is_call:
+            return self._apply_call(event)
 
         if event.remaining_seconds is not None:
             return self._apply_stated_cooldown(event, estimate_before)
@@ -404,6 +435,113 @@ class TimerManager:
                  timer.champion_name, timer.spell_name, duration, age,
                  ", approx" if approximate else "",
                  ", uncertain" if timer.uncertain else "", event.raw_line)
+        return timer
+
+    # ------------------------------------------------------------------
+    # Timer calls typed by a teammate
+    # ------------------------------------------------------------------
+    def _resolve_call(self, event: SpellEvent) -> SpellEvent | None:
+        """Turn "jgl flash 950" into an event about an actual champion.
+
+        Two things the parser could not do. A lane is resolved to whoever plays
+        it, which only this class knows; and an ultimate called by lane gets its
+        ability name, which needs the champion first.
+
+        Returns None -- silently, and often -- when the roles are not known yet.
+        That is not a failure: it is the answer to "who is the jungler?" before
+        anything has said so, and it is exactly why the role readers exist.
+        """
+        if not self.settings.get("chat_calls", True):
+            return None
+
+        champion_id = event.champion_id
+        if event.target_role:
+            champion_id = self.champion_for_role(event.target_role) or ""
+            if not champion_id:
+                log.info("ignoring %r: nobody is known to play %s",
+                         event.raw_line, event.target_role)
+                return None
+
+        champion = self.assets.champions.get(champion_id)
+        if champion is None:
+            return None
+
+        spell_name = event.spell_name
+        if event.kind == "ultimate":
+            ult = champion.ultimate
+            spell_name = ult.name if ult is not None and ult.name else spell_name
+        return replace(event, champion_id=champion.champion_id,
+                       champion_name=champion.name, spell_name=spell_name)
+
+    def _apply_call(self, event: SpellEvent) -> ActiveTimer | None:
+        """Start (or correct) a timer from a called ready time.
+
+        The number is a point on the game clock, so what has to be worked out is
+        where that clock is now. Preferred sources, in order: the clock we already
+        track, then the timestamp on the calling line itself. With neither there is
+        no way to turn "back at 9:50" into a countdown, and the call is dropped
+        rather than guessed at.
+        """
+        ready = float(event.ready_at_game or 0)
+        now_game = self.estimated_game_time()
+        if now_game is None:
+            now_game = float(event.game_time) if event.game_time is not None else None
+        if now_game is None:
+            log.info("ignoring %r: the game clock is unknown, so a called time "
+                     "cannot be turned into a countdown", event.raw_line)
+            return None
+
+        remaining = ready - now_game
+        if remaining <= 0:
+            log.info("ignoring %r: %s is already back up at %.0fs on the clock",
+                     event.raw_line, event.spell_name, now_game)
+            return None
+        if remaining > MAX_CALL_LEAD:
+            log.info("ignoring %r: %.0fs is longer than any cooldown",
+                     event.raw_line, remaining)
+            return None
+
+        full, _approximate = self._duration_for(event)
+        if full < remaining:
+            full = remaining
+
+        previous = self._timers.get((event.champion_id, event.spell_key))
+        if (previous is not None and not previous.uncertain
+                and not self._is_recast(previous, remaining, ready)):
+            # A call may add what the game has not said, and it may correct
+            # another call -- both of those land on an uncertain timer, which is
+            # excluded above. What it may not do is argue with the client's own
+            # number, which is exact.
+            log.info("keeping the game's own timer for %s %s, ignoring %r",
+                     event.champion_name, event.spell_name, event.raw_line)
+            return None
+
+        now = time.monotonic()
+        timer = ActiveTimer(
+            champion_id=event.champion_id,
+            champion_name=event.champion_name,
+            kind=event.kind,
+            spell_key=event.spell_key,
+            spell_name=event.spell_name,
+            duration=full,
+            started_at=now - (full - remaining),
+            # Not approximate even for an ultimate: the caller stated the time
+            # outright, so nothing about rank or haste was guessed.
+            approximate=False,
+            stated=False,
+            # Marked, and the overlay says so. Somebody's word is better than
+            # nothing and worse than the client's, which is exactly what the "?"
+            # means everywhere else in this application.
+            uncertain=True,
+            role=self._role_for(event),
+            ready_at_game=ready,
+        )
+        self._timers[timer.key] = timer
+        self.history.append((time.time(), event))
+        del self.history[:-100]
+        log.info("called timer: %s %s back at %.0fs (%.0fs left) from %r",
+                 timer.champion_name, timer.spell_name, ready, remaining,
+                 event.raw_line)
         return timer
 
     def _reanchor(self, timer: ActiveTimer, event: SpellEvent, duration: float,
@@ -589,11 +727,69 @@ class TimerManager:
     # ------------------------------------------------------------------
     # Roles
     # ------------------------------------------------------------------
-    def set_role(self, champion_id: str, role: str) -> None:
-        self._roles[champion_id] = role.upper()
+    def set_role(self, champion_id: str, role: str, *,
+                 manual: bool = True) -> None:
+        """Record which lane a champion plays.
+
+        ``manual`` marks it as the user's own answer, which the readers may not
+        overwrite. Defaulting to True keeps the control window's combo boxes --
+        the original and only caller -- behaving exactly as they did.
+        """
+        role = role.upper()
+        if manual:
+            self._manual_roles.add(champion_id)
+        elif champion_id in self._manual_roles:
+            return
+        self._roles[champion_id] = role
         for timer in self._timers.values():
             if timer.champion_id == champion_id:
-                timer.role = role.upper()
+                timer.role = role
+
+    def set_roles(self, slots: dict[int, str], *, source: str = "") -> int:
+        """Record the roles a reader found, keyed by position in the team list.
+
+        Returns how many were newly learnt, so a caller can tell a reading that
+        changed something from one that merely confirmed what was already known --
+        the difference between a log line worth having and one every second.
+        """
+        assigned = assign_slots(slots)
+        if not assigned:
+            return 0
+        learnt = 0
+        for champion_id, role in assigned.items():
+            if self._roles.get(champion_id) == role:
+                continue
+            if champion_id in self._manual_roles:
+                continue
+            self.set_role(champion_id, role, manual=False)
+            learnt += 1
+        if learnt:
+            log.info("roles from %s: %s", source or "a reader",
+                     ", ".join(f"{cid}={role}" for cid, role in assigned.items()))
+        return learnt
+
+    def role_of(self, champion_id: str) -> str:
+        return self._roles.get(champion_id, "")
+
+    def champion_for_role(self, role: str) -> str | None:
+        """Who plays ``role``, or None if nobody does or two claim to.
+
+        Ambiguity resolves to None rather than to the first match: a call names a
+        lane precisely because the caller expects one champion there, and starting
+        a five-minute Flash on the wrong one is worse than starting none.
+        """
+        matches = [champion_id for champion_id, value in self._roles.items()
+                   if value == role]
+        if len(matches) != 1:
+            return None
+        return matches[0]
+
+    def roster(self) -> list[str]:
+        """Every enemy champion we know of, in lane order then alphabetical."""
+        known = set(self._roles) | {timer.champion_id
+                                    for timer in self._timers.values()}
+        return sorted(known, key=lambda cid: (ROLE_ORDER.get(self._roles.get(cid, ""),
+                                                             len(ROLES)), cid))
 
     def _role_for(self, event: SpellEvent) -> str:
         known = self._roles.get(event.champion_id)
@@ -670,7 +866,7 @@ class TimerManager:
         if self.settings.get("hide_ready_entries"):
             timers = [t for t in timers if not t.is_ready(now)]
         if self.settings.get("sort_by_role"):
-            timers.sort(key=lambda t: (ROLE_ORDER.get(t.role, 5),
+            timers.sort(key=lambda t: (ROLE_ORDER.get(t.role, len(ROLES)),
                                        t.champion_name, t.remaining(now)))
         else:
             timers.sort(key=lambda t: (t.remaining(now), t.champion_name))

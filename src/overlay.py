@@ -244,17 +244,78 @@ COUNTDOWN_FACES = (
     ("Cascadia Mono", 1.0, QFont.Bold),
     ("Consolas", 1.0, QFont.Bold),
 )
+
+# Faces the user may pick instead, beyond the automatic chain above. Same two
+# rules -- steady digits, legible small and bold -- so the list is short and every
+# entry is a face Windows actually ships. Each carries the multiplier that brings
+# it to the same optical size as the others, which is what lets the size setting
+# mean one thing across all of them.
+#
+# The interface's own face is deliberately in here and deliberately not first: it
+# is the most *coherent* choice and not the most legible one, since it is a text
+# face rather than a signage face.
+EXTRA_COUNTDOWN_FACES = (
+    ("Tahoma", 1.15, QFont.Bold),
+    ("Verdana", 1.10, QFont.Bold),
+    ("Trebuchet MS", 1.18, QFont.Bold),
+    ("Franklin Gothic Medium", 1.20, QFont.Bold),
+    ("Calibri", 1.25, QFont.Bold),
+    ("Arial", 1.15, QFont.Bold),
+    ("Lucida Console", 1.02, QFont.Bold),
+    ("Courier New", 1.10, QFont.Bold),
+)
+
+# The value meaning "whichever of COUNTDOWN_FACES this machine has".
+FACE_AUTO = "auto"
+
 _COUNTDOWN_FACE: tuple[str, float, int] | None = None
+# What the settings currently ask for. Held on the module rather than passed
+# down, because `countdown_font` is called from a dozen places inside the paint
+# and layout code, and threading a preference through all of them would be a
+# change to every one of those call sites for a value that never varies within a
+# frame. Set by the overlay when the settings change; see `set_countdown_style`.
+_CHOSEN_FACE = FACE_AUTO
+_CHOSEN_SCALE = 1.0
+
+
+def available_countdown_faces() -> list[tuple[str, float, int]]:
+    """Every face on this machine that the countdown may be drawn in.
+
+    Filtered against the font database rather than offered blind: a list that
+    lets somebody pick a font they do not have is a list that silently draws
+    something else.
+    """
+    from PySide6.QtGui import QFontDatabase
+    available = set(QFontDatabase.families())
+    return [face for face in COUNTDOWN_FACES + EXTRA_COUNTDOWN_FACES
+            if face[0] in available]
+
+
+def set_countdown_style(family: str, scale: float) -> None:
+    """Choose the countdown's face and size. ``family`` may be ``FACE_AUTO``."""
+    global _CHOSEN_FACE, _CHOSEN_SCALE
+    _CHOSEN_FACE = str(family or FACE_AUTO)
+    try:
+        _CHOSEN_SCALE = max(0.3, min(3.0, float(scale)))
+    except (TypeError, ValueError):
+        _CHOSEN_SCALE = 1.0
 
 
 def countdown_face() -> tuple[str, float, int]:
-    """The first face on the machine, resolved once.
+    """The face to draw countdowns in: the chosen one, or the best available.
 
-    Deferred rather than computed at import: the font database is empty until a
-    QApplication exists, and a chooser that runs too early always picks the last
-    entry.
+    The automatic answer is resolved once and cached. Deferred rather than
+    computed at import: the font database is empty until a QApplication exists,
+    and a chooser that runs too early always picks the last entry.
     """
     global _COUNTDOWN_FACE
+    if _CHOSEN_FACE != FACE_AUTO:
+        for face in COUNTDOWN_FACES + EXTRA_COUNTDOWN_FACES:
+            if face[0] == _CHOSEN_FACE:
+                return face
+        # A face named in the settings that this machine does not have. Falling
+        # through to the automatic chain draws something legible instead of
+        # something arbitrary.
     if _COUNTDOWN_FACE is None:
         from PySide6.QtGui import QFontDatabase
         available = set(QFontDatabase.families())
@@ -270,11 +331,18 @@ def countdown_font(points: float) -> QFont:
 
     Callers keep asking for the size they always asked for; the multiplier in
     :data:`COUNTDOWN_FACES` is what makes a face that draws small at 9 points
-    come out the same height as one that draws large.
+    come out the same height as one that draws large, and the user's own size
+    setting is applied here for the same reason -- every layout in this file
+    measures its rows through this function, so a countdown that shrinks takes
+    the space reserved for it with it instead of leaving a hole.
     """
     family, factor, weight = countdown_face()
     font = QFont(family)
-    font.setPointSizeF(max(6.0, points * factor))
+    # The floor is a floor on legibility, not on validity: below about four
+    # points a countdown is a smudge whatever the face. Low enough that the size
+    # setting keeps doing something across its whole range at ordinary overlay
+    # scales, rather than silently bottoming out halfway along the slider.
+    font.setPointSizeF(max(4.0, points * factor * _CHOSEN_SCALE))
     font.setWeight(weight)
     # Tabular figures, on the faces that need asking. Qt 6.7 and later; on
     # anything older the fallback chain is what keeps the digits steady.
@@ -486,6 +554,9 @@ class Overlay(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
 
+        # Before the first paint, and before restore_geometry, which measures a
+        # row to decide how tall a window has to be.
+        self.sync_countdown_style()
         self.restore_geometry()
         self.apply_lock(bool(self.settings.get("overlay_locked", True)))
         # Full window opacity, always: the setting is applied to the panel while
@@ -597,6 +668,16 @@ class Overlay(QWidget):
     # display by default does.
     def centre_at_top(self, *, save: bool = True) -> None:
         self.place_default(save=save)
+
+    def sync_countdown_style(self) -> None:
+        """Push the chosen countdown face and size into the drawing code.
+
+        A method on the overlay rather than something the settings window does
+        directly: the module-level preference is an implementation detail of how
+        the paint code reads it, and this is the object that owns the painting.
+        """
+        set_countdown_style(str(self.settings.get("timer_font", FACE_AUTO)),
+                            self.settings.get("timer_font_scale", 1.0))
 
     def sync_layout(self) -> None:
         """Follow a change of display, carrying each one's position with it.

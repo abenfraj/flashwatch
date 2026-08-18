@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-"""The setup guide: seven screens, drawn to the mockups' own coordinates.
+"""The setup guide: eight screens, drawn to the mockups' own coordinates.
 
 Four things decide whether Flashwatch works at all, and not one of them can be
 worked out by poking at the interface: League has to be in **borderless**, the
 **client's language** decides the wording looked for in chat, the **overlay** has
 three shapes and goes anywhere on screen, and none of it can be *proved* outside
 a game. So the first run says all four, in the Practice Tool, where each one can
-actually be checked instead of promised.
+actually be checked instead of promised. The fifth screen is the exception and
+earns its place the same way: the appearance settings, offered where the preview
+they change is already on screen rather than on the far side of the guide.
 
 What is different about this window, and the reason it is built the way it is:
 it is a **direct port of ``design/maquette/Onboarding *.dc.html``**, not an
@@ -59,8 +61,10 @@ from PySide6.QtGui import (QColor, QFont, QFontMetricsF, QGuiApplication,
                            QPolygonF, QRadialGradient)
 from PySide6.QtWidgets import QWidget
 
-from i18n import ENGLISH, FRENCH, locale_for, tr
-from overlay import LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST, LAYOUTS
+from i18n import ENGLISH, FRENCH, language_for, locale_for, tr
+from overlay import (FACE_AUTO, LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST,
+                     LAYOUTS, THEMES, available_countdown_faces)
+from settings import DEFAULTS
 from theme import GUIDE, menu_family
 
 log = logging.getLogger(__name__)
@@ -81,11 +85,12 @@ STEP_LANGUAGE = "language"
 STEP_WELCOME = "welcome"
 STEP_BORDERLESS = "borderless"
 STEP_LAYOUT = "layout"
+STEP_TUNE = "tune"
 STEP_PLACE = "place"
 STEP_PROOF = "proof"
 STEP_DONE = "done"
-STEPS = (STEP_LANGUAGE, STEP_WELCOME, STEP_BORDERLESS, STEP_LAYOUT, STEP_PLACE,
-         STEP_PROOF, STEP_DONE)
+STEPS = (STEP_LANGUAGE, STEP_WELCOME, STEP_BORDERLESS, STEP_LAYOUT, STEP_TUNE,
+         STEP_PLACE, STEP_PROOF, STEP_DONE)
 STEP_NAV = {step: f"guide.nav_{step}" for step in STEPS}
 
 # Chrome, from the mockups: header band, footer rule, footer button row.
@@ -647,6 +652,15 @@ def glyph(painter: QPainter, rect: QRectF, kind: str, colour: QColor, *,
             painter.drawEllipse(
                 QPointF(centre.x() + dx * (radius + 5),
                         centre.y() + dy * (radius + 5)), 3.2, 3.2)
+    elif kind == "sliders":
+        for index, at in enumerate((0.32, 0.68)):
+            y = rect.top() + rect.height() * at
+            painter.drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y))
+            painter.setBrush(colour)
+            painter.drawEllipse(
+                QPointF(rect.left() + rect.width() * (0.66 if index else 0.34),
+                        y), width * 1.3, width * 1.3)
+            painter.setBrush(Qt.NoBrush)
     elif kind == "sparkle":
         painter.setPen(Qt.NoPen)
         painter.setBrush(colour)
@@ -745,14 +759,98 @@ class Weights:
 
 
 class Hot:
-    """A clickable rectangle in design coordinates."""
+    """A clickable rectangle in design coordinates.
 
-    __slots__ = ("rect", "action", "key")
+    ``drag`` is what makes a slider possible in a window with no widgets in it:
+    a spot that has one is fed the pointer on press and again on every move
+    until the button comes up, and it is *not* fired on release -- the value was
+    already applied on the way past, and applying it twice would fight the last
+    position the pointer was actually at.
+    """
 
-    def __init__(self, rect: QRectF, action, key: str = "") -> None:
+    __slots__ = ("rect", "action", "key", "drag")
+
+    def __init__(self, rect: QRectF, action, key: str = "", drag=None) -> None:
         self.rect = rect
         self.action = action
         self.key = key
+        self.drag = drag
+
+
+# ---------------------------------------------------------------------------
+# The controls
+#
+# The settings window has real widgets for all of these; this window has none,
+# on purpose (see the module docstring), so the four shapes it needs are painted
+# from the same palette as everything else and driven by :class:`Hot`. They are
+# deliberately the *same* four shapes the maquettes use -- a pill, a chip, a
+# track with a knob, a pair of steppers -- so a setting looks like itself
+# wherever it is met.
+# ---------------------------------------------------------------------------
+def switch_pill(painter: QPainter, rect: QRectF, on: float,
+                hover: float = 0.0) -> None:
+    """The toggle, at the settings window's own proportions."""
+    radius = rect.height() / 2
+    box(painter, rect, radius, fill=mix(c("inset"), c("accent_btn"), on),
+        edge=mix(c("card_edge"), c("accent"), max(on, hover * 0.7)),
+        edge_width=1.0 + 0.4 * on)
+    knob = radius - 4
+    travel = rect.width() - 8 - knob * 2
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(mix(c("dim"), c("ink"), max(on, 0.55)))
+    painter.drawEllipse(QPointF(rect.left() + 4 + knob + travel * on,
+                                rect.center().y()), knob, knob)
+
+
+def chip(painter: QPainter, rect: QRectF, text: str, on: float,
+         hover: float = 0.0) -> None:
+    """One choice out of a short row of them."""
+    box(painter, rect, 9, fill=mix(c("card"), c("accent_btn"), on),
+        edge=mix(c("card_edge"), c("accent"), max(on, hover * 0.7)),
+        edge_width=1.0 + 0.4 * on)
+    centred(painter, rect, text, px(17, QFont.DemiBold),
+            mix(c("text"), c("ink"), on))
+
+
+def slider(painter: QPainter, rect: QRectF, fraction: float,
+           hover: float = 0.0) -> None:
+    """A track with a knob on it. ``rect`` is the whole grabbable strip."""
+    fraction = clamp(fraction)
+    y = rect.center().y()
+    left, right = rect.left() + 11, rect.right() - 11
+    pen = QPen(c("inset"), 6.0)
+    pen.setCapStyle(Qt.RoundCap)
+    painter.setPen(pen)
+    painter.drawLine(QPointF(left, y), QPointF(right, y))
+    at = left + (right - left) * fraction
+    pen = QPen(c("accent_btn"), 6.0)
+    pen.setCapStyle(Qt.RoundCap)
+    painter.setPen(pen)
+    painter.drawLine(QPointF(left, y), QPointF(at, y))
+    painter.setPen(QPen(mix(c("accent"), c("accent_lit"), hover), 1.6))
+    painter.setBrush(c("ink"))
+    painter.drawEllipse(QPointF(at, y), 10.0, 10.0)
+
+
+def stepper(painter: QPainter, rect: QRectF, text: str, *,
+            back: float = 0.0, forward: float = 0.0,
+            arrows: tuple[str, str] = ("−", "+")) -> None:
+    """A value with a button on each side of it. ``rect`` is all three."""
+    box(painter, rect, 9, fill=c("card"), edge=c("card_edge"))
+    for side, hover, mark in ((0, back, arrows[0]), (1, forward, arrows[1])):
+        button = stepper_button(rect, side)
+        box(painter, button, 8, fill=mix(QColor(0, 0, 0, 0), c("accent_btn"),
+                                         hover * 0.55))
+        centred(painter, button, mark, px(20, QFont.ExtraBold),
+                mix(c("text"), c("ink"), hover))
+    centred(painter, rect, text, px(17, QFont.DemiBold), c("ink"))
+
+
+def stepper_button(rect: QRectF, side: int) -> QRectF:
+    """Where one of a stepper's two buttons is. Shared by paint and hit test."""
+    size = rect.height() - 8
+    x = rect.left() + 4 if side == 0 else rect.right() - 4 - size
+    return QRectF(x, rect.top() + 4, size, size)
 
 
 # ---------------------------------------------------------------------------
@@ -1138,7 +1236,11 @@ def paint_game(painter: QPainter, rect: QRectF, guide, mode: str) -> None:
         # room rather than as a direction.
         placed = QRectF(rect.left() + rect.width() * 0.24, rect.top() + 88,
                         rect.width() * 0.52, 74)
-    paint_overlay(painter, placed, kind, mode == "proof")
+    # The rectangle back out of it, because a scale or a vertical track moves
+    # the overlay off the one it was handed -- and the frame, the arrows and the
+    # labels below all point at where it really landed.
+    placed = paint_overlay(painter, placed, kind, mode == "proof",
+                           guide.overlay_style())
     painter.setPen(QPen(c("accent"), 2.0))
     painter.setBrush(Qt.NoBrush)
     painter.drawRoundedRect(placed.adjusted(-5, -5, 5, 5), 8, 8)
@@ -1166,7 +1268,8 @@ def paint_game(painter: QPainter, rect: QRectF, guide, mode: str) -> None:
         painter.drawRoundedRect(ghost, 8, 8)
         painter.save()
         painter.setOpacity(painter.opacity() * 0.5 * stage(reveal, 0.5, 0.35))
-        paint_overlay(painter, ghost.adjusted(4, 4, -4, -4), kind, False)
+        paint_overlay(painter, ghost.adjusted(4, 4, -4, -4), kind, False,
+                      guide.overlay_style())
         painter.restore()
         line(painter, ghost.left(), ghost.bottom() + 8,
              tr("guide.place_anywhere"), px(16), c("dim"))
@@ -1217,8 +1320,54 @@ def paint_game(painter: QPainter, rect: QRectF, guide, mode: str) -> None:
     painter.restore()
 
 
+_FACES: list[str] | None = None
+
+
+def countdown_faces() -> list[str]:
+    """The countdown faces this machine has, "auto" first.
+
+    Cached: the answer comes from the font database, which is a set built out of
+    every family installed, and this is read while painting.
+    """
+    global _FACES
+    if _FACES is None:
+        _FACES = [FACE_AUTO] + [face[0] for face in available_countdown_faces()]
+    return _FACES
+
+
+def face_name(chosen: str) -> str:
+    """The family the countdown is actually drawn in, "auto" resolved."""
+    faces = countdown_faces()
+    if chosen != FACE_AUTO and chosen in faces:
+        return chosen
+    return faces[1] if len(faces) > 1 else family()
+
+
+def overlay_style(settings) -> dict:
+    """Everything about the overlay's look, read off the settings.
+
+    Gathered in one place and handed to :func:`paint_overlay` rather than read
+    inside it: the same picture is drawn from live settings on the tuning step
+    and from nothing at all in the little thumbnails, and a function that
+    reached for the settings itself could not do both.
+    """
+    theme = THEMES.get(str(settings.get("theme", "light")), THEMES["light"])
+    return {
+        "theme": theme,
+        "opacity": float(settings.get("overlay_opacity", 0.92)),
+        "scale": float(settings.get("overlay_scale", 1.0)),
+        "face": face_name(str(settings.get("timer_font", FACE_AUTO))),
+        "timer_scale": float(settings.get("timer_font_scale", 0.5)),
+        "vertical": bool(settings.get("bar_vertical", False)),
+    }
+
+
+def _themed(theme: dict, key: str) -> QColor:
+    return QColor(*theme[key])
+
+
 def paint_overlay(painter: QPainter, rect: QRectF, kind: str,
-                  single: bool) -> None:
+                  single: bool, style: dict | None = None) -> QRectF:
     """Flashwatch's own bar, drawn on the game the way it really looks.
 
     A near-opaque light panel carrying dark numerals -- the product's actual
@@ -1226,23 +1375,78 @@ def paint_overlay(painter: QPainter, rect: QRectF, kind: str,
     placeholder cyan blocks. This is the one thing on these screens the reader
     will see again five minutes later, so it is the one thing that must not be a
     stand-in.
+
+    With a ``style`` from :func:`overlay_style` it stops being a fixed picture
+    and becomes the settings themselves: the theme's own colours, the panel at
+    the opacity it will really composite at, the size and the face the countdown
+    will really be drawn in, and the track stood on its end if that is what is
+    asked for. That is the whole point of the tuning step -- a preview that does
+    not move when the setting does is worse than no preview at all, because it
+    is read as the setting having done nothing.
+
+    Returns the rectangle it actually drew in, which is not the one it was given
+    once a scale or a vertical track has had its say: the caller frames it.
     """
     painter.save()
+    theme = style["theme"] if style else None
+    vertical = bool(style and style["vertical"] and kind == LAYOUT_BAR)
     # Everything inside is sized from the panel's own height, because this is
     # drawn at two very different sizes: 74 px tall over the game, and 38 px tall
     # inside a row's thumbnail. Fixed type would be legible at one and a smear at
     # the other -- which is exactly what the first version of these rows did.
     k = clamp(rect.height() / 74.0, 0.42, 1.4)
+    if style:
+        grown = clamp(style["scale"], 0.5, 2.4)
+        centre = rect.center()
+        if vertical:
+            # The track on its end keeps its top-left corner, the way the real
+            # window does: it is the same overlay in another shape, not a second
+            # one somewhere else. It is also as wide as the countdown beside
+            # each portrait needs it to be -- the real window sizes itself to
+            # its contents, and a strip that clipped its own numerals would be
+            # showing a bug rather than a setting.
+            room = max(1.0, clamp(style["timer_scale"] / 0.5, 0.4, 2.6))
+            rect = QRectF(rect.left(), rect.top(),
+                          108 * grown * min(room, 1.9), 252 * grown)
+            k = clamp(grown, 0.42, 1.4)
+        else:
+            rect = QRectF(centre.x() - rect.width() * grown / 2,
+                          centre.y() - rect.height() * grown / 2,
+                          rect.width() * grown, rect.height() * grown)
+            k = clamp(rect.height() / 74.0, 0.42, 1.4)
     shadow(painter, rect, 8 * k, spread=10 * k, drop=4 * k, alpha=90)
-    box(painter, rect, 8 * k, fill=QColor(238, 241, 246, 235),
-        edge=QColor(24, 36, 62, 90))
-    ink = QColor("#141a24")
-    faint = QColor("#606b7e")
-    ready = QColor("#0f6b3d")
-    soon = QColor("#8a4d00")
+    if theme is None:
+        fill = QColor(238, 241, 246, 235)
+        edge = QColor(24, 36, 62, 90)
+    else:
+        # The real composite, not a flattering one: panel alpha times the
+        # theme's own share times the opacity setting is what lands on the game,
+        # and a preview drawn at full strength would make the slider look broken.
+        fill = _themed(theme, "panel")
+        fill.setAlpha(max(0, min(255, int(fill.alpha()
+                                          * theme.get("panel_alpha", 0.8)
+                                          * clamp(style["opacity"], 0.1, 1.0)))))
+        edge = _themed(theme, "border")
+    box(painter, rect, 8 * k, fill=fill, edge=edge)
+
+    ink = _themed(theme, "far") if theme else QColor("#141a24")
+    faint = _themed(theme, "rail") if theme else QColor("#606b7e")
+    hair = _themed(theme, "border") if theme else QColor(24, 36, 62, 50)
+    ready = _themed(theme, "ready") if theme else QColor("#0f6b3d")
+    soon = _themed(theme, "mid") if theme else QColor("#8a4d00")
     entries = [("4:23", soon, 0.55), ("1:12", ready, 0.85), ("2:41", ink, 0.3)]
     if single:
         entries = [("4:23", soon, 0.55)]
+
+    def numerals(size: float) -> QFont:
+        """The countdown's own face and size, or the window's if untuned."""
+        if not style:
+            return px(size, QFont.Bold)
+        font = QFont(style["face"])
+        font.setPixelSize(max(1, int(round(
+            size * clamp(style["timer_scale"] / 0.5, 0.4, 2.6)))))
+        font.setWeight(QFont.Bold)
+        return font
 
     if kind == LAYOUT_LIST:
         row_h = rect.height() / max(1, len(entries))
@@ -1257,22 +1461,36 @@ def paint_overlay(painter: QPainter, rect: QRectF, kind: str,
             painter.drawLine(QPointF(row.left() + 34 * k, row.center().y()),
                              QPointF(row.left() + 84 * k, row.center().y()))
             line(painter, row.right() - 8 * k, row.center().y() - 12 * k, value,
-                 px(19 * k, QFont.Bold), colour, align=Qt.AlignRight)
+                 numerals(19 * k), colour, align=Qt.AlignRight)
     elif kind == LAYOUT_CARDS:
         step = rect.width() / max(1, len(entries))
         for index, (value, colour, progress) in enumerate(entries):
             cx = rect.left() + step * (index + 0.5)
             ring = QRectF(cx - 20 * k, rect.top() + 10 * k, 40 * k, 40 * k)
             painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(QColor(24, 36, 62, 60), 4 * k))
+            painter.setPen(QPen(hair, 4 * k))
             painter.drawEllipse(ring)
             painter.setPen(QPen(colour, 4 * k))
             painter.drawArc(ring, 90 * 16, -int(360 * 16 * progress))
             line(painter, cx, ring.bottom() + 4 * k, value,
-                 px(17 * k, QFont.Bold), colour, align=Qt.AlignHCenter)
+                 numerals(17 * k), colour, align=Qt.AlignHCenter)
+    elif vertical:
+        # Position is still progress, only downwards: the same reading, turned
+        # a quarter turn, which is the whole of what the setting does.
+        x = rect.left() + 26 * k
+        top, bottom = rect.top() + 22 * k, rect.bottom() - 22 * k
+        painter.setPen(QPen(hair, 3 * k))
+        painter.drawLine(QPointF(x, top), QPointF(x, bottom))
+        for value, colour, progress in entries:
+            cy = top + (bottom - top) * (0.5 if single else progress)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(colour)
+            painter.drawEllipse(QPointF(x, cy), 9 * k, 9 * k)
+            line(painter, x + 16 * k, cy - 11 * k, value, numerals(18 * k),
+                 colour)
     else:
         y = rect.center().y() - 6 * k
-        painter.setPen(QPen(QColor(24, 36, 62, 50), 3 * k))
+        painter.setPen(QPen(hair, 3 * k))
         painter.drawLine(QPointF(rect.left() + 22 * k, y),
                          QPointF(rect.right() - 22 * k, y))
         for index, (value, colour, progress) in enumerate(entries):
@@ -1281,9 +1499,10 @@ def paint_overlay(painter: QPainter, rect: QRectF, kind: str,
             painter.setPen(Qt.NoPen)
             painter.setBrush(colour)
             painter.drawEllipse(QPointF(cx, y), 9 * k, 9 * k)
-            line(painter, cx, y + 12 * k, value, px(16 * k, QFont.Bold), colour,
+            line(painter, cx, y + 12 * k, value, numerals(16 * k), colour,
                  align=Qt.AlignHCenter)
     painter.restore()
+    return rect
 
 
 # ---------------------------------------------------------------------------
@@ -1702,8 +1921,307 @@ class LayoutScreen(Screen):
                 for key, rect in self._rows(guide)]
 
 
+class TuneScreen(Screen):
+    """5 -- every knob the display has, with the result turning as they turn.
+
+    The settings were on the far side of the guide: someone finished it, landed
+    in the settings window and met the same display again with a dozen controls
+    around it. So they are here instead, on the step after the shape is chosen,
+    where the Practice Tool panel is already on screen and can answer each one
+    immediately -- which is the only honest way to offer an opacity slider.
+
+    Two halves, and the split is what they *are* rather than what they look
+    like: the left column is how the overlay looks (theme, opacity, size, the
+    countdown's face and size), the right is what it shows (idle, order, spells
+    that are back up, and how long READY stays). Everything here exists in the
+    settings window too, under the same words, because a setting met twice under
+    two names is two settings as far as the reader is concerned.
+    """
+
+    key = STEP_TUNE
+
+    LABEL_W = 172.0
+    ROW_H = 46.0
+    ROW_PITCH = 58.0
+
+    # value key, label key, and how the number is worded
+    THEME_CHIPS = (("light", "ui.theme_light"), ("dark", "ui.theme_dark"),
+                   ("neon", "ui.theme_neon"))
+    # setting, label, low, high, step, and how to write the value out
+    SLIDERS = (
+        ("overlay_opacity", "ui.opacity", 0.35, 1.0, 0.01,
+         lambda value: f"{round(value * 100)} %"),
+        ("overlay_scale", "ui.scale", 0.6, 2.0, 0.05,
+         lambda value: f"{value:.2f}x"),
+        ("timer_font_scale", "ui.timer_size", 0.4, 2.0, 0.05,
+         lambda value: f"{value:.2f}x"),
+    )
+    # Top to bottom in the left column. The face sits between its own size and
+    # the sizes above it because that is the order the row labels read in.
+    FIELDS = ("theme", "overlay_opacity", "overlay_scale", "timer_font",
+              "timer_font_scale")
+    # The right-hand grid, in reading order. The vertical track is last because
+    # it belongs to the track alone and is left out for the other two displays:
+    # a switch that does nothing reads as broken rather than as inapplicable,
+    # and dropping the last cell of a grid reads as the end of the list.
+    SWITCHES = (("bar_show_when_idle", "ui.bar_when_idle"),
+                ("sort_by_role", "ui.sort_by_role"),
+                ("hide_ready_entries", "ui.hide_ready"),
+                ("hide_until_in_game", "ui.hide_until_in_game"),
+                ("bar_vertical", "ui.bar_vertical"))
+
+    # Everything this screen owns, which is also everything its reset button
+    # puts back. The display itself is not in it: that was the step before, and
+    # a reset that undid it would be answering a question nobody asked.
+    OWNED = ("theme", "overlay_opacity", "overlay_scale", "timer_font",
+             "timer_font_scale", "bar_show_when_idle", "sort_by_role",
+             "hide_ready_entries", "hide_until_in_game", "bar_vertical",
+             "ready_linger_seconds")
+
+    # -- geometry ------------------------------------------------------
+    @classmethod
+    def _plan(cls, guide) -> dict:
+        """Where everything is. One answer, shared by the paint and the hits.
+
+        Measured from the paragraph rather than written down, for the reason the
+        base class gives: a hit box placed at a remembered offset is a hit box
+        that misses the moment a translation runs one line longer.
+        """
+        lines = _count_lines(tr("guide.tune_lead"), px(22, QFont.Medium), COL_W)
+        top = COL_TOP + 62 + 24 + lines * 34 + 22
+        fields = {name: QRectF(COL_X, top + index * cls.ROW_PITCH, COL_W,
+                               cls.ROW_H)
+                  for index, name in enumerate(cls.FIELDS)}
+        note_top = top + len(cls.FIELDS) * cls.ROW_PITCH - 12
+        # The note's height is its sentence's, so the button under it has to be
+        # measured rather than placed: the French note runs a line longer than
+        # the English one and a fixed offset put the two on top of each other.
+        note = tr("guide.tune_note")
+        note_h = max(82.0, _count_lines(note, px(19, QFont.Medium),
+                                        COL_W - 110) * 30 + 44)
+
+        panel = QRectF(PANEL_X, COL_TOP + 52, PANEL_W, 400)
+        cells: list[QRectF] = []
+        width = (PANEL_W - 48) / 2
+        for index in range(6):
+            cells.append(QRectF(PANEL_X + (index % 2) * (width + 48),
+                                panel.bottom() + 58 + (index // 2) * 48,
+                                width, 44))
+        return {"fields": fields, "note_top": note_top, "panel": panel,
+                "grid_caption": panel.bottom() + 24, "cells": cells,
+                "reset_top": note_top + note_h + 26}
+
+    @classmethod
+    def _slider_rect(cls, field: QRectF) -> QRectF:
+        """The grabbable strip. The value is written to the right of it."""
+        left = field.left() + cls.LABEL_W
+        return QRectF(left, field.top(), field.width() - cls.LABEL_W - 78, 44)
+
+    @classmethod
+    def _control_rect(cls, field: QRectF) -> QRectF:
+        return QRectF(field.left() + cls.LABEL_W, field.top() + 3,
+                      field.width() - cls.LABEL_W, 40)
+
+    @classmethod
+    def _chip_rect(cls, field: QRectF, index: int) -> QRectF:
+        area = cls._control_rect(field)
+        width = (area.width() - 16) / 3
+        return QRectF(area.left() + index * (width + 8), area.top(), width,
+                      area.height())
+
+    @staticmethod
+    def _switch_rect(cell: QRectF) -> QRectF:
+        return QRectF(cell.right() - 52, cell.center().y() - 14, 52, 28)
+
+    @staticmethod
+    def _linger_rect(cell: QRectF) -> QRectF:
+        return QRectF(cell.right() - 132, cell.center().y() - 19, 132, 38)
+
+    @classmethod
+    def _reset_rect(cls, plan: dict) -> QRectF:
+        return QRectF(COL_X, plan["reset_top"], 320, 58)
+
+    @classmethod
+    def _confirm_rects(cls, plan: dict) -> tuple[QRectF, QRectF]:
+        top = plan["reset_top"]
+        return (QRectF(COL_X, top, 190, 58), QRectF(COL_X + 202, top, 150, 58))
+
+    # -- painting ------------------------------------------------------
+    def paint(self, painter: QPainter, guide) -> None:
+        plan = self._plan(guide)
+        self.heading(painter, guide, COL_X, COL_TOP, "sliders",
+                     tr("guide.tune_title"))
+        flow(painter, COL_X, COL_TOP + 62 + 24, COL_W,
+             runs_of(tr("guide.tune_lead"), px(22, QFont.Medium), c("text"),
+                     strong=px(22, QFont.DemiBold),
+                     strong_colour=c("accent_lit")), 34)
+
+        fields = plan["fields"]
+        self._paint_theme(painter, guide, fields["theme"])
+        for index, (key, label, low, high, _step, wording) in enumerate(
+                self.SLIDERS):
+            self._paint_slider(painter, guide, fields[key], key, label, low,
+                               high, wording, 0.24 + index * 0.06)
+        self._paint_face(painter, guide, fields["timer_font"], 0.42)
+        self.note(painter, guide, COL_X, plan["note_top"], COL_W,
+                  tr("guide.tune_note"), delay=0.5)
+        self._paint_reset(painter, guide, plan)
+
+        self.caption(painter, guide, PANEL_X, COL_TOP, tr("guide.layout_result"))
+        panel = plan["panel"]
+        box(painter, panel, 8, fill=c("screen"))
+        paint_game(painter, panel, guide, "layout")
+        box(painter, panel, 8, edge=c("accent_btn"), edge_width=2.0)
+
+        self.caption(painter, guide, PANEL_X, plan["grid_caption"],
+                     tr("guide.tune_behaviour"))
+        for index, (key, label) in enumerate(self._cells(guide)):
+            self._paint_cell(painter, guide, plan, index, key, label)
+
+    def _field_label(self, painter: QPainter, field: QRectF, key: str) -> None:
+        line(painter, field.left(), field.center().y() - 11, tr(key),
+             px(17, QFont.Medium), c("text_2"))
+
+    def _grown(self, guide, delay: float) -> float:
+        return stage(guide.reveal, delay, 0.4)
+
+    def _paint_theme(self, painter: QPainter, guide, field: QRectF) -> None:
+        painter.save()
+        painter.setOpacity(painter.opacity() * self._grown(guide, 0.18))
+        self._field_label(painter, field, "ui.theme")
+        current = str(guide.settings.get("theme", "light"))
+        for index, (value, label) in enumerate(self.THEME_CHIPS):
+            chip(painter, self._chip_rect(field, index), tr(label),
+                 1.0 if value == current else 0.0,
+                 guide.weights.get(f"hover:tune:theme:{value}"))
+        painter.restore()
+
+    def _paint_slider(self, painter: QPainter, guide, field: QRectF, key: str,
+                      label: str, low: float, high: float, wording,
+                      delay: float) -> None:
+        painter.save()
+        painter.setOpacity(painter.opacity() * self._grown(guide, delay))
+        self._field_label(painter, field, label)
+        value = float(guide.settings.get(key, low))
+        strip = self._slider_rect(field)
+        slider(painter, strip, (value - low) / max(1e-6, high - low),
+               guide.weights.get(f"hover:tune:{key}"))
+        line(painter, field.right(), field.center().y() - 10, wording(value),
+             px(17, QFont.Bold), c("ink"), align=Qt.AlignRight)
+        painter.restore()
+
+    def _paint_face(self, painter: QPainter, guide, field: QRectF,
+                    delay: float) -> None:
+        painter.save()
+        painter.setOpacity(painter.opacity() * self._grown(guide, delay))
+        self._field_label(painter, field, "ui.timer_font")
+        chosen = str(guide.settings.get("timer_font", FACE_AUTO))
+        name = tr("ui.timer_font_auto") if chosen == FACE_AUTO else chosen
+        stepper(painter, self._control_rect(field), name,
+                back=guide.weights.get("hover:tune:face:-"),
+                forward=guide.weights.get("hover:tune:face:+"),
+                arrows=("\u2039", "\u203a"))
+        painter.restore()
+
+    def _cells(self, guide) -> list[tuple[str, str]]:
+        """The right-hand grid's contents, in order."""
+        rows = [(key, label) for key, label in self.SWITCHES
+                if key != "bar_vertical"
+                or guide.current_layout() == LAYOUT_BAR]
+        rows.append(("ready_linger_seconds", "ui.ready_linger"))
+        return rows
+
+    def _paint_cell(self, painter: QPainter, guide, plan: dict, index: int,
+                    key: str, label: str) -> None:
+        cell = plan["cells"][index]
+        painter.save()
+        painter.setOpacity(painter.opacity()
+                           * self._grown(guide, 0.3 + index * 0.05))
+        line(painter, cell.left(), cell.center().y() - 11, tr(label),
+             px(18, QFont.Medium), c("text_2"))
+        if key == "ready_linger_seconds":
+            stepper(painter, self._linger_rect(cell),
+                    f"{int(guide.settings.get(key, 5))} s",
+                    back=guide.weights.get("hover:tune:linger:-"),
+                    forward=guide.weights.get("hover:tune:linger:+"))
+        else:
+            switch_pill(painter, self._switch_rect(cell),
+                        1.0 if guide.settings.get(key) else 0.0,
+                        guide.weights.get(f"hover:tune:{key}"))
+        painter.restore()
+
+    def _paint_reset(self, painter: QPainter, guide, plan: dict) -> None:
+        grown = self._grown(guide, 0.6)
+        if guide.confirm_reset:
+            line(painter, COL_X, plan["reset_top"] - 36,
+                 tr("guide.tune_reset_ask"), px(19, QFont.DemiBold), c("ink"))
+            yes, no = self._confirm_rects(plan)
+            paint_button(painter, yes, tr("guide.tune_reset_yes"),
+                         hover=guide.weights.get("hover:tune:reset_yes"),
+                         primary=True, grown=grown)
+            paint_button(painter, no, tr("guide.tune_reset_no"),
+                         hover=guide.weights.get("hover:tune:reset_no"),
+                         grown=grown)
+        else:
+            paint_button(painter, self._reset_rect(plan),
+                         tr("guide.tune_reset"),
+                         hover=guide.weights.get("hover:tune:reset"),
+                         grown=grown)
+
+    # -- what can be clicked -------------------------------------------
+    def hots(self, guide) -> list[Hot]:
+        plan = self._plan(guide)
+        fields = plan["fields"]
+        spots: list[Hot] = []
+
+        for index, (value, _label) in enumerate(self.THEME_CHIPS):
+            spots.append(Hot(
+                self._chip_rect(fields["theme"], index),
+                lambda v=value: guide.apply_setting("theme", v),
+                f"tune:theme:{value}"))
+
+        for key, _label, low, high, step, _wording in self.SLIDERS:
+            strip = self._slider_rect(fields[key])
+            spots.append(Hot(
+                strip, lambda: None, f"tune:{key}",
+                drag=lambda point, k=key, r=strip, lo=low, hi=high, st=step:
+                    guide.drag_setting(k, point, r, lo, hi, st)))
+
+        control = self._control_rect(fields["timer_font"])
+        for side, sign in ((0, -1), (1, 1)):
+            spots.append(Hot(
+                stepper_button(control, side),
+                lambda d=sign: guide.cycle_face(d),
+                f"tune:face:{'-' if sign < 0 else '+'}"))
+
+        for index, (key, _label) in enumerate(self._cells(guide)):
+            cell = plan["cells"][index]
+            if key == "ready_linger_seconds":
+                linger = self._linger_rect(cell)
+                for side, sign in ((0, -1), (1, 1)):
+                    spots.append(Hot(
+                        stepper_button(linger, side),
+                        lambda d=sign: guide.bump_linger(d),
+                        f"tune:linger:{'-' if sign < 0 else '+'}"))
+            else:
+                # The whole row, not just the pill: a line of text with a switch
+                # at the end of it is one control, and aiming at the switch is
+                # the reader doing the interface's work for it.
+                spots.append(Hot(cell, lambda k=key: guide.toggle_setting(k),
+                                 f"tune:{key}"))
+
+        if guide.confirm_reset:
+            yes, no = self._confirm_rects(plan)
+            spots.append(Hot(yes, guide.reset_tune, "tune:reset_yes"))
+            spots.append(Hot(no, guide.cancel_reset, "tune:reset_no"))
+        else:
+            spots.append(Hot(self._reset_rect(plan), guide.ask_reset,
+                             "tune:reset"))
+        return spots
+
+
 class PlaceScreen(Screen):
-    """5 -- put it where you want it. The overlay is a window, not a header."""
+    """6 -- put it where you want it. The overlay is a window, not a header."""
 
     key = STEP_PLACE
 
@@ -1738,7 +2256,14 @@ class PlaceScreen(Screen):
 
 
 class ProofScreen(Screen):
-    """6 -- the whole chain, demonstrated: paste a line, a timer appears."""
+    """7 -- the whole chain, demonstrated on a real frame that ships with it.
+
+    One press, no game required and nothing to type: the program reads a real
+    captured frame the way it reads a live one and starts the timers it finds. It
+    used to hand over a line to paste into the Practice Tool instead, which asked
+    the reader to have League open at this exact moment and to trust that a line
+    they typed themselves proved anything about reading the game's own wording.
+    """
 
     key = STEP_PROOF
 
@@ -1750,31 +2275,37 @@ class ProofScreen(Screen):
                          c("text"), strong=px(24, QFont.DemiBold),
                          strong_colour=c("accent_lit")), 39)
 
-        field, button = self._line_rects(guide)
         grown = stage(guide.reveal, 0.3, 0.4)
-        painter.save()
-        painter.setOpacity(painter.opacity() * grown)
-        box(painter, field, 8, fill=c("inset"), edge=c("inset_edge"))
-        flow(painter, field.left() + 18, field.top() + 14,
-             field.width() - 36, [(tr("ui.test_line"), px(17), c("text"))], 26)
-        painter.restore()
-        paint_button(painter, button,
-                     tr("ui.copied") if guide.copied else tr("ui.copy"),
-                     hover=guide.weights.get("hover:copy"), primary=False,
+        run, frame_button = self._button_rects(guide)
+        paint_button(painter, run,
+                     tr("guide.proof_running") if guide.test_running
+                     else tr("guide.proof_action"),
+                     hover=guide.weights.get("hover:test"), primary=True,
                      grown=grown)
         # The remedy, next to the test that reveals the need for it. Framing the
         # chat by hand is not a step everybody walks through -- the area is found
         # on its own, and asking a new user to draw a rectangle around something
         # the program already located would be busywork. It belongs exactly here:
         # the one moment where a reader discovers that nothing appeared.
-        paint_button(painter, self._frame_rect(guide), tr("ui.test_mode"),
+        paint_button(painter, frame_button, tr("ui.test_mode"),
                      hover=guide.weights.get("hover:frame"), primary=False,
                      grown=grown)
+
+        top = run.bottom() + 22
+        # The verdict, once there is one. Painted where the reader is already
+        # looking -- directly under the button they just pressed. Kept to two
+        # entries because everything below it still has to fit above the footer.
+        for text, colour in guide.test_lines:
+            font = px(19, QFont.Medium)
+            flow(painter, COL_X, top, COL_W, [(text, font, c(colour))], 28)
+            top += _count_lines(text, font, COL_W) * 28 + 10
+        if guide.test_lines:
+            top += 10
+
         # A quiet line rather than a second note box: two boxes stacked do not
         # fit the column, and this is a remedy for a minority, not a warning.
         hint = px(17, QFont.Medium)
         rows = _count_lines(tr("guide.proof_frame"), hint, COL_W)
-        top = button.bottom() + 20
         painter.save()
         painter.setOpacity(painter.opacity() * stage(guide.reveal, 0.5, 0.4))
         flow(painter, COL_X, top, COL_W,
@@ -1790,23 +2321,23 @@ class ProofScreen(Screen):
         box(painter, panel, 8, edge=c("accent_btn"), edge_width=2.0)
 
     @staticmethod
-    def _line_rects(guide) -> tuple[QRectF, QRectF]:
+    def _button_rects(guide) -> tuple[QRectF, QRectF]:
+        """The test button, and the framing one beside it rather than under it.
+
+        The two together are 476 wide against the column's 480 -- the same 4px of
+        slack the copy button and this one used to share. Side by side rather than
+        stacked because the column also has to hold the verdict, the remedy line
+        and the safety note above the window's own footer.
+        """
         lines = _count_lines(tr("guide.proof_lead"), px(24, QFont.Medium), COL_W)
         top = COL_TOP + 62 + 26 + lines * 39 + 26
-        rows = _count_lines(tr("ui.test_line"), px(17), COL_W - 36)
-        field = QRectF(COL_X, top, COL_W, max(56, rows * 26 + 28))
-        return field, QRectF(COL_X, field.bottom() + 18, 200, 56)
-
-    @classmethod
-    def _frame_rect(cls, guide) -> QRectF:
-        """The framing button, beside the copy one rather than under it."""
-        copy = cls._line_rects(guide)[1]
-        return QRectF(copy.right() + 16, copy.top(), 260, copy.height())
+        run = QRectF(COL_X, top, 260, 62)
+        return run, QRectF(run.right() + 16, top, 200, 62)
 
     def hots(self, guide) -> list[Hot]:
-        return [Hot(self._line_rects(guide)[1], guide.copy_test_line, "copy"),
-                Hot(self._frame_rect(guide), guide.chat_frame_requested.emit,
-                    "frame")]
+        run, frame_button = self._button_rects(guide)
+        return [Hot(run, guide.run_self_test, "test"),
+                Hot(frame_button, guide.chat_frame_requested.emit, "frame")]
 
 
 class DoneScreen(Screen):
@@ -1930,7 +2461,7 @@ class DoneScreen(Screen):
 
 SCREENS = {screen.key: screen for screen in (
     LanguageScreen(), WelcomeScreen(), BorderlessScreen(), LayoutScreen(),
-    PlaceScreen(), ProofScreen(), DoneScreen())}
+    TuneScreen(), PlaceScreen(), ProofScreen(), DoneScreen())}
 
 
 def paint_button(painter: QPainter, rect: QRectF, text: str, *,
@@ -1974,13 +2505,24 @@ class Onboarding(QWidget):
     layout_changed = Signal(str)          # a display was picked
     place_requested = Signal()            # show the overlay, unlocked, to be moved
     chat_frame_requested = Signal()       # open the chat zone frame
+    self_test_requested = Signal()        # read the shipped sample frame
+    settings_changed = Signal()           # a knob on the tuning step was turned
 
     def __init__(self, settings) -> None:
         super().__init__(None)
         self.settings = settings
         self._index = 0
         self._finished = False
-        self.copied = False
+        # The proof step's state: whether a run is in flight, and the verdict as
+        # (text, theme colour key) lines to paint under the button.
+        self.test_running = False
+        self.test_lines: list[tuple[str, str]] = []
+        # The tuning step's one piece of state: whether its reset button has
+        # been pressed once and is waiting to be meant. Kept on the window
+        # rather than on the screen because the screens are singletons shared by
+        # every guide ever opened, and a half-asked question must not outlive
+        # the window that asked it.
+        self.confirm_reset = False
 
         # Animated state, all read inside paintEvent.
         self.reveal = 1.0
@@ -1992,6 +2534,7 @@ class Onboarding(QWidget):
         self.weights = Weights(self)
         self._hover = ""
         self._pressed = ""
+        self._dragging: Hot | None = None
 
         family()                          # load Mulish before the first paint
         self.setWindowTitle(tr("guide.title"))
@@ -2232,6 +2775,12 @@ class Onboarding(QWidget):
         return None
 
     def mouseMoveEvent(self, event) -> None:
+        if self._dragging is not None:
+            # Deliberately not re-hit: a slider being dragged keeps the pointer
+            # even once it has left the strip, which is what makes the ends of
+            # the range reachable without threading a needle.
+            self._dragging.drag(self._to_design(event.position()))
+            return
         spot = self._hit(event.position())
         key = spot.key if spot is not None else ""
         if key != self._hover:
@@ -2254,9 +2803,20 @@ class Onboarding(QWidget):
             return
         spot = self._hit(event.position())
         self._pressed = spot.key if spot is not None else ""
+        if spot is not None and spot.drag is not None:
+            self._dragging = spot
+            spot.drag(self._to_design(event.position()))
 
     def mouseReleaseEvent(self, event) -> None:
         if event.button() != Qt.LeftButton:
+            return
+        if self._dragging is not None:
+            # Every step of the drag was written into the settings unsaved, so
+            # that a slider does not rewrite the file sixty times on its way
+            # across. This is the one write.
+            self._dragging = None
+            self._pressed = ""
+            self.settings.save()
             return
         spot = self._hit(event.position())
         if spot is not None and spot.key == self._pressed:
@@ -2285,8 +2845,7 @@ class Onboarding(QWidget):
 
     # -- state ---------------------------------------------------------
     def current_language(self) -> str:
-        return (ENGLISH if str(self.settings.get("locale", "fr_FR")).lower()
-                .startswith("en") else FRENCH)
+        return language_for(str(self.settings.get("locale", "en_US")))
 
     def current_layout(self) -> str:
         value = str(self.settings.get("overlay_layout", LAYOUT_BAR))
@@ -2332,7 +2891,7 @@ class Onboarding(QWidget):
         windows; this one needs neither, because it draws every word of itself
         from ``tr()`` at paint time. That is the whole reason the window is
         painted rather than built out of widgets: step one changes the language
-        of steps two to seven, and it must not cost a rebuild.
+        of steps two to eight, and it must not cost a rebuild.
         """
         if language not in (FRENCH, ENGLISH) or language == self.current_language():
             return
@@ -2340,6 +2899,63 @@ class Onboarding(QWidget):
         self._sync_language()
         self._refresh_title()
         self.language_changed.emit(language)
+        self.update()
+
+    # -- the tuning step -----------------------------------------------
+    def overlay_style(self) -> dict:
+        """How the overlay currently looks, for the panels that draw it."""
+        return overlay_style(self.settings)
+
+    def apply_setting(self, key: str, value, *, save: bool = True) -> None:
+        """Write one setting and let the application follow it, now.
+
+        The point of tuning it here is watching it land, so nothing is deferred
+        to a Next button: the overlay itself is already on screen behind this
+        window and moves with the slider.
+        """
+        self.settings.set(key, value, save=save)
+        self.settings_changed.emit()
+        self.update()
+
+    def toggle_setting(self, key: str) -> None:
+        self.apply_setting(key, not bool(self.settings.get(key)))
+
+    def drag_setting(self, key: str, point: QPointF, strip: QRectF,
+                     low: float, high: float, step: float) -> None:
+        """Where the pointer is along ``strip``, in the setting's own units."""
+        span = max(1.0, strip.width() - 22)
+        share = clamp((point.x() - strip.left() - 11) / span)
+        value = low + (high - low) * share
+        value = round(round(value / step) * step, 4)
+        self.apply_setting(key, min(high, max(low, value)), save=False)
+
+    def cycle_face(self, direction: int) -> None:
+        """The next countdown face along, wrapping. "Automatic" is one of them."""
+        faces = countdown_faces()
+        current = str(self.settings.get("timer_font", FACE_AUTO))
+        index = faces.index(current) if current in faces else 0
+        self.apply_setting("timer_font",
+                           faces[(index + direction) % len(faces)])
+
+    def bump_linger(self, direction: int) -> None:
+        value = int(self.settings.get("ready_linger_seconds", 5)) + direction
+        self.apply_setting("ready_linger_seconds", max(0, min(60, value)))
+
+    def ask_reset(self) -> None:
+        """First press asks. Nothing is undone until the second one answers."""
+        self.confirm_reset = True
+        self.update()
+
+    def cancel_reset(self) -> None:
+        self.confirm_reset = False
+        self.update()
+
+    def reset_tune(self) -> None:
+        """Put back exactly what this screen can change, and nothing else."""
+        self.confirm_reset = False
+        self.settings.update({key: DEFAULTS[key] for key in TuneScreen.OWNED},
+                             save=True)
+        self.settings_changed.emit()
         self.update()
 
     def pick_layout(self, key: str) -> None:
@@ -2350,12 +2966,42 @@ class Onboarding(QWidget):
         self.layout_changed.emit(key)
         self.update()
 
-    def copy_test_line(self) -> None:
-        """Put the proof line on the clipboard, and say so on the button."""
-        clipboard = QGuiApplication.clipboard()
-        if clipboard is not None:
-            clipboard.setText(tr("ui.test_line"))
-        self.copied = True
+    def run_self_test(self) -> None:
+        """Ask for the sample frame to be read. Ignored while one is in flight."""
+        if self.test_running:
+            return
+        self.test_running = True
+        self.test_lines = []
+        self.update()
+        self.self_test_requested.emit()
+
+    def show_test_result(self, result, started: dict) -> None:
+        """The verdict, in the two entries this column has room for.
+
+        Shorter than the control window's report on purpose, and not only for
+        space: a reader in the guide needs to know whether it worked and what to
+        do if it did not, where somebody in Troubleshooting wants the geometry of
+        the region and the timing.
+        """
+        self.test_running = False
+        lines: list[tuple[str, str]] = []
+        if result.error:
+            lines.append((tr("ui.test_error", error=result.error), "bad"))
+        elif result.ok:
+            lines.append((tr("guide.proof_pass", count=len(result.events)), "ok"))
+            # One line for every spell rather than one line each: the countdown is
+            # the proof, and it is what the lead promised would appear.
+            spells = []
+            for event in result.events:
+                mark = started.get((event.champion_id, event.spell_key))
+                spells.append(f"{event.champion_name} - {event.spell_name}"
+                              + (f" ({mark})" if mark else ""))
+            lines.append((", ".join(spells), "text"))
+        elif result.region is None:
+            lines.append((tr("ui.test_fail_region"), "bad"))
+        else:
+            lines.append((tr("ui.test_fail_parse"), "bad"))
+        self.test_lines = lines
         self.update()
 
     def retranslate(self) -> None:
@@ -2386,7 +3032,11 @@ class Onboarding(QWidget):
         self._enter(1 if self._index >= previous else -1)
 
     def _enter(self, direction: int) -> None:
-        self.copied = False
+        # A verdict belongs to the visit that produced it: coming back to the step
+        # should offer the test again rather than show a stale pass.
+        self.test_running = False
+        self.test_lines = []
+        self.confirm_reset = False
         self._slide_motion.run(46.0 * direction, 0.0)
         self._fade_motion.run(0.0, 1.0)
         self._reveal_motion.run(0.0, 1.0)

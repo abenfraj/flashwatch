@@ -87,5 +87,23 @@ finally:
 check("the real Flashwatch entry was left untouched", real_entry() == before,
       f"{before!r} -> {real_entry()!r}")
 
+
+# ------------------------------------------------- a login is not a launch
+# Double-clicking Flashwatch and Windows starting it at login are the same
+# process run for opposite reasons: one is somebody asking to see the window, the
+# other is the machine getting it ready in the background. The flag on the Run
+# entry is the only thing that tells them apart.
+check("the boot command carries the flag",
+      autostart.STARTUP_FLAG in autostart._command(), autostart._command())
+check("a double-click does not",
+      not autostart.started_by_windows(["flashwatch.exe"]))
+check("a login does",
+      autostart.started_by_windows(["flashwatch.exe", autostart.STARTUP_FLAG]))
+# An entry written before the flag existed reads as a manual launch, which is the
+# harmless way round -- and only until refresh_if_moved rewrites it.
+check("an entry from an older build differs, so it gets rewritten",
+      '"x.exe"' != autostart._command()
+      and not autostart.started_by_windows(['"x.exe"']))
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

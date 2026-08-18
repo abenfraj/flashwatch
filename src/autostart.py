@@ -28,6 +28,14 @@ log = logging.getLogger(__name__)
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 VALUE_NAME = "Flashwatch"
 
+# Appended to the command Windows runs at boot, and to nothing else. It is how
+# the program tells a login apart from a double-click, which are the same process
+# started for opposite reasons: one is somebody asking to see the window, the
+# other is the machine getting Flashwatch ready in the background. Opening the
+# settings window at every boot would be nagging; not opening it when it was
+# double-clicked would look like nothing happened.
+STARTUP_FLAG = "--startup"
+
 
 def _command() -> str:
     """The command line Windows should run, quoted for the registry.
@@ -37,14 +45,26 @@ def _command() -> str:
     leave a console window sitting behind everything.
     """
     if getattr(sys, "frozen", False):
-        return f'"{Path(sys.executable).resolve()}"'
+        return f'"{Path(sys.executable).resolve()}" {STARTUP_FLAG}'
 
     entry = Path(__file__).resolve().parent / "main.py"
     interpreter = Path(sys.executable).resolve()
     windowless = interpreter.with_name("pythonw.exe")
     if windowless.exists():
         interpreter = windowless
-    return f'"{interpreter}" "{entry}"'
+    return f'"{interpreter}" "{entry}" {STARTUP_FLAG}'
+
+
+def started_by_windows(argv: list[str] | None = None) -> bool:
+    """Whether this process was launched by the Run entry rather than by hand.
+
+    Read from the command line rather than from anything persisted, because it
+    is a property of *this* launch and not of the installation. An entry written
+    by an older build carries no flag and therefore reads as a manual launch --
+    which is the harmless way round, and only until :func:`refresh_if_moved`
+    rewrites it on the next run.
+    """
+    return STARTUP_FLAG in (sys.argv if argv is None else argv)
 
 
 def is_enabled() -> bool:
@@ -109,6 +129,10 @@ def refresh_if_moved() -> bool:
     their settings -- so an entry written before a move would silently boot
     nothing. Only ever rewrites an entry that already exists; it must not be a
     back door that switches autostart on.
+
+    It also brings an older entry up to date, which is how an install that
+    predates :data:`STARTUP_FLAG` starts distinguishing a boot from a launch
+    without anybody having to touch the checkbox.
     """
     existing = current_command()
     if existing is None or existing == _command():

@@ -897,7 +897,7 @@ footer .sep{margin-left:auto}
       "name": "Nothing shows up during my match.",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "In order: is League in borderless windowed? Does the program's language match your client's? Has an enemy actually used a summoner spell yet — with no announcement, the bar stays deliberately empty. If all of that is fine, type Wait Darius Flash - 245 sec. in chat: a timer must appear immediately. If it does not, open Troubleshooting → Frame the chat and look at what the area really reads."
+        "text": "In order: is League in borderless windowed? Does the program's language match your client's? Has an enemy actually used a summoner spell yet — with no announcement, the bar stays deliberately empty. If all of that is fine, press Test on the home page: it reads a real game frame that ships with the program, so a pass means everything but the capture of your own screen works. If it passes and your match still shows nothing, open Troubleshooting → Frame the chat and look at what the area really reads."
       }
     },
     {
@@ -1382,13 +1382,15 @@ The cooldown comes from the game's table (Flash: 300 s, <s>246 s</s>
 with Cosmic Insight, assumed by default). The match clock corrects
 the reading delay: a line read two seconds late costs nothing.
 
-To check that the OCR really reads your chat, just type:
+To check the program works, press <b>Test</b>: it reads a real
+game frame that ships with it, from the search for the chat down
+to the timers, and needs no match running.
 
   Wait Darius Flash - 245 sec.
 
-The game does not write that sentence during a match; the program
-accepts it because it carries a remaining time, which makes it a
-clean test.</pre>
+This form is accepted too, and typing it in chat is the way to
+check that <i>your own screen</i> is being read: the game never
+writes that sentence, and it carries a remaining time.</pre>
     </div>
 
 
@@ -1489,7 +1491,7 @@ clean test.</pre>
       </details>
       <details>
         <summary>Nothing shows up during my match.</summary>
-        <div class="a">In order: is League in <b>borderless windowed</b>? Does the program's <b>language</b> match your client's? Has an enemy actually used a summoner spell yet — with no announcement, the bar stays deliberately empty. If all of that is fine, type <span class="mono">Wait Darius Flash - 245 sec.</span> in chat: a timer must appear immediately. If it does not, open <span class="mono">Troubleshooting → Frame the chat</span> and look at what the area really reads.</div>
+        <div class="a">In order: is League in <b>borderless windowed</b>? Does the program's <b>language</b> match your client's? Has an enemy actually used a summoner spell yet — with no announcement, the bar stays deliberately empty. If all of that is fine, press <b>Test</b> on the home page: it reads a real game frame that ships with the program, so a pass means everything but the capture of your own screen works. If it passes and your match still shows nothing, open <span class="mono">Troubleshooting → Frame the chat</span> and look at what the area really reads.</div>
       </details>
       <details>
         <summary>Is it heavy on resources?</summary>
@@ -1729,12 +1731,15 @@ avec Perspicacité cosmique, supposée par défaut). L'horloge de la
 partie sert à corriger le retard de lecture : une ligne lue deux
 secondes trop tard ne coûte rien.
 
-Pour vérifier que l'OCR lit bien ton chat, tape simplement :
+Pour vérifier que le programme marche, appuie sur <b>Test</b> : il
+lit une vraie image de partie fournie avec lui, de la recherche du
+chat jusqu'aux timers, sans qu'une partie tourne.
 
   Attendez Darius Saut éclair - 245 sec.
 
-Le jeu n'écrit pas cette phrase en partie ; le programme l'accepte
-parce qu'elle porte un temps restant, ce qui en fait un test net.</pre>`,
+Cette forme est acceptée aussi, et la taper dans le chat sert à
+vérifier que <i>ton propre écran</i> est bien lu : le jeu n'écrit
+jamais cette phrase, et elle porte un temps restant.</pre>`,
   "how.flow":
     "<div><div class=\"t\">Capture</div><div class=\"v\">200 ms</div></div>" +
     "<div><div class=\"t\">Reconnaissance</div><div class=\"v\">Zone du chat</div></div>" +
@@ -1773,7 +1778,7 @@ parce qu'elle porte un temps restant, ce qui en fait un test net.</pre>`,
     "<details open><summary>Windows dit que le fichier est dangereux, c'est normal ?</summary>" +
     "<div class=\"a\">Oui. Un exécutable sans certificat de signature déclenche SmartScreen (« Windows a protégé votre PC ») et parfois un avertissement du navigateur au téléchargement. Certains antivirus signalent aussi par principe les programmes empaquetés de cette façon : si le tien supprime le fichier, il faut l'autoriser explicitement. Signer le programme coûterait un certificat payant.</div></details>" +
     "<details><summary>Rien ne s'affiche pendant ma partie.</summary>" +
-    "<div class=\"a\">Dans l'ordre : League est-il en <b>fenêtré sans bordure</b> ? La <b>langue</b> du programme correspond-elle à celle de ton client ? Un ennemi a-t-il utilisé un sort d'invocateur depuis le début de la partie — sans annonce, la barre reste volontairement vide. Si tout est bon, tape <span class=\"mono\">Attendez Darius Saut éclair - 245 sec.</span> dans le chat : un timer doit apparaître immédiatement. Sinon, ouvre <span class=\"mono\">Dépannage → Cadrer le chat</span> et regarde ce que la zone lit réellement.</div></details>" +
+    "<div class=\"a\">Dans l'ordre : League est-il en <b>fenêtré sans bordure</b> ? La <b>langue</b> du programme correspond-elle à celle de ton client ? Un ennemi a-t-il utilisé un sort d'invocateur depuis le début de la partie — sans annonce, la barre reste volontairement vide. Si tout est bon, appuie sur <b>Test</b> sur la page d'accueil : il lit une vraie image de partie fournie avec le programme, donc un test réussi signifie que tout fonctionne sauf la capture de ton propre écran. S'il réussit et que ta partie n'affiche toujours rien, ouvre <span class=\"mono\">Dépannage → Cadrer le chat</span> et regarde ce que la zone lit réellement.</div></details>" +
     "<details><summary>Ça consomme beaucoup ?</summary>" +
     "<div class=\"a\">Non. Au repos la boucle coûte environ <b>0,2 % d'un cœur</b> : l'image de la zone du chat est comparée d'une capture à l'autre et la reconnaissance de texte ne tourne que si quelque chose a changé. Quelques pourcents pendant une lecture active, sur un seul cœur.</div></details>" +
     "<details><summary>Est-ce que je peux le lancer deux fois ?</summary>" +

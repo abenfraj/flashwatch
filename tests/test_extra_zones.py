@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""The two areas beyond the chat: the game clock and the scoreboard.
+"""The areas beyond the chat: the game clock, the scoreboard, the loading screen.
 
-Neither can be found automatically -- a match timer is five glyphs with no
-signature to search for, and the scoreboard only exists while Tab is held -- so
-pointing at them by hand is the feature, not a fallback. What is asserted here:
+None can be found automatically -- a match timer is five glyphs with no signature
+to search for, the scoreboard only exists while Tab is held, and the loading
+screen is gone before anything could confirm a guess -- so pointing at them by
+hand is the feature, not a fallback. What is asserted here:
 
-* one frame serves all three areas, and each keeps its own shape and readout;
+* one frame serves every area, and each keeps its own shape and readout;
 * the clock is *read*: OCR text becomes a game time, and a game time becomes the
   clock the timers age their pings against;
 * a clock read off the screen is only believed once a second reading agrees, since
@@ -31,8 +32,8 @@ from message_parser import parse_clock
 from riot_assets import RiotAssets
 from settings import DEFAULTS, Settings
 from timer_manager import (CLOCK_CONFIRM_TOLERANCE, PRIME_FRAMES, TimerManager)
-from zone_overlay import (MIN_REGION, ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD,
-                          ZoneFrame)
+from zone_overlay import (MIN_REGION, ZONE_CHAT, ZONE_CLOCK, ZONE_LOADING,
+                          ZONE_SCOREBOARD, ZONES, ZoneFrame)
 
 results = []
 
@@ -59,7 +60,7 @@ check("a clock is read out of a noisy line",
 # ------------------------------------------------- the frame knows its zone
 app = QApplication.instance() or QApplication(sys.argv)
 
-frames = {zone: ZoneFrame(zone) for zone in (ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD)}
+frames = {zone: ZoneFrame(zone) for zone in ZONES}
 for zone, frame in frames.items():
     frame.start(ChatRegion(400, 200, 300, 120, source="manual", confirmed=True))
 
@@ -76,7 +77,7 @@ check("a clock frame cannot collapse", width >= MIN_REGION[ZONE_CLOCK][0]
       and height >= MIN_REGION[ZONE_CLOCK][1], f"{width}x{height}")
 
 # The readout is judged on what each zone is for: rows for chat, a parsed value
-# for the clock, any text at all for the scoreboard.
+# for the clock, recognised lanes for the two team areas.
 rows_clock = [((0, 0, 60, 20), "12:34", False)]
 frames[ZONE_CLOCK].set_feedback(rows_clock, exploring=False)
 summary, good, _detail = frames[ZONE_CLOCK]._readout()
@@ -87,16 +88,22 @@ frames[ZONE_CLOCK].set_feedback([((0, 0, 60, 20), "N/A", False)], exploring=Fals
 summary, good, _detail = frames[ZONE_CLOCK]._readout()
 check("and says so when there is no clock in it", not good, summary)
 
-frames[ZONE_SCOREBOARD].set_feedback(
-    [((0, 0, 200, 20), "Ahri 3/1/7", False),
-     ((0, 30, 200, 20), "Darius 5/2/1", False)], exploring=False)
-summary, good, _detail = frames[ZONE_SCOREBOARD]._readout()
-check("the scoreboard frame reports what it read",
-      good and "Ahri 3/1/7" in summary, summary)
+# The two team areas are judged on the lanes they produced and not on the text
+# they saw -- the scoreboard has no champion names in it at all, so counting rows
+# there would report success while nothing had been recognised.
+for zone in (ZONE_SCOREBOARD, ZONE_LOADING):
+    frames[zone].set_feedback(
+        [((0, 0, 200, 20), "Ahri 3/1/7", False)], exploring=False,
+        roles="TOP=Darius JUN=Viego")
+    summary, good, _detail = frames[zone]._readout()
+    check(f"the {zone} frame reports the lanes it recognised",
+          good and "Viego" in summary, summary)
 
-frames[ZONE_SCOREBOARD].set_feedback([], exploring=False)
-_summary, good, _detail = frames[ZONE_SCOREBOARD]._readout()
-check("and says so when it read nothing", not good)
+    frames[zone].set_feedback([((0, 0, 200, 20), "1250 g", False)],
+                              exploring=False)
+    summary, good, _detail = frames[zone]._readout()
+    check(f"and the {zone} frame says so when it recognised none",
+          not good, summary)
 
 # Chat keeps the behaviour it had: rows counted, chat lines called out.
 frames[ZONE_CHAT].set_feedback(

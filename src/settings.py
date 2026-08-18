@@ -117,6 +117,19 @@ DEFAULTS: dict[str, Any] = {
     # only one of the three that stays legible over a bright game as well as a
     # dark one -- at the cost of being a little more opaque. dark | light | neon
     "theme": "light",
+    # The countdown's face. "auto" takes the first of the built-in preferences
+    # this machine actually has (Bahnschrift, then Segoe UI, then a mono); any
+    # other value names one of the faces offered in the settings, and is ignored
+    # if that font is not installed. Only the *countdown* -- the champion and
+    # spell labels stay on the interface's own face, because they are text and
+    # the countdown is a readout.
+    "timer_font": "auto",
+    # Size of that readout, as a multiple of the size everything else is drawn
+    # from. Half by default: the countdown was sized to be readable from across
+    # the room, which in practice makes the overlay much larger than the
+    # information in it warrants, and every layout measures its rows through this
+    # so a smaller number shrinks the block rather than leaving a hole in it.
+    "timer_font_scale": 0.5,
     "sort_by_role": True,
     "hide_ready_entries": False,
     # How long a spell keeps showing READY once it is back up, before its entry
@@ -145,29 +158,39 @@ DEFAULTS: dict[str, Any] = {
     "chat_region_window": [1920, 1080],
 
     # Two further areas the user places by hand in test mode, both [x, y, w, h]
-    # in virtual-screen coordinates. Seeded from the same 1920x1080 layout.
+    # in virtual-screen coordinates. The values here are the 1920x1080 ones;
+    # a fresh install rescales them to its own screen through ZONE_FRACTIONS
+    # below, so these are the fallback rather than the answer.
     #
     # Neither is guarded by a window size the way the chat region is, because
-    # neither is ever searched for: there is nothing to fall back to, so a seed
-    # that is wrong for the screen is no worse than the None it replaces -- the
-    # user places it by hand either way. The clock is the one that matters, and
-    # a misplaced one is cheap: a reading is only adopted once a second one
+    # neither is ever searched for: there is nothing to fall back to, so the user
+    # places it by hand if the seed is wrong. The clock is the one that matters,
+    # and a misplaced one is cheap: a reading is only adopted once a second one
     # agrees with it, and anything that is not a plausible mm:ss is dropped.
     #
     # The clock is read and used: it is the game time itself, so it beats the
     # timestamps prefixing chat lines (which the player can switch off) and keeps
     # ping age-correction and ultimate ranks honest.
     "clock_region": [1852, 8, 56, 18],
-    # The scoreboard is read and shown but not yet interpreted; placing it now is
-    # what the planned reader (enemy items -> real ability haste) will use.
-    "scoreboard_region": [326, 237, 1267, 540],
+    # The enemy team's five portraits in the scoreboard (Tab), as a narrow column
+    # rather than the whole panel: the reader identifies each portrait by matching
+    # it against the champion icons already cached for the overlay, and a frame
+    # wide enough to hold names and items would spend its time sliding a window
+    # across gold counts.
+    "scoreboard_region": [330, 507, 116, 272],
+    # The enemy row on the loading screen, where the champion names are printed.
+    # Wide and shallow: five cards side by side.
+    "loading_region": [336, 545, 1248, 260],
 
     # --- Riot data ------------------------------------------------------
     # Locale of the League client, chosen in the settings window. Drives three
     # things at once: the localised strings matched in chat, the champion and
     # spell names downloaded, and the language of the interface. "fr_FR" or
-    # "en_US"; anything else falls back to French for the interface.
-    "locale": "fr_FR",
+    # "en_US"; anything else falls back to English for the interface.
+    #
+    # English until the guide asks, because the question itself has to be
+    # written in some language and that is the one most players read.
+    "locale": "en_US",
 
     # --- what to track --------------------------------------------------
     "track_summoners": True,
@@ -183,6 +206,17 @@ DEFAULTS: dict[str, Any] = {
     # yourself to check that the OCR reads your chat, and typed text is not drawn
     # red -- so leaving this on would reject exactly the line used for testing.
     "require_enemy_colour": False,
+    # Act on timers teammates type in chat: "jgl flash 950" puts the jungler's
+    # Flash back up at 9:50. On by default -- it is how League communicates
+    # cooldowns, and the app knowing what the team already knows costs nothing.
+    # A call always shows the "?" mark, since it is somebody's word rather than
+    # the client's, and a line with no time in it never starts anything.
+    "chat_calls": True,
+    # Work out the enemy's lanes from the loading screen and the scoreboard,
+    # which both list a team in lane order. Feeds the sort-by-role display and is
+    # what makes a call naming a lane resolvable at all. Off means the roles are
+    # whatever the user picks in the Enemies list, as before.
+    "auto_roles": True,
 
     # --- cooldown modifiers -------------------------------------------
     # Cosmic Insight (18% summoner haste) is near-universal, so it is assumed by
@@ -207,10 +241,24 @@ DEFAULTS: dict[str, Any] = {
     "audio_enabled": True,
     "audio_warn_seconds": 5,
     "audio_on_ready": True,
+    # Which of the voices in audio.PRESETS the two cues are played in. They are
+    # synthesised on demand rather than shipped, so the choice costs a tenth of a
+    # second and no disk. "chime" is the original.
+    "audio_sfx": "chime",
 
     # Shown once, the first time the close button hides the window instead of
     # quitting, so the disappearance is not mistaken for a crash.
     "tray_hint_shown": False,
+
+    # Open the Flashwatch window when the program is launched, rather than going
+    # straight to the notification area. On, because a program that appears to do
+    # nothing when you double-click it is a program you double-click again.
+    #
+    # A login does not count as a launch, however this is set: the autostart entry
+    # carries a flag (see autostart.STARTUP_FLAG) and a boot always stays in the
+    # tray. Starting with Windows exists so Flashwatch is *already running* when a
+    # game begins, and a settings window every morning is the opposite of that.
+    "open_window_on_launch": True,
 
     # --- first run -------------------------------------------------------
     # The setup guide runs itself once. What it covers cannot be discovered by
@@ -240,6 +288,43 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
+# Where the two hand-placed areas sit, as fractions of the client area. These are
+# the 1920x1080 seeds above divided by 1920x1080, so they reproduce them exactly
+# on that screen and put the same *place* on any other one.
+#
+# Why fractions at all: unlike the chat region, neither of these is ever searched
+# for, so a seed left at 1080p coordinates is simply wrong on a 1440p or 4K screen
+# -- the clock probe then spends a read every 0.9s on empty pixels and the framing
+# tool opens nowhere near the thing it is meant to frame. Scaling costs nothing and
+# is right far more often than not, because both sit at a fixed spot in League's
+# HUD rather than at a fixed number of pixels.
+#
+# The chat region is deliberately *not* in here. It is guarded by the window size
+# it was found at, and a wrong-but-plausible chat seed is worse than none: it is
+# adopted as confirmed and read for 30 seconds before the timeout sends detection
+# back to exploring, where a discarded seed would have started exploring at once.
+ZONE_FRACTIONS: dict[str, tuple[float, float, float, float]] = {
+    # Top right, beside the minimap: League's match timer.
+    "clock_region": (1852 / 1920, 8 / 1080, 56 / 1920, 18 / 1080),
+    # The lower half of the Tab panel, at its left edge: the enemy portraits.
+    "scoreboard_region": (330 / 1920, 507 / 1080, 116 / 1920, 272 / 1080),
+    # The lower row of cards on the loading screen: the enemy team.
+    "loading_region": (336 / 1920, 545 / 1080, 1248 / 1920, 260 / 1080),
+}
+
+
+def scaled_region(key: str, window_rect: tuple[int, int, int, int]
+                  ) -> list[int] | None:
+    """Where ``key``'s area sits in a client of this size, or None if untabled."""
+    fractions = ZONE_FRACTIONS.get(key)
+    if fractions is None:
+        return None
+    left, top, width, height = window_rect
+    x, y, w, h = fractions
+    return [left + int(round(width * x)), top + int(round(height * y)),
+            max(8, int(round(width * w))), max(6, int(round(height * h)))]
+
+
 class Settings:
     """Thread-safe dict-ish settings store with JSON persistence."""
 
@@ -249,6 +334,12 @@ class Settings:
         # scratch file, and with a bound default they silently read and wrote the
         # user's real configuration instead.
         self._path = path if path is not None else CONFIG_PATH
+        # Whether this run found no settings of its own, i.e. is a first run. Read
+        # by the one thing that has to know: seeding the hand-placed areas for the
+        # screen, which must happen once and never over a value the user has set.
+        # Recorded before load() rather than asked afterwards, since load() is what
+        # makes the answer unavailable.
+        self.fresh = not self._path.exists()
         self._lock = threading.RLock()
         self._data: dict[str, Any] = dict(DEFAULTS)
         # Keys on disk that this version knows nothing about. Kept aside and

@@ -191,7 +191,13 @@ def write_spec(one_file: bool, icon: Path | None,
         # is stamped on the executable instead of bundled -- Windows reads that
         # one off the file itself, before the program runs.
         + [(str(path), "resources/brand")
-           for path in sorted((ROOT / "resources" / "brand").glob("*.png"))],
+           for path in sorted((ROOT / "resources" / "brand").glob("*.png"))]
+        # The frame the Test button reads, and the manifest of what is in it.
+        # 2.3 MB, and it is what makes the test a test: without it the button can
+        # only report that its own sample is missing.
+        + [(str(path), "resources/test")
+           for path in sorted((ROOT / "resources" / "test").glob("*"))
+           if path.suffix in (".png", ".json")],
     )
     tail = (SPEC_ONEFILE if one_file else SPEC_ONEDIR).format(
         name=NAME, icon=str(icon) if icon is not None else None,

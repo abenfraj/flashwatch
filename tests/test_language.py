@@ -26,7 +26,7 @@ settings_module.CONFIG_PATH = tmp / "settings.json"
 
 import i18n
 from i18n import ENGLISH, FRENCH, STRINGS, language_for, locale_for, tr
-from settings import Settings
+from settings import DEFAULTS, Settings
 
 results = []
 
@@ -53,8 +53,14 @@ check("placeholders match across languages", not mismatched, str(mismatched))
 # translation cannot hide among them.
 SAME_ON_PURPOSE = {"app.title", "app.tray_tooltip",
                    "ui.theme_neon", "ui.notifications", "ui.capture",
+                   # The self-test card's title. One word, spelled the same.
+                   "ui.test_card",
                    # Words League itself does not translate.
-                   "zone.name_chat", "zone.name_scoreboard",
+                   "zone.name_chat",
+                   # Notification voices. These three are the same word in
+                   # French and in English -- two instruments and one musical
+                   # term, which is what those usually are.
+                   "sfx.marimba", "sfx.clave", "sfx.vibrato",
                    # Labels drawn inside the figure that redraws League's own
                    # options window: they are the client's words, and the client
                    # spells these three the same in French and in English. They
@@ -91,15 +97,21 @@ literals = set(re.findall(r"""["']([a-z_]+\.[a-z0-9_]+)["']""", source))
 # lists the code builds them from. Enumerated rather than pattern-matched on
 # purpose: a regex like `guide\..*_title` matches keys that do not exist either,
 # which is how "guide.done_title" sat unused behind a passing check.
+from audio import PRESETS as audio_presets       # noqa: E402
 from onboarding import STEP_NAV                   # noqa: E402
-from zone_overlay import ZONES                    # noqa: E402
+from zone_overlay import ZONE_LOADING, ZONE_SCOREBOARD, ZONES  # noqa: E402
 
 # The stepper's seven labels and the two language cards, built from the same
 # lists the guide builds them from.
 built = (set(STEP_NAV.values())
          | {f"guide.language_{code}_{part}"
             for code in ("fr", "en") for part in ("name", "sub")}
-         | {f"zone.name_{zone}" for zone in ZONES})
+         | {f"zone.name_{zone}" for zone in ZONES}
+         # The two team areas share one readout, which picks its own hint.
+         | {f"zone.{zone}_hint" for zone in (ZONE_SCOREBOARD, ZONE_LOADING)}
+         # One name per notification voice, from the same table the settings
+         # window fills its list from.
+         | {f"sfx.{preset.key}" for preset in audio_presets})
 
 orphans = sorted(key for key in STRINGS
                  if key not in literals and key not in built)
@@ -126,7 +138,11 @@ check("a Riot locale maps to a language",
       language_for("en_US") == ENGLISH and language_for("fr_FR") == FRENCH)
 check("a language maps back to a Riot locale",
       locale_for(ENGLISH) == "en_US" and locale_for(FRENCH) == "fr_FR")
-check("an unknown locale falls back to French", language_for("de_DE") == FRENCH)
+check("an unknown locale falls back to English", language_for("de_DE") == ENGLISH)
+check("and so does the setting nobody has answered yet",
+      language_for(DEFAULTS["locale"]) == ENGLISH
+      and i18n.set_language(DEFAULTS["locale"]) == ENGLISH,
+      DEFAULTS["locale"])
 check("set_language accepts a locale as well as a code",
       i18n.set_language("en_US") == ENGLISH and i18n.current() == ENGLISH)
 

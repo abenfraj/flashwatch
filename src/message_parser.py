@@ -53,6 +53,21 @@ and a later confirmed line for the same spell clears the mark without disturbing
 the countdown. Being wrong about one of these costs a question mark rather than a
 wrong timer presented as fact.
 
+A fourth form is not the game speaking at all -- it is a teammate calling a
+timer, which is how half of League communicates cooldowns:
+
+    (12:04) Bob (Ahri): jgl flash 950
+                        |tgt| |sll| |up at 9:50|
+
+Everything above exists to tell the game's own wording apart from a human's.
+This form is the exception that proves it: it is *only* ever human, so it is
+recognised by its shape rather than by its trustworthiness -- a role or champion,
+a spell, and a time -- and it is acted on because somebody deliberately typed it.
+The number is a point on the game clock, not a duration: "950" means the spell is
+back at 9:50, which is what players mean and what makes a call read late still
+land on the right second. It can be switched off in the settings, since a team
+that calls timers wrongly is worse than a team that does not call them at all.
+
 Anything else -- ordinary player chat, emotes, the kill feed -- falls through and
 is discarded.
 """
@@ -64,7 +79,9 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
+from cooldowns import COOLDOWNS, normalise_spell
 from riot_assets import ChampionInfo, RiotAssets, fold, strip_accents
+from roles import role_from_word
 
 log = logging.getLogger(__name__)
 
@@ -161,6 +178,27 @@ CHAT_PREFIX_WINDOW = 10
 # A timestamped row must carry this much text before it counts as a chat line.
 # "(12:04)" on its own is a clock, not a message.
 MIN_CHAT_LINE_LENGTH = 14
+
+# ---------------------------------------------------------------- calls
+# What a player types to say when a spell comes back: "jgl flash 950".
+#
+# Only real digits are accepted here, unlike every other number in this module.
+# Elsewhere the text comes from the game's own rendering and OCR's confusions have
+# to be forgiven; a call is short, typed, and its three parts each have to parse,
+# so letting "9SO" through would buy nothing and would let ordinary chat in.
+CALL_TIME_RE = re.compile(r"^(?:(\d{1,2})\s*[:.,;h]\s*(\d{2})|(\d{1,4}))$")
+
+# How many words a call may be. Three is the shape ("jgl flash 950"); the slack
+# covers a two-word champion, a two-word spell name and a stray token.
+MAX_CALL_WORDS = 7
+
+# Words that name an ultimate without naming the ability.
+CALL_ULT_WORDS = frozenset({"ult", "ulti", "ultime", "ultimate", "r"})
+
+# Longest cooldown in the game, plus room for a call typed a few seconds late.
+# A call pointing further ahead than this is not a cooldown, it is a number that
+# happened to sit at the end of a sentence.
+MAX_CALL_LEAD = max(COOLDOWNS.values()) + 60
 
 
 def parse_clock(text: str) -> int | None:
@@ -296,6 +334,19 @@ class SpellEvent:
     # Set when the game stated the cooldown outright ("- 245 sec."). Exact, and
     # preferred over deriving a timer from a cast time.
     remaining_seconds: int | None = None
+    # The lane a player called, when they named one instead of a champion
+    # ("jgl flash 950"). Resolved to a champion by the timer manager, which is
+    # what knows who plays where; the parser has no business knowing that.
+    target_role: str = ""
+    # Absolute point on the game clock at which the spell is back up. A called
+    # time is stated this way rather than as a duration, because that is what the
+    # number in "jgl flash 950" is.
+    ready_at_game: int | None = None
+    # "game" for anything the client printed, "call" for a teammate's timer call.
+    # The distinction decides whether the event may be acted on at all: calls are
+    # a setting, since a team that calls timers badly is worse than one that does
+    # not call them.
+    source: str = "game"
 
     @property
     def is_ultimate(self) -> bool:
@@ -304,6 +355,10 @@ class SpellEvent:
     @property
     def is_exact(self) -> bool:
         return self.remaining_seconds is not None
+
+    @property
+    def is_call(self) -> bool:
+        return self.source == "call"
 
 
 def _best_match(candidate: str, options: dict[str, str],
@@ -396,6 +451,24 @@ class MessageParser:
             # the rest of the UI is localised.
             self._summoner_index[fold(spell.canonical)] = spell.canonical
 
+    def add_localised_spells(self, names: dict[str, str]) -> None:
+        """Teach this parser spell names from another language.
+
+        Only ever used by the shipped self-test, whose sample frame is in one
+        fixed language while the client may be in another. Deliberately a
+        separate call on a separate parser instance rather than something
+        :meth:`rebuild_index` does for every locale at once: accepting every
+        language's wording on the live parser would weaken the one test that makes
+        an attributed cast line trustworthy -- that the spell is named the way
+        *this* client names it, so "used Flash" on a French client is a human
+        typing rather than the game reporting.
+        """
+        for canonical, name in names.items():
+            if canonical not in self.assets.spells or not name:
+                continue
+            self._summoner_index[fold(name)] = canonical
+            self._summoner_localised[fold(name)] = canonical
+
     # ------------------------------------------------------------------
     def parse_line(self, line: str) -> SpellEvent | None:
         text = " ".join(line.split())
@@ -426,6 +499,13 @@ class MessageParser:
             # than the other two -- nothing in it says the spell was *cast* --
             # so it yields an uncertain event rather than nothing.
             event = self._parse_bare(body, text, game_time)
+            if event is not None:
+                return event
+            # Form 4: a teammate calling a timer, "jgl flash 950". Tried last
+            # because it is the only form that is *meant* to be a human, so it
+            # must never get a line one of the game's own wordings could have
+            # claimed.
+            event = self._parse_call(body, text, game_time)
             if event is not None:
                 return event
             if self._mentions_champion(body):
@@ -573,6 +653,190 @@ class MessageParser:
             raw_line=raw,
             signature=signature,
             certain=False,
+        )
+
+    # ------------------------------------------------------------------
+    # Form 4: a teammate calling a timer
+    # ------------------------------------------------------------------
+    def _parse_call(self, body: str, raw: str,
+                    game_time: int | None) -> SpellEvent | None:
+        """Parse "jgl flash 950" -- a player saying when a spell is back.
+
+        Recognised by shape rather than by wording, because there is no wording:
+        every team spells it differently and half of them abbreviate. What makes
+        it safe is that all three parts must parse -- a lane or a champion, a real
+        spell, and a plausible clock time -- and ordinary chat almost never has
+        all three. Order is not fixed either, since "flash jgl 950" is just as
+        common as the other way round.
+
+        Nothing is decided here about *who* the lane is. The parser knows
+        champions and spells; who plays jungle is the timer manager's business,
+        and it is the one thing about a call that can still be missing when the
+        line is read.
+        """
+        words = [word for word in re.split(r"[\s,;]+", body.strip()) if word]
+        if not 3 <= len(words) <= MAX_CALL_WORDS:
+            return None
+
+        ready, consumed = self._called_time(words)
+        if ready is None:
+            return None
+        words = words[:-consumed]
+        if len(words) < 2:
+            return None
+
+        # Every contiguous window as the spell, everything else as the target.
+        # Two words each at most in practice, so the search is a dozen tries.
+        for size in (1, 2, 3):
+            for start in range(0, len(words) - size + 1):
+                spell = self._called_spell(" ".join(words[start:start + size]))
+                if spell is None:
+                    continue
+                rest = words[:start] + words[start + size:]
+                target = self._called_target(rest)
+                if target is None:
+                    continue
+                return self._build_call(target, spell, ready, raw, game_time)
+        return None
+
+    @staticmethod
+    def _called_time(words: list[str]) -> tuple[int | None, int]:
+        """The clock time a call ends with, and how many words it took.
+
+        "950", "9:50" and "9 50" are the same call. The bare form is read the way
+        a player means it: one or two digits are whole minutes, three or four are
+        minutes and seconds run together.
+        """
+        def read(text: str) -> int | None:
+            match = CALL_TIME_RE.match(text)
+            if match is None:
+                return None
+            minutes_text, seconds_text, bare = match.groups()
+            if bare is not None:
+                if len(bare) <= 2:
+                    minutes, seconds = int(bare), 0
+                else:
+                    minutes, seconds = int(bare[:-2]), int(bare[-2:])
+            else:
+                minutes, seconds = int(minutes_text), int(seconds_text)
+            if seconds > 59 or minutes > 120:
+                return None
+            return minutes * 60 + seconds
+
+        tail = words[-1].strip(".!?)")
+        # "9 50" first, where the space is a typo or OCR split the token. Before
+        # the single-token read and not after it, because "50" on its own is a
+        # perfectly good call time (50:00) and would otherwise win, turning a
+        # ten-minute Flash into a fifty-minute one.
+        if len(words) >= 3 and re.fullmatch(r"\d{2}", tail) and \
+                re.fullmatch(r"\d{1,2}", words[-2]):
+            minutes, seconds = int(words[-2]), int(tail)
+            if seconds <= 59 and minutes <= 120:
+                return minutes * 60 + seconds, 2
+        value = read(tail)
+        if value is not None:
+            return value, 1
+        return None, 0
+
+    def _called_spell(self, text: str) -> tuple[str, str, str] | None:
+        """Resolve the spell half of a call into ``(kind, key, display name)``.
+
+        Far more forgiving than :meth:`_resolve_spell_strict`: this text was typed
+        by a human, so "flash" on a French client, "tp", "exh" and the localised
+        name all have to work. That leniency is affordable because a call is only
+        acted on when the *whole* shape parses.
+        """
+        folded = fold(text)
+        if not folded:
+            return None
+        if folded in CALL_ULT_WORDS:
+            # The champion's own ultimate; its name is filled in downstream, once
+            # a lane has been resolved to a champion.
+            return "ultimate", "ULT", ""
+
+        canonical = self._summoner_index.get(folded) or normalise_spell(folded)
+        if canonical is None:
+            canonical = _best_match(folded, self._summoner_index,
+                                    MIN_SPELL_RATIO, allow_ratio=False)
+        if canonical is None or canonical not in COOLDOWNS:
+            return None
+        spell = self.assets.spells.get(canonical)
+        return "summoner", canonical, spell.name if spell else canonical
+
+    def _called_target(self, words: list[str]) -> tuple[str, str] | None:
+        """Resolve who a call is about: ``("role", "JUNGLE")`` or a champion id.
+
+        A lane wins over a champion when both could match, because a lane is
+        what people actually type and no champion is called "mid".
+        """
+        if not words:
+            return None
+        for word in words:
+            role = role_from_word(word)
+            if role:
+                return "role", role
+
+        champion = self._resolve_called_champion(" ".join(words))
+        if champion is None:
+            return None
+        return "champion", champion.champion_id
+
+    def _resolve_called_champion(self, candidate: str) -> ChampionInfo | None:
+        """A champion named in a call: the whole side, glyph errors forgiven.
+
+        No ratio fallback and no trailing-word salvage. Both exist elsewhere to
+        survive leftover HUD text around the game's own output; here the text is
+        short and typed, and either salvage would happily find a champion inside
+        an ordinary sentence that happened to end in a number.
+        """
+        folded = fold(candidate)
+        if not folded:
+            return None
+        champion_id = self._champion_index.get(folded)
+        if champion_id is None:
+            champion_id = _best_match(folded, self._champion_index,
+                                      MIN_CHAMPION_RATIO, allow_ratio=False)
+        if champion_id is None:
+            return None
+        return self.assets.champions.get(champion_id)
+
+    def _build_call(self, target: tuple[str, str], spell: tuple[str, str, str],
+                    ready: int, raw: str, game_time: int | None
+                    ) -> SpellEvent | None:
+        kind, spell_key, spell_name = spell
+        target_kind, target_value = target
+
+        champion_id, champion_name, role = "", "", ""
+        if target_kind == "role":
+            role = target_value
+        else:
+            champion = self.assets.champions.get(target_value)
+            if champion is None:
+                return None
+            champion_id, champion_name = champion.champion_id, champion.name
+            if kind == "ultimate":
+                ult = champion.ultimate
+                spell_name = ult.name if ult is not None and ult.name else "ULT"
+
+        # Keyed on the stated ready time, so re-reading the line is suppressed
+        # while a corrected call -- a different number -- gets through.
+        signature = f"{role or champion_id}|{spell_key}|call{ready}"
+        return SpellEvent(
+            champion_id=champion_id,
+            champion_name=champion_name,
+            kind=kind,
+            spell_key=spell_key,
+            spell_name=spell_name,
+            game_time=game_time,
+            raw_line=raw,
+            signature=signature,
+            # A call is somebody's word, not the client's. It gets the same "?"
+            # the inferred form gets, and the same promotion when the game later
+            # says the spell outright.
+            certain=False,
+            target_role=role,
+            ready_at_game=ready,
+            source="call",
         )
 
     def parse_lines(self, lines: list[str]) -> list[SpellEvent]:
@@ -779,6 +1043,24 @@ class MessageParser:
                 return "ultimate", "ULT", ult.name
 
         return None
+
+    def champion_named(self, text: str) -> str | None:
+        """The champion a short label names, or None. For the role readers.
+
+        The loading screen prints a champion's name under each portrait and
+        nothing else, so the whole label has to resolve -- no salvage from
+        trailing words, no similarity ratio. Both of those exist to survive
+        leftover HUD text around the game's own sentences, and here they would
+        turn the summoner name on the card above into a champion.
+        """
+        folded = fold(text or "")
+        if len(folded) < 3:
+            return None
+        champion_id = self._champion_index.get(folded)
+        if champion_id is None:
+            champion_id = _best_match(folded, self._champion_index,
+                                      MIN_CHAMPION_RATIO, allow_ratio=False)
+        return champion_id
 
     def _record_near_miss(self, text: str) -> None:
         if text in self.near_misses:

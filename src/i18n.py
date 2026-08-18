@@ -7,7 +7,10 @@ obvious at a glance instead of hiding in whichever file happens to print it.
 The language follows the League client language chosen in the settings, because
 the two are almost never different in practice -- someone playing on an English
 client reads English. It is deliberately not read from Windows: what matters is
-the language of the chat being OCR'd, not the one the desktop is in.
+the language of the chat being OCR'd, not the one the desktop is in. Until that
+choice is made -- first launch, or a locale nobody recognises -- it is English:
+the guide that asks the question has to be written in something, and English is
+the language the most players will be able to answer it in.
 
 ``tr`` never raises. An unknown key comes back as the key itself, which shows up
 in the interface as a plain slug instead of crashing the window that was about to
@@ -27,16 +30,22 @@ LANGUAGES = (FRENCH, ENGLISH)
 # Riot's locale codes, which are what the data downloader wants.
 LOCALES = {FRENCH: "fr_FR", ENGLISH: "en_US"}
 
-_language = FRENCH
+_language = ENGLISH
 
 
 def language_for(locale: str) -> str:
-    """Map a Riot locale ("fr_FR", "en_US") onto a language code."""
-    return ENGLISH if str(locale).lower().startswith("en") else FRENCH
+    """Map a Riot locale ("fr_FR", "en_US") onto a language code.
+
+    French only when the locale says so; everything else, including a locale
+    the application never writes, comes back English. The fallback has to name
+    one of the two, and English is the one someone who has not chosen yet is
+    likeliest to read.
+    """
+    return FRENCH if str(locale).lower().startswith("fr") else ENGLISH
 
 
 def locale_for(language: str) -> str:
-    return LOCALES.get(language, LOCALES[FRENCH])
+    return LOCALES.get(language, LOCALES[ENGLISH])
 
 
 def set_language(value: str) -> str:
@@ -264,19 +273,54 @@ STRINGS: dict[str, tuple[str, str]] = {
         "Three minutes: League's display mode, your client language, framing the "
         "chat, and where the bar sits."),
     "ui.guide_open": ("Ouvrir le guide", "Open the guide"),
-    "ui.test_line_title": ("Verifier que ca marche, sans attendre un ennemi",
-                           "Check it works without waiting for an enemy"),
-    "ui.test_line_hint": (
-        "Collez cette ligne dans le chat de la partie : un timer doit apparaitre "
-        "immediatement. Si oui, la lecture de l'ecran fonctionne et il ne reste "
-        "qu'a attendre un vrai sort.",
-        "Paste this line into the game chat: a timer must appear at once. If it "
-        "does, screen reading works and all that is left is waiting for a real "
-        "spell."),
-    "ui.test_line": ("Attendez Darius Saut eclair - 245 sec.",
-                     "Wait Darius Flash - 245 sec."),
+    "ui.test_card": ("Test", "Test"),
+    "ui.test_hint": (
+        "Une vraie image de partie est fournie avec le programme. Le test la lit "
+        "de bout en bout (recherche du chat, OCR, reconnaissance des sorts) et "
+        "demarre les timers correspondants, sans attendre de partie.",
+        "A real game frame ships with the program. The test reads it end to end "
+        "(finding the chat, OCR, recognising the spells) and starts the matching "
+        "timers, with no game needed."),
+    "ui.test_run": ("Lancer le test", "Run the test"),
+    "ui.test_again": ("Relancer le test", "Run the test again"),
+    "ui.test_running": ("Lecture de l'image...", "Reading the image..."),
+    "ui.test_not_ready": (
+        "Les donnees Riot finissent de charger. Reessayez dans un instant.",
+        "Riot's data is still loading. Try again in a moment."),
+    "ui.test_pass": ("La chaine de lecture fonctionne.",
+                     "The reading chain works."),
+    "ui.test_fail_region": (
+        "Le chat n'a pas ete localise dans l'image. C'est la detection de zone "
+        "qui est en cause, pas votre configuration.",
+        "The chat was not located in the image. That points at the area "
+        "detection, not at your setup."),
+    "ui.test_fail_parse": (
+        "Le texte a bien ete lu, mais aucun sort n'y a ete reconnu.",
+        "The text was read, but no spell was recognised in it."),
+    "ui.test_fail_partial": (
+        "Une partie seulement des sorts attendus a ete reconnue.",
+        "Only some of the expected spells were recognised."),
+    "ui.test_error": ("Le test n'a pas pu tourner : {error}",
+                      "The test could not run: {error}"),
+    "ui.test_detail": (
+        "Zone trouvee {region}, {lines} lignes lues dont {chat} reconnues comme "
+        "du chat, {ms:.0f} ms",
+        "Area found {region}, {lines} lines read of which {chat} recognised as "
+        "chat, {ms:.0f} ms"),
+    "ui.test_hit": ("{champion} - {spell} : timer demarre ({time})",
+                    "{champion} - {spell}: timer started ({time})"),
+    "ui.test_hit_existing": ("{champion} - {spell} : reconnu, timer deja en cours",
+                             "{champion} - {spell}: recognised, timer already running"),
+    "ui.test_miss": ("{champion} - {spell} : non reconnu",
+                     "{champion} - {spell}: not recognised"),
+    "ui.test_scope": (
+        "Ce test ne lit pas votre ecran : il ne peut donc pas confirmer que la "
+        "capture de votre partie fonctionne. Pour ca, utilisez Cadrer le chat "
+        "pendant une partie, dans Depannage.",
+        "This test does not read your screen, so it cannot confirm that capturing "
+        "your own game works. For that, use Frame the chat during a game, under "
+        "Troubleshooting."),
     "ui.copy": ("Copier", "Copy"),
-    "ui.copied": ("Copie !", "Copied!"),
     "ui.enemies": ("Ennemis reperes", "Enemies spotted"),
     "ui.ocr_summary": ("{runs} analyses, {ms:.0f} ms, {skipped:.0f}% ignorees",
                        "{runs} reads, {ms:.0f} ms, {skipped:.0f}% skipped"),
@@ -299,15 +343,24 @@ STRINGS: dict[str, tuple[str, str]] = {
         "Put the frame over the match timer at the top of the screen. Once "
         "applied, the app reads the game clock directly instead of inferring it "
         "from chat timestamps."),
-    "ui.test_mode_scoreboard": ("Cadrer le scoreboard",
-                                "Frame the scoreboard"),
+    "ui.test_mode_scoreboard": ("Cadrer les ennemis (scoreboard)",
+                                "Frame the enemies (scoreboard)"),
     "ui.test_mode_scoreboard_tip": (
-        "Placez le cadre sur le tableau des scores (touche Tab maintenue). Ce "
-        "qu'il lit est affiche pour verification ; la zone est enregistree pour "
-        "la lecture des objets ennemis, pas encore exploitee.",
-        "Put the frame over the scoreboard (hold Tab). What it reads is shown so "
-        "you can check it; the area is saved for the enemy-item reader, which is "
-        "not wired up yet."),
+        "Maintenez Tab, puis placez le cadre sur la colonne des cinq portraits "
+        "ennemis. Chaque portrait est compare aux icones deja telechargees, et "
+        "sa position dans la colonne donne le role.",
+        "Hold Tab, then put the frame over the column of five enemy portraits. "
+        "Each portrait is compared with the icons already downloaded, and its "
+        "position in the column gives the role."),
+    "ui.test_mode_loading": ("Cadrer l'ecran de chargement",
+                             "Frame the loading screen"),
+    "ui.test_mode_loading_tip": (
+        "Placez le cadre sur la rangee des cinq ennemis, pendant le chargement. "
+        "Les noms de champions y sont ecrits, et leur ordre donne les roles : "
+        "top, jungle, mid, adc, support.",
+        "Put the frame over the row of five enemies while the game loads. Their "
+        "champion names are printed there, and their order gives the roles: top, "
+        "jungle, mid, adc, support."),
     "ui.show_overlay": ("Afficher l'overlay", "Show the overlay"),
     "ui.locked": ("Verrouille (clics traversants)", "Locked (click-through)"),
     "ui.locked_hint": (
@@ -429,6 +482,23 @@ STRINGS: dict[str, tuple[str, str]] = {
     "ui.theme_neon": ("Neon", "Neon"),
     "ui.opacity": ("Opacite :", "Opacity:"),
     "ui.scale": ("Echelle :", "Scale:"),
+    "ui.timer_font": ("Police du chrono :", "Timer font:"),
+    "ui.timer_font_auto": ("Automatique", "Automatic"),
+    "ui.timer_font_tip": (
+        "Ne concerne que le compte a rebours, pas les noms. Automatique prend la "
+        "meilleure police presente sur cette machine : des chiffres de largeur "
+        "fixe, pour que le nombre ne tressaute pas a chaque seconde.",
+        "Affects the countdown only, never the names. Automatic takes the best "
+        "face present on this machine: fixed-width digits, so the number does "
+        "not twitch on every tick."),
+    "ui.timer_size": ("Taille du chrono :", "Timer size:"),
+    "ui.timer_size_tip": (
+        "Taille du compte a rebours, independamment de l'echelle generale : de "
+        "quoi garder de grands portraits avec un nombre discret, ou l'inverse. "
+        "Les lignes se redimensionnent avec lui.",
+        "Size of the countdown, separately from the overall scale: enough to keep "
+        "large portraits with a discreet number, or the other way round. The rows "
+        "resize with it."),
     "ui.sort_by_role": ("Trier par role", "Sort by role"),
     "ui.hide_ready": ("Masquer les sorts disponibles", "Hide spells that are up"),
     "ui.ready_linger": ("Garder READY affiche :", "Keep READY on screen:"),
@@ -442,6 +512,32 @@ STRINGS: dict[str, tuple[str, str]] = {
                            "Summoner spells (exact)"),
     "ui.track_ultimates": ("Ultimes (approximatif, ~)",
                            "Ultimates (approximate, ~)"),
+    "ui.chat_calls": ("Timers annonces dans le chat",
+                      "Timers called in chat"),
+    "ui.chat_calls_tip": (
+        "Un coequipier qui tape \"jgl flash 950\" lance le timer du jungler "
+        "jusqu'a 9:50 sur l'horloge de la partie. Le role (top, jgl, mid, adc, "
+        "supp) ou le nom du champion, le sort, et l'heure : les trois sont "
+        "obligatoires. Sans heure, rien ne demarre -- \"top no flash\" n'est pas "
+        "un timer. Ces timers portent le \"?\", parce qu'ils viennent de "
+        "quelqu'un et pas du jeu.",
+        "A teammate typing \"jgl flash 950\" starts the jungler's timer until "
+        "9:50 on the game clock. The role (top, jgl, mid, adc, supp) or the "
+        "champion's name, the spell, and the time: all three are required. With "
+        "no time nothing starts -- \"top no flash\" is not a timer. These timers "
+        "carry the \"?\", because they come from somebody rather than from the "
+        "game."),
+    "ui.auto_roles": ("Lire les roles ennemis a l'ecran",
+                      "Read the enemy roles from the screen"),
+    "ui.auto_roles_tip": (
+        "L'ecran de chargement et le scoreboard listent une equipe dans l'ordre "
+        "des lignes : top, jungle, mid, adc, support. Les deux zones se cadrent "
+        "dans Depannage. Decochez pour ne garder que les roles choisis a la main "
+        "dans la liste des ennemis.",
+        "The loading screen and the scoreboard both list a team in lane order: "
+        "top, jungle, mid, adc, support. Both areas are framed on the "
+        "Troubleshooting page. Untick to keep only the roles picked by hand in "
+        "the enemies list."),
     "ui.enemy_colour": ("Uniquement les ennemis", "Enemies only"),
     "ui.enemy_colour_tip": (
         "Ne concerne que les lignes du type \"Attendez <champion> <sort> - N "
@@ -470,6 +566,41 @@ STRINGS: dict[str, tuple[str, str]] = {
     "ui.audio": ("Activer le son", "Enable sound"),
     "ui.audio_ready": ("Signaler les sorts prets", "Announce ready spells"),
     "ui.audio_warn": ("Alerte avant :", "Warn before:"),
+    "ui.audio_sfx": ("Son :", "Sound:"),
+    "ui.audio_preview": ("Ecouter", "Play"),
+    "ui.audio_preview_tip": (
+        "Joue le son de retour de sort. Choisir dans la liste le joue aussi, "
+        "meme si les notifications sont coupees.",
+        "Plays the spell-is-back cue. Picking from the list plays it too, even "
+        "when notifications are switched off."),
+
+    # -- the notification voices -----------------------------------------
+    # Named for what they sound like rather than for how they are made: nobody
+    # picks a cue by its synthesis engine. Listed in the order the settings show
+    # them, which walks through the families -- struck, metallic, breathy,
+    # sliding, wavering, swelling -- instead of shuffling them.
+    "sfx.chime": ("Carillon", "Chime"),
+    "sfx.bell": ("Cloche", "Bell"),
+    "sfx.bowl": ("Bol chantant", "Singing bowl"),
+    "sfx.marimba": ("Marimba", "Marimba"),
+    "sfx.harp": ("Harpe", "Harp"),
+    "sfx.musicbox": ("Boite a musique", "Music box"),
+    "sfx.knock": ("Toc-toc", "Knock"),
+    "sfx.tick": ("Tic", "Tick"),
+    "sfx.fmbell": ("Cloche metallique", "Metal bell"),
+    "sfx.glass": ("Verre", "Glass"),
+    "sfx.reed": ("Anche", "Reed"),
+    "sfx.clave": ("Claves", "Claves"),
+    "sfx.breath": ("Souffle", "Breath"),
+    "sfx.brush": ("Balai", "Brush"),
+    "sfx.shaker": ("Maracas", "Shaker"),
+    "sfx.hush": ("Chuchotement", "Hush"),
+    "sfx.swoop": ("Montee", "Swoop"),
+    "sfx.droplet": ("Goutte", "Droplet"),
+    "sfx.warble": ("Tremolo", "Warble"),
+    "sfx.vibrato": ("Vibrato", "Vibrato"),
+    "sfx.pad": ("Nappe", "Pad"),
+    "sfx.choir": ("Choeur", "Choir"),
     "ui.capture": ("Capture", "Capture"),
     "ui.interval": ("Intervalle :", "Interval:"),
 
@@ -485,6 +616,21 @@ STRINGS: dict[str, tuple[str, str]] = {
         "recover announcements printed before it launched. It starts in the "
         "notification area, with no window. Windows also lets you switch this "
         "entry off from Task Manager's Startup tab."),
+    "ui.open_window": ("Ouvrir la fenetre au lancement",
+                       "Open the window on launch"),
+    "ui.open_window_tip": (
+        "Decochez pour que Flashwatch demarre directement dans la zone de "
+        "notification. La fenetre reste accessible : double-cliquez l'icone de "
+        "la barre des taches.",
+        "Untick to have Flashwatch start straight in the notification area. The "
+        "window stays one double-click on the tray icon away."),
+    "ui.open_window_note": (
+        "Un demarrage avec Windows n'ouvre jamais la fenetre, quelle que soit "
+        "cette case : le programme est alors lance pour etre deja pret quand une "
+        "partie commence, pas pour etre regarde.",
+        "A start with Windows never opens the window, whatever this box says: "
+        "the program is launched then so that it is already running when a game "
+        "begins, not so that it can be looked at."),
     "ui.autostart_failed": (
         "Windows a refuse la modification (strategie de securite ?). "
         "L'entree de demarrage n'a pas ete changee.",
@@ -512,10 +658,12 @@ STRINGS: dict[str, tuple[str, str]] = {
 
     # -- enemies and their roles -----------------------------------------
     "ui.team_help": (
-        "Les champions apparaissent des qu'un sort est detecte. Attribuez un "
-        "role pour regrouper l'affichage.",
-        "Champions appear as soon as a spell is detected. Give one a role to "
-        "group the display."),
+        "Les champions apparaissent des que l'ecran de chargement ou le "
+        "scoreboard est lu, ou au premier sort detecte. Le role choisi ici "
+        "l'emporte toujours sur celui lu a l'ecran.",
+        "Champions appear as soon as the loading screen or the scoreboard is "
+        "read, or on the first spell detected. A role picked here always wins "
+        "over one read off the screen."),
     "ui.team_empty": (
         "Aucun ennemi repere pour l'instant. Ils s'ajoutent tout seuls au premier "
         "sort detecte.",
@@ -569,11 +717,12 @@ STRINGS: dict[str, tuple[str, str]] = {
     "guide.next": ("Suivant", "Next"),
     "guide.finish": ("Terminer", "Finish"),
 
-    # The seven labels under the stepper's circles.
+    # The eight labels under the stepper's circles.
     "guide.nav_language": ("Langue du client", "Client language"),
     "guide.nav_welcome": ("Bienvenue", "Welcome"),
     "guide.nav_borderless": ("Fenêtré sans bordure", "Borderless window"),
     "guide.nav_layout": ("Choisir l'affichage", "Pick a display"),
+    "guide.nav_tune": ("Le régler", "Tune it"),
     "guide.nav_place": ("Le poser", "Place it"),
     "guide.nav_proof": ("La preuve", "The proof"),
     "guide.nav_done": ("Tout est prêt", "All set"),
@@ -652,7 +801,26 @@ STRINGS: dict[str, tuple[str, str]] = {
                             "The result in the Practice Tool"),
     "guide.layout_recommended": ("Recommandé", "Recommended"),
 
-    # -- 5. place it -----------------------------------------------------
+    # -- 5. tune it ------------------------------------------------------
+    "guide.tune_title": ("Le régler", "Tune it"),
+    "guide.tune_lead": (
+        "Chaque réglage change <b>l'aperçu à droite</b> pendant que tu le "
+        "tournes.",
+        "Every setting changes <b>the preview on the right</b> as you turn "
+        "it."),
+    "guide.tune_behaviour": ("Ce qu'il affiche", "What it shows"),
+    "guide.tune_note": (
+        "Le chrono est le seul texte dont tu choisis la police : les noms "
+        "gardent celle du programme.",
+        "The countdown is the only text whose face you pick: the names keep "
+        "the program's own."),
+    "guide.tune_reset": ("Tout remettre par défaut", "Put it all back"),
+    "guide.tune_reset_ask": ("Remettre ces réglages par défaut ?",
+                             "Reset these settings to their defaults?"),
+    "guide.tune_reset_yes": ("Oui, remettre", "Yes, reset"),
+    "guide.tune_reset_no": ("Annuler", "Cancel"),
+
+    # -- 6. place it -----------------------------------------------------
     "guide.place_title": ("Le poser", "Place it"),
     "guide.place_lead": (
         "L'affichage se glisse <b>n'importe où à l'écran</b>. Déverrouille-le, "
@@ -669,13 +837,20 @@ STRINGS: dict[str, tuple[str, str]] = {
         "starts."),
     "guide.place_anywhere": ("ou n'importe où ailleurs", "or anywhere else"),
 
-    # -- 6. the proof ----------------------------------------------------
+    # -- 7. the proof ----------------------------------------------------
     "guide.proof_title": ("La preuve", "The proof"),
     "guide.proof_lead": (
-        "Colle cette ligne dans le chat de l'Outil d'entraînement. "
+        "Une vraie image de partie est fournie avec le programme. "
         "<b>Un timer apparaît</b> : la chaîne entière fonctionne.",
-        "Paste this line into the Practice Tool chat. <b>A timer appears</b>: "
+        "A real game frame ships with the program. <b>A timer appears</b>: "
         "the whole chain works."),
+    "guide.proof_action": ("Lancer le test", "Run the test"),
+    "guide.proof_running": ("Lecture...", "Reading..."),
+    # Says only what is true on a second press too, when the timers it would have
+    # started are already running. The countdown beside each spell is what reports
+    # a timer that did start.
+    "guide.proof_pass": ("{count} sorts lus sur l'image.",
+                         "{count} spells read from the frame."),
     "guide.proof_note": (
         "Rien n'est injecté dans League, sa mémoire n'est jamais lue, aucun clic "
         "ni appui de touche n'est envoyé au jeu. Uniquement les pixels déjà "
@@ -692,7 +867,7 @@ STRINGS: dict[str, tuple[str, str]] = {
         "the wrong place, this button draws a box to put over yours, and shows "
         "live what it reads underneath. It stays in Troubleshooting."),
 
-    # -- 7. all set ------------------------------------------------------
+    # -- 8. all set ------------------------------------------------------
     "guide.done_title": ("Tout est prêt !", "All set!"),
     "guide.done_lead": (
         "Ton client League of Legends est maintenant configuré et optimisé.",
@@ -740,19 +915,26 @@ STRINGS: dict[str, tuple[str, str]] = {
     "zone.title": ("Zone OCR (mode test)", "OCR zone (test mode)"),
     "zone.name_chat": ("CHAT", "CHAT"),
     "zone.name_clock": ("TEMPS DE PARTIE", "GAME CLOCK"),
-    "zone.name_scoreboard": ("SCOREBOARD", "SCOREBOARD"),
+    "zone.name_scoreboard": ("SCOREBOARD (ENNEMIS)", "SCOREBOARD (ENEMIES)"),
+    "zone.name_loading": ("ECRAN DE CHARGEMENT", "LOADING SCREEN"),
     "zone.clock_read": ("horloge lue : {value}", "clock read: {value}"),
     "zone.clock_unreadable": ("aucune horloge lisible dans ce cadre",
                               "no readable clock inside this frame"),
     "zone.clock_hint": ("Cadrez le chronometre en haut de l'ecran (mm:ss).",
                         "Frame the match timer at the top of the screen (mm:ss)."),
-    "zone.text_read": ("{count} ligne(s) lue(s) : {sample}",
-                       "{count} line(s) read: {sample}"),
-    "zone.nothing_read": ("rien de lisible dans ce cadre",
-                          "nothing readable inside this frame"),
     "zone.scoreboard_hint": (
-        "Maintenez Tab pour afficher le scoreboard, puis cadrez-le.",
-        "Hold Tab to bring up the scoreboard, then frame it."),
+        "Maintenez Tab, puis cadrez la colonne des cinq portraits ennemis "
+        "(haut en bas : top, jungle, mid, adc, support).",
+        "Hold Tab, then frame the column of five enemy portraits (top to "
+        "bottom: top, jungle, mid, adc, support)."),
+    "zone.loading_hint": (
+        "Cadrez la rangee des cinq ennemis sur l'ecran de chargement "
+        "(gauche a droite : top, jungle, mid, adc, support).",
+        "Frame the row of five enemies on the loading screen (left to right: "
+        "top, jungle, mid, adc, support)."),
+    "zone.roles_read": ("roles reconnus : {roles}", "roles recognised: {roles}"),
+    "zone.roles_none": ("aucun champion reconnu dans ce cadre",
+                        "no champion recognised inside this frame"),
     "zone.searching": ("recherche", "searching"),
     "zone.fixed": ("zone fixee", "area pinned"),
     "zone.header": ("MODE TEST  -  {width}x{height} @ {x},{y}  ({state})",

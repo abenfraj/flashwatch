@@ -29,6 +29,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 import autostart
 import chat_detector
 import i18n
+import self_test
 import settings as settings_module
 import single_instance
 import theme
@@ -41,12 +42,13 @@ from ocr import CaptureWorker
 from onboarding import Onboarding
 from overlay import Overlay
 from riot_assets import RiotAssets
+from roles import ROLES
 from settings import Settings
 from timer_manager import TimerManager
 from ui import ControlWindow, RegionPicker
 from version import __version__
-from zone_overlay import (ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD, ZONES,
-                          ZoneFrame)
+from zone_overlay import (ZONE_CHAT, ZONE_CLOCK, ZONE_LOADING,
+                          ZONE_SCOREBOARD, ZONES, ZoneFrame)
 
 log = logging.getLogger(__name__)
 
@@ -73,13 +75,20 @@ SETTING_FOR_ZONE = {
     ZONE_CHAT: "chat_region",
     ZONE_CLOCK: "clock_region",
     ZONE_SCOREBOARD: "scoreboard_region",
+    ZONE_LOADING: "loading_region",
 }
+
+# The two areas the enemy team is listed in. Unlike the clock, these are read for
+# the application's own sake and go on being read after the framing tool closes,
+# so they are registered with the worker separately.
+ROLE_ZONES = (ZONE_LOADING, ZONE_SCOREBOARD)
 
 # Labels for the tray entries that open each frame.
 TRAY_TEST_KEYS = {
     ZONE_CHAT: "tray.test_mode",
     ZONE_CLOCK: "ui.test_mode_clock",
     ZONE_SCOREBOARD: "ui.test_mode_scoreboard",
+    ZONE_LOADING: "ui.test_mode_loading",
 }
 
 
@@ -161,10 +170,14 @@ class Application:
 
         # Before anything with a label is built: the interface follows the League
         # client language chosen in the settings.
-        i18n.set_language(str(self.settings.get("locale", "fr_FR")))
+        i18n.set_language(str(self.settings.get("locale", "en_US")))
 
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
+        # Needs a QApplication to know the screen, and has to run before the
+        # capture worker registers the clock probe from these values.
+        if self.settings.fresh:
+            self._seed_zones_for_screen()
         # Created with the application, so it belongs to the Qt thread: that is
         # what makes a posted callback arrive there.
         self._invoker = UiInvoker()
@@ -188,7 +201,7 @@ class Application:
         self._update_busy = False
         self._update_percent = -1
 
-        self.assets = RiotAssets(locale=str(self.settings.get("locale", "fr_FR")))
+        self.assets = RiotAssets(locale=str(self.settings.get("locale", "en_US")))
         self.notifier = Notifier(self.settings)
 
         # Built after assets load, since both need champion data.
@@ -211,6 +224,10 @@ class Application:
         # What to put back if the chat test mode is cancelled.
         self._region_before_test: tuple[list[int] | None, bool] | None = None
         self._known_champions: set[str] = set()
+        # The last team reading handed to the timers. Kept so a reading is
+        # applied once rather than on every refresh, and so a roster that has
+        # been cleared underneath us is noticed.
+        self._applied_roles: dict[int, str] = {}
         self._boot_message = tr("boot.loading")
 
         self._connect_ui()
@@ -261,6 +278,35 @@ class Application:
         # on top of a half-built application.
         if not self.settings.get("onboarding_done"):
             QTimer.singleShot(GUIDE_DELAY_MS, self._show_guide)
+        else:
+            # Only when the guide is not taking the first run over. Both windows
+            # at once is clutter, and the guide *is* the introduction -- it hands
+            # over to the settings window itself when it is done.
+            self._open_window_if_wanted()
+
+    def _open_window_if_wanted(self) -> None:
+        """Put the window on screen if this launch is meant to.
+
+        Not delayed, unlike the guide: this is the answer to a double-click and
+        it has to feel like one. Everything it shows is built by the time this
+        runs, and the tray icon exists a few lines above it.
+        """
+        if self._should_open_window():
+            self._show_control()
+
+    def _should_open_window(self) -> bool:
+        """Whether this launch should put the window on screen.
+
+        Two ways to say no, and they are different questions. A login is not a
+        launch -- Windows started this copy so it would be running before a game,
+        not so somebody could look at it -- and that is decided by the command
+        line rather than by the setting. The setting is for somebody who launches
+        Flashwatch by hand and wants it to go straight to the tray anyway.
+        """
+        if autostart.started_by_windows():
+            log.info("started by Windows, staying in the notification area")
+            return False
+        return bool(self.settings.get("open_window_on_launch", True))
 
     # ------------------------------------------------------------------
     def _connect_ui(self) -> None:
@@ -274,6 +320,7 @@ class Application:
         self.control.settings_changed.connect(self._on_settings_changed)
         self.control.hidden_to_tray.connect(self._on_hidden_to_tray)
         self.control.guide_requested.connect(self._show_guide)
+        self.control.self_test_requested.connect(self._on_self_test)
         self.control.recentre_requested.connect(self._on_recentre)
         self.control.demo_toggled.connect(self._on_demo_toggled)
         self.control.language_changed.connect(self._on_language_changed)
@@ -283,6 +330,7 @@ class Application:
         self.control.update_skipped.connect(self._on_update_skipped)
         self.control.update_check_requested.connect(
             lambda: self._start_update_check(manual=True))
+        self.control.sfx_preview_requested.connect(self.notifier.preview)
 
     def _build_tray(self) -> None:
         """Build the tray icon and its menu.
@@ -577,6 +625,8 @@ class Application:
             # there is nothing to wait for.
             self.worker.set_probe(ZONE_CLOCK, clock_region)
 
+        self._sync_role_zones()
+
         if self.zone_frames:
             # A frame was opened while the assets were still loading. Reading it
             # touches Qt, so hop back to the UI thread for that.
@@ -610,6 +660,7 @@ class Application:
             if payload.get("session_changed"):
                 self.timers.reset(reason="session changed")
                 self._known_champions.clear()
+                self._applied_roles = {}
                 self.control.clear_team()
 
             if payload.get("frame_counted"):
@@ -636,19 +687,70 @@ class Application:
     def _sync_team(self) -> None:
         if self.timers is None:
             return
-        ids = [t.champion_id for t in self.timers.snapshot()]
+        # The roster, not just the champions with a live timer: once the loading
+        # screen has been read the whole enemy team is known, and the list is far
+        # more useful five names deep than one.
+        ids = self.timers.roster()
         fresh = [cid for cid in ids if cid not in self._known_champions]
         if fresh:
             self._known_champions.update(fresh)
             self.control.sync_team(fresh, self._on_role_changed)
-        # Reflect roles the manager inferred, e.g. Smite implies jungle.
-        for timer in self.timers.snapshot():
-            if timer.role:
-                self.control.set_role_display(timer.champion_id, timer.role)
+        for champion_id in ids:
+            role = self.timers.role_of(champion_id)
+            if role:
+                self.control.set_role_display(champion_id, role)
 
     def _on_role_changed(self, champion_id: str, role: str) -> None:
         if self.timers is not None:
             self.timers.set_role(champion_id, role)
+
+    # ------------------------------------------------------------------
+    # The enemy's lanes, read off the screen
+    # ------------------------------------------------------------------
+    def _sync_role_zones(self) -> None:
+        """Point the worker at the loading screen and the scoreboard, or not.
+
+        Called whenever the setting or either rectangle changes. Dropping the
+        regions rather than leaving the worker to check the setting on every pass
+        is what makes "off" cost nothing at all.
+        """
+        if self.worker is None:
+            return
+        wanted = bool(self.settings.get("auto_roles", True))
+        for zone in ROLE_ZONES:
+            region = (self._saved_region(SETTING_FOR_ZONE[zone]) if wanted
+                      else None)
+            self.worker.set_role_region(zone, region)
+
+    def _apply_read_roles(self, status) -> None:
+        """Take the lanes the worker read and give them to the timers.
+
+        The worker only ever offers a reading two separate looks agreed on, so
+        there is nothing left to vet here; what this decides is when to stop
+        looking, which is as soon as the whole team is known.
+        """
+        if self.timers is None or not self.settings.get("auto_roles", True):
+            return
+
+        if self._applied_roles and not self.timers.roster():
+            # The timers cleared themselves without going through this class --
+            # a game restart worked out from the clock alone. The team we applied
+            # belongs to the game that just ended, so forget it and ask for a
+            # fresh look rather than putting the old one back.
+            self._applied_roles = {}
+            if self.worker is not None:
+                self.worker.set_roles_wanted(True)
+            return
+
+        if not status.roles or status.roles == self._applied_roles:
+            return
+        self._applied_roles = dict(status.roles)
+        if self.timers.set_roles(status.roles, source=status.roles_source):
+            self._sync_team()
+        if len(status.roles) >= len(ROLES) and self.worker is not None:
+            # Every lane is filled in. Reading on would spend a capture and an
+            # icon comparison every couple of seconds to learn nothing.
+            self.worker.set_roles_wanted(False)
 
     # ------------------------------------------------------------------
     def _refresh_ui(self) -> None:
@@ -682,13 +784,16 @@ class Application:
             # time itself, so it outranks anything inferred from chat timestamps.
             self.timers.note_clock(status.game_clock)
 
+        self._apply_read_roles(status)
+
         for zone, frame in self.zone_frames.items():
             if not frame.isVisible():
                 continue
             rows = (status.rows if zone == ZONE_CHAT
                     else status.probe_rows.get(zone, []))
             frame.set_feedback(rows, exploring=status.exploring,
-                               note=f"{status.last_ocr_ms:.0f} ms")
+                               note=f"{status.last_ocr_ms:.0f} ms",
+                               roles=status.role_notes.get(zone, ""))
 
         if snapshot:
             # Timers take over the display; a stale status line must not linger
@@ -738,6 +843,57 @@ class Application:
         return "waiting"
 
     # ------------------------------------------------------------------
+    # The self-test
+    # ------------------------------------------------------------------
+    def _on_self_test(self, *, guide: bool = False) -> None:
+        """Read the shipped sample frame, then start the timers it names.
+
+        Handed to the capture worker rather than run here: it owns the loaded OCR
+        engine, and reading the sample takes about a second -- long enough to
+        freeze a window if it happened on the Qt thread.
+
+        ``guide`` says which surface asked, and therefore which one is answered.
+        Both offer the test and the verdict belongs where it was asked for.
+        """
+        if self.worker is None or self.timers is None or not self.assets.ready:
+            # Reported through the same path as any other failure, so both
+            # surfaces already know how to show it.
+            self._report_self_test(
+                self_test.SelfTestResult(error=tr("ui.test_not_ready")),
+                guide=guide)
+            return
+        self.worker.request_self_test(
+            lambda result: self._invoker.post(
+                lambda: self._finish_self_test(result, guide=guide)))
+
+    def _finish_self_test(self, result, *, guide: bool = False) -> None:
+        """Back on the Qt thread with the verdict: start timers, then report."""
+        if self.timers is None:
+            return
+        started: dict[tuple[str, str], str] = {}
+        if result.events:
+            # force: priming counts *captured* frames, so with League closed it
+            # would never end and these events would be dropped in silence. Only
+            # these -- a game's own chat history stays primed away.
+            fresh = self.timers.handle_events(result.timer_events(), force=True)
+            for timer in fresh:
+                started[timer.key] = timer.display()
+                self.control.add_event(f"{timer.champion_name} - "
+                                       f"{timer.spell_name} ({timer.display()})")
+            self._sync_team()
+        self._report_self_test(result, started, guide=guide)
+
+    def _report_self_test(self, result, started: dict | None = None, *,
+                          guide: bool = False) -> None:
+        """Show a verdict on whichever surface asked for it, if it is still open."""
+        started = started or {}
+        if guide:
+            if self.guide is not None:
+                self.guide.show_test_result(result, started)
+            return
+        self.control.show_test_result(result, started)
+
+    # ------------------------------------------------------------------
     def _on_redetect(self) -> None:
         if self.worker is not None:
             self.settings.set("chat_region_locked", False)
@@ -769,10 +925,11 @@ class Application:
     # ------------------------------------------------------------------
     # Test mode: live frames the user drags onto the areas to read
     # ------------------------------------------------------------------
-    # Three areas, one frame each, all placed the same way. Only the chat is
-    # detected automatically; the game clock and the scoreboard have no reliable
-    # signature to search for, so being able to point at them by hand *is* the
-    # feature rather than a fallback.
+    # Four areas, one frame each, all placed the same way. Only the chat is
+    # detected automatically; the clock, the scoreboard and the loading screen
+    # have no reliable signature to search for -- and the loading screen is gone
+    # before anything could confirm a guess about it -- so being able to point at
+    # them by hand *is* the feature rather than a fallback.
     def _on_test_mode_from_tray(self, zone: str, enabled: bool) -> None:
         """Route the tray entry through the button, so both stay in step."""
         self.control.sync_test_mode(zone, enabled)
@@ -831,6 +988,46 @@ class Application:
             return None
         return ChatRegion(x, y, w, h, source="manual", confirmed=True)
 
+    def _screen_rect(self) -> tuple[int, int, int, int]:
+        """The primary screen in *native* pixels, as a window rect would be.
+
+        Scaled by the device pixel ratio deliberately: everything read off the
+        screen is captured in native pixels, so a 150%-scaled 4K desktop must
+        report 3840 wide and not the 2560 Qt works in.
+        """
+        screen = self.app.primaryScreen()
+        area = screen.geometry() if screen is not None else None
+        if area is None:
+            return (0, 0, 1920, 1080)
+        ratio = float(screen.devicePixelRatio())
+        return (int(area.x() * ratio), int(area.y() * ratio),
+                int(area.width() * ratio), int(area.height() * ratio))
+
+    def _seed_zones_for_screen(self) -> None:
+        """Put the hand-placed areas where this screen keeps them, once.
+
+        The shipped defaults are 1920x1080 pixel rectangles, so on any other
+        screen they point at nothing: the clock probe would read empty pixels
+        every 0.9s for the life of the install, and the framing tool would open
+        far from the thing to frame. Both areas sit at a fixed *place* in League's
+        HUD, so the fraction carries across resolutions where the pixel count
+        does not.
+
+        First run only, and only for the areas in the table -- a value the user
+        has placed by hand is never touched, and the chat region is not scaled at
+        all (see settings.ZONE_FRACTIONS for why a plausible wrong chat seed is
+        worse than none).
+        """
+        window = self._screen_rect()
+        values = {key: settings_module.scaled_region(key, window)
+                  for key in settings_module.ZONE_FRACTIONS}
+        if values == {key: list(self.settings.get(key) or [])
+                      for key in values}:
+            return
+        self.settings.update(values)
+        log.info("seeded the hand-placed areas for a %dx%d screen: %s",
+                 window[2], window[3], values)
+
     def _starting_region(self, zone: str) -> ChatRegion:
         """Where to put a frame when it opens.
 
@@ -846,27 +1043,16 @@ class Application:
         status = getattr(self, "_latest_status", None)
         window = status.window_rect if status is not None else None
         if window is None:
-            screen = self.app.primaryScreen()
-            area = screen.geometry() if screen is not None else None
-            ratio = float(screen.devicePixelRatio()) if screen is not None else 1.0
-            if area is None:
-                window = (0, 0, 1920, 1080)
-            else:
-                window = (int(area.x() * ratio), int(area.y() * ratio),
-                          int(area.width() * ratio), int(area.height() * ratio))
-        left, top, width, height = window
-
-        if zone == ZONE_CLOCK:
-            # Top centre: the match timer sits in the middle of the top bar.
-            box_w, box_h = int(width * 0.07), int(height * 0.035)
-            return ChatRegion(left + (width - box_w) // 2, top + int(height * 0.01),
-                              box_w, box_h, source="manual", confirmed=True)
-        if zone == ZONE_SCOREBOARD:
-            # The Tab panel covers the middle of the screen.
-            box_w, box_h = int(width * 0.66), int(height * 0.5)
-            return ChatRegion(left + (width - box_w) // 2,
-                              top + int(height * 0.22), box_w, box_h,
-                              source="manual", confirmed=True)
+            window = self._screen_rect()
+        # The clock and the scoreboard have one guess each, and it is the same
+        # table that seeds them on a fresh install: a frame that opened somewhere
+        # else than where the shipped default points would be two answers to one
+        # question. (It used to put the clock top *centre*, which is not where
+        # League draws it -- the timer sits at the top right, beside the minimap.)
+        scaled = settings_module.scaled_region(SETTING_FOR_ZONE[zone], window)
+        if scaled is not None:
+            x, y, w, h = scaled
+            return ChatRegion(x, y, w, h, source="manual", confirmed=True)
 
         # Chat: what is being read right now beats any guess.
         if status is not None and status.region_rect:
@@ -885,6 +1071,8 @@ class Application:
                 self.worker.set_manual_region(frame.region())
             else:
                 self.worker.set_probe(zone, frame.region())
+                if zone in ROLE_ZONES:
+                    self.worker.set_role_region(zone, frame.region())
 
     def _on_test_region_changed(self, zone: str, region: ChatRegion) -> None:
         """Point the worker at the frame, without persisting anything yet."""
@@ -894,6 +1082,13 @@ class Application:
             self.worker.set_manual_region(region)
         else:
             self.worker.set_probe(zone, region)
+        if zone in ROLE_ZONES:
+            # The reader follows the frame too, so the footer can say which
+            # champions the rectangle currently covers. Looking is switched back
+            # on for the same reason: somebody framing this area wants to see it
+            # working, whether or not the team is already known.
+            self.worker.set_role_region(zone, region)
+            self.worker.set_roles_wanted(True)
 
     def _on_test_applied(self, zone: str, region: ChatRegion) -> None:
         if zone == ZONE_CHAT:
@@ -908,6 +1103,7 @@ class Application:
             self.settings.set(SETTING_FOR_ZONE[zone], region.as_list())
             if self.worker is not None:
                 self.worker.set_probe(zone, region)
+            self._sync_role_zones()
         log.info("test mode: %s region validated %s", zone, region.describe())
         self.tray.showMessage(
             "Flashwatch",
@@ -921,6 +1117,7 @@ class Application:
             # of pointing the worker back at the saved rectangle, if any.
             if self.worker is not None:
                 self.worker.set_probe(zone, self._probe_after_close(zone))
+            self._sync_role_zones()
             log.info("test mode: %s cancelled", zone)
             return
 
@@ -944,9 +1141,10 @@ class Application:
     def _probe_after_close(self, zone: str) -> ChatRegion | None:
         """What the worker should keep reading once a frame is closed.
 
-        The clock keeps being read, because its value is used. The scoreboard is
-        stored but has no consumer yet, so reading it after the user has finished
-        placing it would be pure cost.
+        Only the clock. The two team areas are read as well, and go on being read
+        after the frame closes -- but through the role reader rather than as
+        probes, since a probe is an OCR pass and the scoreboard needs an icon
+        comparison instead. See :meth:`_sync_role_zones`.
         """
         if zone != ZONE_CLOCK:
             return None
@@ -959,6 +1157,7 @@ class Application:
                 self.worker.set_test_mode(False)
             else:
                 self.worker.set_probe(zone, self._probe_after_close(zone))
+                self._sync_role_zones()
         self.control.sync_test_mode(zone, False)
         self._sync_test_action(zone, False)
 
@@ -966,7 +1165,13 @@ class Application:
         if self.timers is not None:
             self.timers.reset(reason="manual reset")
         self._known_champions.clear()
+        self._applied_roles = {}
         self.control.clear_team()
+        # The reset cleared the roles with everything else, so start looking for
+        # them again -- otherwise pressing it in a game whose team had already
+        # been read would leave every lane unknown until the next match.
+        if self.worker is not None:
+            self.worker.set_roles_wanted(True)
 
     def _on_overlay_visible(self, visible: bool) -> None:
         self.settings.set("overlay_visible", visible)
@@ -1004,9 +1209,12 @@ class Application:
             self.guide.finished.connect(self._on_guide_finished)
             self.guide.language_changed.connect(self._on_language_changed)
             self.guide.layout_changed.connect(self._on_layout_changed)
+            self.guide.settings_changed.connect(self._on_guide_tuned)
             self.guide.place_requested.connect(self._on_place_overlay)
             self.guide.chat_frame_requested.connect(
                 lambda: self.control.button_test_mode.setChecked(True))
+            self.guide.self_test_requested.connect(
+                lambda: self._on_self_test(guide=True))
         if step:
             self.guide.show_step(step)
         self.guide.show()
@@ -1023,6 +1231,16 @@ class Application:
         self.control.refresh_layout_choice()
         self.control.go_to_display_page()
         self._show_control()
+
+    def _on_guide_tuned(self) -> None:
+        """A knob was turned on the guide's tuning step.
+
+        The settings window has to be told before the overlay is: it writes all
+        of its controls in one go whenever any of them moves, so one left open
+        behind the guide would undo this the next time it was touched.
+        """
+        self.control.refresh_display_settings()
+        self._on_settings_changed()
 
     def _on_layout_changed(self, _key: str) -> None:
         """A display was picked: move the overlay onto its own geometry."""
@@ -1164,6 +1382,7 @@ class Application:
         self._connect_ui()
         # The team list starts empty again, so let the next sync refill it.
         self._known_champions.clear()
+        self._applied_roles = {}
         self._sync_team()
         # A running trial belongs to the application, not to the window that
         # happened to start it: a fresh window would otherwise offer to start the
@@ -1195,7 +1414,7 @@ class Application:
 
     def _reload_assets(self) -> None:
         """Fetch Riot's data in the new locale, off the UI thread."""
-        locale = str(self.settings.get("locale", "fr_FR"))
+        locale = str(self.settings.get("locale", "en_US"))
         assets = RiotAssets(locale=locale)
         try:
             assets.bootstrap(progress=self._set_boot_message)
@@ -1229,11 +1448,18 @@ class Application:
         if self.timers is not None:
             self.timers.reset(reason="language changed")
         self._known_champions.clear()
+        self._applied_roles = {}
         self._rebuild_interface()
         self._set_boot_message(tr("boot.waiting"))
         log.info("assets reloaded for %s", assets.locale)
 
     def _on_settings_changed(self) -> None:
+        # Turning the role readers off has to actually stop them, not merely stop
+        # the result being used: the point of the switch is the work it saves.
+        self._sync_role_zones()
+        # Before the repaint below, since it decides how tall a row is.
+        self.overlay.sync_countdown_style()
+        self.notifier.refresh()
         # Opacity is not set on the window any more -- it is painted into the
         # panel, so the repaint at the end of this method is what applies it.
         self.overlay.refresh_visibility()
@@ -1307,7 +1533,7 @@ def main() -> int:
     log.info("starting Flashwatch v%s", __version__)
 
     # Before the guard, so its message is in the user's language.
-    i18n.set_language(str(Settings().get("locale", "fr_FR")))
+    i18n.set_language(str(Settings().get("locale", "en_US")))
     global _instance_guard
     _instance_guard = acquire_single_instance()
     if _instance_guard is None:

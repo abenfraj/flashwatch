@@ -83,15 +83,23 @@ BUTTON_OK = QColor(30, 96, 60, 240)
 ZONE_CHAT = "chat"
 ZONE_CLOCK = "clock"
 ZONE_SCOREBOARD = "scoreboard"
-ZONES = (ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD)
+ZONE_LOADING = "loading"
+ZONES = (ZONE_CHAT, ZONE_CLOCK, ZONE_SCOREBOARD, ZONE_LOADING)
 
 # Smallest sensible rectangle per zone, in physical pixels. The chat needs room
 # for several lines; the clock is five glyphs and forcing a chat-sized box around
 # it would drag in the minimap and the scoreboard button.
+#
+# The two team areas are shaped like what they hold: the scoreboard's enemy
+# portraits are a narrow column of five, the loading screen's cards a wide row of
+# five. Both are cut into five equal cells, so a frame that is the wrong way round
+# would put every lane in the wrong cell -- hence minimums that make the intended
+# shape the obvious one.
 MIN_REGION = {
     ZONE_CHAT: (120, 48),
     ZONE_CLOCK: (56, 18),
-    ZONE_SCOREBOARD: (200, 60),
+    ZONE_SCOREBOARD: (48, 120),
+    ZONE_LOADING: (240, 60),
 }
 
 
@@ -102,10 +110,10 @@ class ZoneFrame(QWidget):
     the capture worker at the new rectangle immediately; :attr:`applied` and
     :attr:`cancelled` end the test mode.
 
-    The same frame serves all three areas -- chat, game clock, scoreboard -- and
-    ``zone`` decides what it is called and what its readout means. Sharing the
-    widget is what keeps the fiddly part (physical pixels, the hollow middle, the
-    edge grabbing) in one place.
+    The same frame serves every area -- chat, game clock, loading screen,
+    scoreboard -- and ``zone`` decides what it is called and what its readout
+    means. Sharing the widget is what keeps the fiddly part (physical pixels, the
+    hollow middle, the edge grabbing) in one place.
     """
 
     region_changed = Signal(object)     # ChatRegion
@@ -134,6 +142,8 @@ class ZoneFrame(QWidget):
         self._last_chat = ""
         # For the clock zone: the value parsed out of what was read, or "".
         self._clock_text = ""
+        # For the two team zones: the lanes the reader recognised, or "".
+        self._role_summary = ""
         self._button_apply = QRect()
         self._button_cancel = QRect()
 
@@ -229,7 +239,8 @@ class ZoneFrame(QWidget):
     # ------------------------------------------------------------------
     # Live feedback from the capture worker
     # ------------------------------------------------------------------
-    def set_feedback(self, rows, *, exploring: bool, note: str = "") -> None:
+    def set_feedback(self, rows, *, exploring: bool, note: str = "",
+                     roles: str = "") -> None:
         """Show what the last OCR pass found inside the frame.
 
         ``rows`` is the pipeline's ``(rect, text, is_chat_line)`` list, in screen
@@ -240,6 +251,7 @@ class ZoneFrame(QWidget):
         self._rows = list(rows or [])
         self._exploring = exploring
         self._ocr_note = note
+        self._role_summary = roles
         if self.zone == ZONE_CLOCK:
             clock = parse_clock(" ".join(text for _r, text, _c in self._rows))
             self._clock_text = ("" if clock is None
@@ -509,14 +521,15 @@ class ZoneFrame(QWidget):
                         tr("zone.clock_hint"))
             return tr("zone.clock_unreadable"), False, tr("zone.clock_hint")
 
-        if self.zone == ZONE_SCOREBOARD:
-            texts = [text for _r, text, _c in self._rows if text]
-            if not texts:
-                return (tr("zone.nothing_read"), False,
-                        tr("zone.scoreboard_hint"))
-            return (tr("zone.text_read", count=len(texts),
-                       sample=" | ".join(texts[:3])), True,
-                    tr("zone.scoreboard_hint"))
+        if self.zone in (ZONE_SCOREBOARD, ZONE_LOADING):
+            # Judged on the lanes it produced, not on the text it saw. The
+            # scoreboard has no champion names in it to read at all -- its
+            # portraits are matched against the cached icons -- so counting rows
+            # there would report success while nothing was recognised.
+            hint = tr(f"zone.{self.zone}_hint")
+            if self._role_summary:
+                return tr("zone.roles_read", roles=self._role_summary), True, hint
+            return tr("zone.roles_none"), False, hint
 
         chat_rows = sum(1 for _r, _t, is_chat in self._rows if is_chat)
         # Labelled as the *last* line rather than the current one: it is kept on
