@@ -288,6 +288,14 @@ check("an ultimate is never refused for not being a summoner",
       parser.parse_line(
           f"(12:34) Darius used {assets.champions['Darius'].ultimate.name}")
       is not None)
+check("an upgraded spell is its family: Unleashed Teleport is Teleport",
+      (up := parser.parse_line("12:34 Bob (Garen): Darius used Unleashed Teleport"))
+      is not None and up.spell_key == "Teleport", str(up and up.spell_key))
+check("and an evolved Smite is Smite",
+      (up := parser.parse_line("12:34 Bob (Garen): Lee Sin used Primal Smite"))
+      is not None and up.spell_key == "Smite", str(up and up.spell_key))
+check("but only a spell the enemy took: nobody here has an upgraded Ghost",
+      parser.parse_line("12:34 Bob (Garen): Darius used Spectral Ghost") is None)
 parser.set_roster(None)
 check("forgetting the roster restores the open field",
       parser.parse_line("12:34 Bob (Garen): Ahri used Flash") is not None)

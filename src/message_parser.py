@@ -187,6 +187,9 @@ MIN_SPELL_RATIO = 0.80
 # similarity ratio well below the open-field one still decides.
 ROSTER_EXTRA_EDITS = 1
 ROSTER_MIN_RATIO = 0.62
+# How many letters an upgraded spell's name may add to its family's: "Unleashed"
+# is nine, "déchaînée" nine, and anything much longer is a sentence.
+UPGRADE_EXTRA_LETTERS = 12
 
 # A chat line leads with the game clock. Allowing a few characters of slack
 # covers an OCR'd bracket or stray speck before it.
@@ -610,8 +613,18 @@ class MessageParser:
         theirs = self._their_spells(champion)
         if not theirs:
             return None
-        return _loose_pick(folded, self._spell_options(
-            theirs, localised_only=localised_only), allow_ratio=not localised_only)
+        options = self._spell_options(theirs, localised_only=localised_only)
+        hit = _loose_pick(folded, options, allow_ratio=not localised_only)
+        if hit is not None:
+            return hit
+        # An upgraded spell keeps its family's name inside its own: "Unleashed
+        # Teleport" after 10:00, the evolved Smites, "Téléportation déchaînée".
+        # Against the two spells this enemy took, a name containing exactly one
+        # of them can only be that one.
+        inside = {value for name, value in options.items()
+                  if len(name) >= 4 and name in folded
+                  and len(folded) - len(name) <= UPGRADE_EXTRA_LETTERS}
+        return inside.pop() if len(inside) == 1 else None
 
     def _record_roster_reject(self, text: str) -> None:
         if text in self.roster_rejects:
