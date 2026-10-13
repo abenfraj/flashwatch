@@ -995,7 +995,7 @@ footer .legal{padding-top:18px;border-top:1px solid var(--edge);
       <div>
         <div class="kicker rise" data-i18n="hero.kicker">Overlay · League of Legends · Windows</div>
         <h1 class="rise" data-i18n="hero.h1">Enemy cooldowns,<br><em>read off the screen</em>.</h1>
-        <p class="lede rise" data-i18n="hero.lede">A free summoner spell timer for League of Legends. The program reads the match chat, recognises what the enemy team has used — Flash, Teleport, Heal, ultimates — and shows a discreet bar at the top of your screen. No key to press, nothing to configure mid-game.</p>
+        <p class="lede rise" data-i18n="hero.lede">A free summoner spell timer for League of Legends. The program reads the match chat, recognises what the enemy team has used — Flash, Teleport, Heal, ultimates — and shows the enemy team at the side of your screen, every spell greyed and counting down while it is down. No key to press, nothing to configure mid-game, and it stays asleep in ARAM and Arena.</p>
       </div>
 
       <div class="hero-side rise">
@@ -1084,19 +1084,19 @@ footer .legal{padding-top:18px;border-top:1px solid var(--edge);
       <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8 4.6 5.9v5.4c0 4.6 3.1 8.4 7.4 9.9 4.3-1.5 7.4-5.3 7.4-9.9V5.9Z"/><path d="M9 12.2l2.1 2.1L15.4 10"/></svg>
       <div>
         <div class="kicker" data-i18n="rules.kicker">Fair play</div>
-        <h2 data-i18n="rules.h2">It reads your screen. That is the whole trick.</h2>
-        <p class="lede" data-i18n="rules.lede">Flashwatch never touches League of Legends. It watches the same pixels you are looking at and does the arithmetic you would otherwise do in your head — which is the entire reason it can be built this way at all.</p>
+        <h2 data-i18n="rules.h2">It reads your screen and your scoreboard. Nothing else.</h2>
+        <p class="lede" data-i18n="rules.lede">Flashwatch never touches League of Legends' memory or files. It reads the chat you are looking at, and the data feed the game itself publishes on your PC for companion apps — the same information as the scoreboard — and does the arithmetic you would otherwise do in your head.</p>
       </div>
     </div>
 
     <div class="rules-grid">
       <div>
-        <h3 data-i18n="rules.1.h">No contact with the game</h3>
-        <p data-i18n="rules.1.p">No injection, no memory reading, no game file touched, no keystroke or click sent, no connection to the game servers. The program and League never meet.</p>
+        <h3 data-i18n="rules.1.h">Nothing injected, nothing sent</h3>
+        <p data-i18n="rules.1.p">No injection, no memory reading, no game file touched, no keystroke or click sent, no connection to the game servers. The only thing it asks the game for is the read-only feed Riot provides for apps like this one, on your own machine.</p>
       </div>
       <div>
         <h3 data-i18n="rules.2.h">No information you did not have</h3>
-        <p data-i18n="rules.2.p">Every timer starts from a line the game itself printed in your own chat. Nothing is revealed, nothing is guessed — it counts down what you could have counted yourself.</p>
+        <p data-i18n="rules.2.p">Every timer starts from a line the game itself printed in your own chat, and its length from what the scoreboard shows: the enemy's boots, runes and level. Nothing is revealed — it counts down what you could have counted yourself.</p>
       </div>
       <div>
         <h3 data-i18n="rules.3.h">Nothing you cannot check</h3>
@@ -1208,7 +1208,7 @@ footer .legal{padding-top:18px;border-top:1px solid var(--edge);
 
     <div class="guide-card" data-i18n="cfg.guide">
       <h3>The first launch walks you through it</h3>
-      <p>You do not have to find any of this on your own. On the very first run a full-window guide opens and takes you through it in order — and it ends on proof rather than on a promise: you paste one line into the Practice Tool chat and watch a timer start.</p>
+      <p>You do not have to find any of this on your own. On the very first run a full-window guide opens and takes you through it in order — and it ends on proof rather than on a promise: one button reads a real game frame that ships with the program and starts the timers it finds in it.</p>
       <div class="guide-steps">
         <span><i>1</i>Client language</span>
         <span><i>2</i>Welcome</span>
@@ -1436,7 +1436,7 @@ writes that sentence, and it carries a remaining time.</pre>
       <div class="sec-num">06</div>
       <div>
         <h2 data-i18n="safe.h2">What it does, what it does not</h2>
-        <p class="lede" data-i18n="safe.lede">The program behaves like someone watching your screen over your shoulder and counting in their head.</p>
+        <p class="lede" data-i18n="safe.lede">The program behaves like someone watching your screen and your scoreboard over your shoulder, and counting in their head.</p>
       </div>
     </div>
     <div class="safe">
@@ -1458,6 +1458,7 @@ writes that sentence, and it carries a remaining time.</pre>
           <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> <span data-i18n="safe.y3">Countdowns computed on your machine</span></li>
           <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> <span data-i18n="safe.y4">A transparent window over the game</span></li>
           <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> <span data-i18n="safe.y5">A one-off download of the public icons</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> <span data-i18n="safe.y6">The game's local, read-only data feed: mode, clock, the scoreboard</span></li>
         </ul>
       </div>
     </div>
@@ -1594,7 +1595,7 @@ const FR = {
 
   "hero.kicker": "Overlay · League of Legends · Windows",
   "hero.h1": "Les cooldowns<br>ennemis, <em>lus à l'écran</em>.",
-  "hero.lede": "Le programme lit le chat de la partie, reconnaît les sorts d'invocateur utilisés en face, et affiche une barre discrète en haut de ton écran. Aucune touche à presser, rien à configurer pendant la partie.",
+  "hero.lede": "Le programme lit le chat de la partie, reconnaît les sorts d'invocateur utilisés en face, et affiche l'équipe ennemie sur le côté de ton écran, chaque sort grisé avec son décompte tant qu'il recharge. Aucune touche à presser, rien à configurer pendant la partie, et il reste endormi en ARAM et en Arène.",
   "hero.readout":
     "<div><span>jeu</span><b>En jeu (1920×1080)</b></div>" +
     "<div><span>zone de chat</span><b>806×190 @ 140,439</b></div>" +
@@ -1617,12 +1618,12 @@ const FR = {
   "demo.cap2": "<b>READY</b> reste 5 s, puis la ligne disparaît",
 
   "rules.kicker": "Jeu réglo",
-  "rules.h2": "Il lit ton écran. C'est tout le truc.",
-  "rules.lede": "Flashwatch ne touche jamais à League of Legends. Il regarde les pixels que tu regardes déjà et fait le calcul que tu ferais de tête — ce qui est précisément la raison pour laquelle il peut être construit ainsi.",
-  "rules.1.h": "Aucun contact avec le jeu",
-  "rules.1.p": "Aucune injection, aucune lecture mémoire, aucun fichier du jeu touché, aucune touche ni aucun clic envoyé, aucune connexion aux serveurs de jeu. Le programme et League ne se rencontrent jamais.",
+  "rules.h2": "Il lit ton écran et ton tableau des scores. Rien d'autre.",
+  "rules.lede": "Flashwatch ne touche jamais à la mémoire ni aux fichiers de League of Legends. Il lit le chat que tu regardes déjà, et les données que le jeu publie lui-même sur ton PC pour les applications compagnons — les mêmes que le tableau des scores — puis fait le calcul que tu ferais de tête.",
+  "rules.1.h": "Rien d'injecté, rien d'envoyé",
+  "rules.1.p": "Aucune injection, aucune lecture mémoire, aucun fichier du jeu touché, aucune touche ni aucun clic envoyé, aucune connexion aux serveurs de jeu. La seule chose qu'il demande au jeu, c'est le flux en lecture seule que Riot prévoit pour ce genre d'application, sur ta propre machine.",
   "rules.2.h": "Aucune information que tu n'avais pas",
-  "rules.2.p": "Chaque timer part d'une ligne que le jeu a lui-même écrite dans ton propre chat. Rien n'est révélé, rien n'est deviné : il décompte ce que tu aurais pu décompter toi-même.",
+  "rules.2.p": "Chaque timer part d'une ligne que le jeu a lui-même écrite dans ton propre chat, et sa durée de ce que montre le tableau des scores : les bottes, les runes et le niveau de l'ennemi. Rien n'est révélé : il décompte ce que tu aurais pu décompter toi-même.",
   "rules.3.h": "Rien que tu ne puisses vérifier",
   "rules.3.p": "Le code source est public et l'exécutable en est construit par un workflow automatisé que tu peux inspecter. L'onglet debug montre chaque ligne lue, telle qu'elle a été lue.",
   "rules.foot": "Flashwatch est un projet indépendant, sans affiliation avec Riot Games ni approbation de leur part, et rien ici ne parle en leur nom. Ce qui est décrit ci-dessus est ce que le programme fait — et tout est vérifiable dans le code source. La liste exhaustive est dans <a href=\"#securite\">ce qu'il fait, ce qu'il ne fait pas</a>.",
@@ -1662,7 +1663,7 @@ const FR = {
   "cfg.lede": "Le reste marche par défaut. Ces deux-là, non — et sans elles tu ne verras rien.",
   "cfg.guide":
     "<h3>Le premier lancement te prend par la main</h3>" +
-    "<p>Tu n'as rien à trouver tout seul. Au tout premier démarrage, un guide plein écran s'ouvre et te fait passer les étapes dans l'ordre — et il se termine sur une preuve plutôt que sur une promesse : tu colles une ligne dans le chat de l'Outil d'entraînement et tu regardes un timer démarrer.</p>" +
+    "<p>Tu n'as rien à trouver tout seul. Au tout premier démarrage, un guide plein écran s'ouvre et te fait passer les étapes dans l'ordre — et il se termine sur une preuve plutôt que sur une promesse : un bouton lit une vraie image de partie fournie avec le programme et démarre les timers qu'il y trouve.</p>" +
     "<div class=\"guide-steps\">" +
       "<span><i>1</i>Langue du client</span>" +
       "<span><i>2</i>Bienvenue</span>" +
@@ -1759,7 +1760,7 @@ jamais cette phrase, et elle porte un temps restant.</pre>`,
   "how.tail": "Un timer posé n'est plus modifié : la même ligne relue, une ligne révélée en remontant le chat, ou un horodatage mal lu ne peuvent plus décaler un compte à rebours en cours. Seule une annonce impliquant nettement plus de temps est traitée comme un nouveau cast.",
 
   "safe.h2": "Ce qu'il fait, ce qu'il ne fait pas",
-  "safe.lede": "Le programme se comporte comme quelqu'un qui regarde ton écran par-dessus ton épaule et compte dans sa tête.",
+  "safe.lede": "Le programme se comporte comme quelqu'un qui regarde ton écran et ton tableau des scores par-dessus ton épaule, et compte dans sa tête.",
   "safe.never": "Jamais",
   "safe.n1": "Aucune injection dans League of Legends",
   "safe.n2": "Aucune lecture de la mémoire du jeu",
@@ -1772,6 +1773,7 @@ jamais cette phrase, et elle porte un temps restant.</pre>`,
   "safe.y3": "Des comptes à rebours calculés sur ta machine",
   "safe.y4": "Une fenêtre transparente par-dessus le jeu",
   "safe.y5": "Le téléchargement des icônes publiques, une fois",
+  "safe.y6": "Le flux de données local du jeu, en lecture seule : mode, horloge, tableau des scores",
 
   "ver.h2": "Toutes les versions",
   "ver.lede": "Chaque version publiée reste téléchargeable, avec ses notes. Si une nouvelle sème le désordre, la précédente est juste en dessous.",
