@@ -973,8 +973,9 @@ class CaptureWorker(threading.Thread):
         # Before any of the chat early-returns below: a zone the user is placing
         # has to keep reporting what it reads even with League absent, exactly as
         # the chat frame does, and the clock is worth reading whenever it is
-        # configured.
-        self._read_probes()
+        # configured -- except in a mode that is switched off.
+        if not self._paused or self._test_mode:
+            self._read_probes()
 
         if self._paused and not self._test_mode:
             # A mode that is switched off. Nothing about it is worth a capture.

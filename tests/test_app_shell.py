@@ -316,6 +316,7 @@ def finish():
         state["aram_hidden"] = application._sync_live(status) is False
         state["aram_paused"] = application.worker.paused
         state["aram_says_so"] = application._ui_state(status) == "paused"
+        state["aram_reads_no_clock"] = not application.worker.has_probe("clock")
         fake_feed.game = feed("CLASSIC", 11)
         state["rift_shown"] = application._sync_live(status) is True
         state["rift_capturing"] = not application.worker.paused
@@ -598,6 +599,7 @@ check("the button follows the trial ending by itself",
 check("an ARAM game keeps the overlay away", state.get("aram_hidden"))
 check("and captures nothing at all", state.get("aram_paused"))
 check("and the window says it is paused", state.get("aram_says_so"))
+check("not even the clock area is read in it", state.get("aram_reads_no_clock"))
 check("a Summoner's Rift game shows it", state.get("rift_shown"))
 check("and captures", state.get("rift_capturing"))
 check("the enemy roster reaches the parser", state.get("rift_roster_to_parser"))

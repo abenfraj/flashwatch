@@ -52,7 +52,7 @@ from live_client import LiveWatcher, mode_enabled
 from message_parser import MessageParser
 from ocr import CaptureWorker
 from onboarding import Onboarding
-from overlay import Overlay
+from overlay import LAYOUT_TEAM, Overlay
 from riot_assets import RiotAssets, fold
 from roles import ROLES
 from settings import Settings
@@ -199,6 +199,9 @@ class Application:
 
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
+        # Read once, here, on the UI thread: the start-up path that needs it runs
+        # on the bootstrap thread, and Qt's screens are not for other threads.
+        self._screen_at_start = self._screen_rect()
         # Needs a QApplication to know the screen, and has to run before the
         # capture worker registers the clock probe from these values.
         if self.settings.fresh:
@@ -850,8 +853,16 @@ class Application:
         roster_game = game if enabled else None
         if self.timers is not None and self.timers.set_live_game(roster_game):
             self._sync_team()
+            enemies = roster_game.enemies if roster_game is not None else ()
+            if (self.worker is not None and len(enemies) >= len(ROLES)
+                    and all(player.position for player in enemies)):
+                # The game named every lane: the loading-screen OCR and the
+                # scoreboard matching would spend their passes learning nothing.
+                self.worker.set_roles_wanted(False)
         self._sync_parser_roster(roster_game)
-        self._sync_clock_probe(feed_clock=roster_game is not None)
+        # The feed gives the clock whenever it answers, in any mode -- including
+        # one that is switched off, where nothing at all should be read.
+        self._sync_clock_probe(feed_clock=game is not None)
         self._last_live_game = game
 
         if not status.in_game:
@@ -916,7 +927,8 @@ class Application:
         """
         status = getattr(self, "_latest_status", None)
         window = (status.window_rect if status is not None
-                  and status.window_rect is not None else self._screen_rect())
+                  and status.window_rect is not None
+                  else getattr(self, "_screen_at_start", None) or self._screen_rect())
         fitted = chat_detector.fit_manual_region(region, window)
         if fitted.width != region.width:
             log.info("chat area %s widened to %d px to hold whole lines",
@@ -946,7 +958,8 @@ class Application:
 
         active = self._sync_live(status)
         self.overlay.set_game_active(active)
-        self.overlay.set_team(self.timers.team())
+        if self.overlay.current_layout() == LAYOUT_TEAM:
+            self.overlay.set_team(self.timers.team())
 
         # A real game outranks the trial: from here on the screen has actual
         # cooldowns to show, and the overlay has to be click-through again. Any
