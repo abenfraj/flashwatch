@@ -261,8 +261,8 @@ CHIP_GAP = 3                  # px at scale 1, between the chip and the number
 
 # The team display, in pixels at scale 1. Sized for 1080p, where League's own
 # summoner icons are about this big; the scale setting does the rest.
-TEAM_PORTRAIT = 30            # the champion, a circle
-TEAM_SPELL = 27               # each spell, a rounded square
+TEAM_PORTRAIT = 32            # the champion, a circle
+TEAM_SPELL = 30               # each spell, a rounded square
 TEAM_GAP = 3                  # between two spells
 TEAM_SPLIT = 5                # between the portrait and its spells
 TEAM_ROW_GAP = 5              # between two enemies, one above the other
@@ -276,9 +276,58 @@ TEAM_SOON_SECONDS = 15.0
 # always light-on-dark whatever the panel behind the display looks like.
 TEAM_TEXT = (246, 248, 252, 255)
 TEAM_TEXT_SOON = (255, 203, 87, 255)
-TEAM_TEXT_HALO = (0, 0, 0, 225)
-TEAM_COOLDOWN_SHADE = (6, 8, 14, 150)     # over the part of the icon still down
-TEAM_COOLDOWN_DIM = (6, 8, 14, 70)        # over the whole icon while it is down
+TEAM_TEXT_HALO = (0, 0, 0, 235)
+# Dark enough under the number that white digits stand off any icon art: the
+# number is what is read, the icon only says which spell it is.
+TEAM_COOLDOWN_SHADE = (4, 6, 10, 150)     # over the part of the icon still down
+TEAM_COOLDOWN_DIM = (4, 6, 10, 120)       # over the whole icon while it is down
+# The "?" badge on a spell that was only inferred: amber with dark ink, the one
+# combination that reads at this size over a greyed icon.
+TEAM_UNSURE_FILL = (255, 203, 87, 255)
+TEAM_UNSURE_INK = (16, 14, 8, 255)
+# How much of the icon's width the number may take, and how tall it may be.
+TEAM_TEXT_WIDTH = 0.92
+TEAM_TEXT_HEIGHT = 0.56
+
+# The face the numbers on the icons are set in: a narrow, heavy signage face,
+# because four glyphs ("1:01") have to fit across a 30 px icon at a height that
+# can be read mid-fight. Not the user's countdown font -- that one is chosen for
+# the other displays, where the number has room, and a typewriter face chosen
+# there turned these into hairlines.
+_TEAM_FACES = (
+    ("Bahnschrift", "Bold SemiCondensed"),
+    ("Bahnschrift", "Bold Condensed"),
+    ("Bahnschrift", "Bold"),
+    ("Segoe UI", "Black"),
+    ("Segoe UI", "Bold"),
+    ("Arial", "Bold"),
+)
+_TEAM_FONT: QFont | None = None
+
+
+def team_number_font(pixels: float) -> QFont:
+    """The team display's number face at ``pixels`` tall, best available first."""
+    global _TEAM_FONT
+    if _TEAM_FONT is None:
+        from PySide6.QtGui import QFontDatabase
+        families = set(QFontDatabase.families())
+        chosen = None
+        for family, style in _TEAM_FACES:
+            if family in families and style in QFontDatabase.styles(family):
+                chosen = QFontDatabase.font(family, style, 10)
+                break
+        if chosen is None:
+            chosen = QFont("Arial")
+            chosen.setWeight(QFont.Bold)
+        if hasattr(chosen, "setFeature"):
+            try:
+                chosen.setFeature(QFont.Tag("tnum"), 1)
+            except Exception:                         # noqa: BLE001
+                pass
+        _TEAM_FONT = chosen
+    font = QFont(_TEAM_FONT)
+    font.setPixelSize(max(6, int(round(pixels))))
+    return font
 
 
 # The countdown's face, in order of preference, with the size multiplier that
@@ -1589,22 +1638,21 @@ class Overlay(QWidget):
             painter.restore()
 
             remaining = timer.remaining()
+            # No "~" on an icon: it costs the number a glyph's width, and an
+            # ultimate is an estimate by nature -- the settings say so once.
             text = format_short(remaining)
-            if timer.approximate and len(text) <= 2:
-                text = f"~{text}"
-            font = QFont(countdown_face()[0], 1, QFont.Bold)
-            share = 0.42 if len(text) >= 4 else 0.52
-            font.setPixelSize(max(6, int(rect.height() * share)))
-            if hasattr(font, "setFeature"):
-                try:
-                    font.setFeature(QFont.Tag("tnum"), 1)
-                except Exception:                     # noqa: BLE001
-                    pass
             colour = QColor(*(TEAM_TEXT_SOON if remaining <= TEAM_SOON_SECONDS
                               else TEAM_TEXT))
-            self._paint_outlined_text(painter, rect, text, font, colour,
-                                      Qt.AlignCenter, {"outline": True},
-                                      halo=QColor(*TEAM_TEXT_HALO))
+            unsure = timer.uncertain
+            # With a "?" badge in the top corner the number moves down to clear
+            # it, instead of being drawn underneath it.
+            centre = rect.top() + rect.height() * (0.63 if unsure else 0.52)
+            self._paint_icon_number(painter, rect, text, colour, centre,
+                                    max_height=rect.height()
+                                    * (0.48 if unsure else TEAM_TEXT_HEIGHT),
+                                    scale=scale)
+            if unsure:
+                self._paint_unsure_badge(painter, rect, scale)
         elif timer is not None:
             # Back up, and still inside the READY linger: say so, in green.
             pen = QPen(_colour(THEMES["clean"], "ready"), max(1.5, 2.0 * scale))
@@ -1618,11 +1666,60 @@ class Overlay(QWidget):
         painter.setPen(QPen(QColor(0, 0, 0, 160), max(1.0, 1.0 * scale)))
         painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner)
 
-        if timer is not None and timer.uncertain and down:
-            size = max(8.0, rect.width() * 0.38)
-            chip = QRectF(rect.right() - size * 0.75, rect.top() - size * 0.25,
-                          size, size)
-            self._paint_uncertain_mark(painter, THEMES["clean"], chip, scale)
+
+    def _paint_icon_number(self, painter: QPainter, rect: QRectF, text: str,
+                           colour: QColor, centre_y: float, *,
+                           max_height: float, scale: float) -> None:
+        """A number on an icon, as large as fits, with a real outline.
+
+        Sized to the icon rather than fixed: "9" gets the full height, "1:01"
+        shrinks until four glyphs fit across. Drawn as a path -- a dark stroke,
+        then the fill -- because an outline faked by drawing the text eight
+        times one pixel apart leaves gaps at the corners, and at this size the
+        gaps are where the glyph disappears into the icon art.
+        """
+        from PySide6.QtGui import QFontMetricsF
+        height = max_height
+        font = team_number_font(height)
+        metrics = QFontMetricsF(font)
+        room = rect.width() * TEAM_TEXT_WIDTH
+        while metrics.horizontalAdvance(text) > room and height > 6:
+            height -= 0.5
+            font = team_number_font(height)
+            metrics = QFontMetricsF(font)
+        width = metrics.horizontalAdvance(text)
+        cap = metrics.capHeight() or metrics.ascent() * 0.7
+        path = QPainterPath()
+        path.addText(rect.center().x() - width / 2.0, centre_y + cap / 2.0,
+                     font, text)
+        stroke = QPen(QColor(*TEAM_TEXT_HALO), max(2.0, 2.6 * scale))
+        stroke.setJoinStyle(Qt.RoundJoin)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.strokePath(path, stroke)
+        painter.fillPath(path, colour)
+        painter.restore()
+
+    def _paint_unsure_badge(self, painter: QPainter, rect: QRectF,
+                            scale: float) -> None:
+        """The "?" for a spell only inferred: amber, in the icon's top corner."""
+        size = max(9.0, rect.width() * 0.42)
+        badge = QRectF(rect.right() - size + 1.0, rect.top() - 1.0, size, size)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(QPen(QColor(0, 0, 0, 200), max(1.0, 1.1 * scale)))
+        painter.setBrush(QColor(*TEAM_UNSURE_FILL))
+        painter.drawEllipse(badge)
+        font = team_number_font(size * 0.86)
+        from PySide6.QtGui import QFontMetricsF
+        metrics = QFontMetricsF(font)
+        width = metrics.horizontalAdvance("?")
+        cap = metrics.capHeight() or metrics.ascent() * 0.7
+        path = QPainterPath()
+        path.addText(badge.center().x() - width / 2.0,
+                     badge.center().y() + cap / 2.0, font, "?")
+        painter.fillPath(path, QColor(*TEAM_UNSURE_INK))
+        painter.restore()
 
     def _paint_outlined_text(self, painter: QPainter, rect, text: str,
                              font: QFont, colour: QColor, align, theme: dict,

@@ -1999,8 +1999,13 @@ class ControlWindow(QWidget):
         self.font(self.combo_timer_font, 16, W500)
         self.custom(self.combo_timer_font,
                     lambda w, s: w.set_chevron(round(20 * s), round(18 * s)))
-        look_layout.addLayout(self._labelled(tr("ui.timer_font"),
-                                             self.combo_timer_font, 78, 22))
+        # In a widget of its own so it can be hidden: the team display sets its
+        # numbers in its own face, sized to the icon, and a font setting that
+        # does nothing to the display on screen reads as broken.
+        self.row_timer_font = QWidget()
+        self.row_timer_font.setLayout(self._labelled(tr("ui.timer_font"),
+                                                     self.combo_timer_font, 78, 22))
+        look_layout.addWidget(self.row_timer_font)
         self.space(look_layout, 10)
 
         self.spin_timer_scale = Scale()
@@ -2014,8 +2019,10 @@ class ControlWindow(QWidget):
         self.font(self.spin_timer_scale, 16, W500)
         self.custom(self.spin_timer_scale,
                     lambda w, s: w.set_chevron(round(16 * s), round(16 * s)))
-        look_layout.addLayout(self._labelled(tr("ui.timer_size"),
-                                             self.spin_timer_scale, 78, 22))
+        self.row_timer_size = QWidget()
+        self.row_timer_size.setLayout(self._labelled(tr("ui.timer_size"),
+                                                     self.spin_timer_scale, 78, 22))
+        look_layout.addWidget(self.row_timer_size)
         self.space(look_layout, 16)
 
         switches = self._column(10)
@@ -2167,9 +2174,11 @@ class ControlWindow(QWidget):
                 widget.setVisible(team)
         # The empty-bar switch says nothing about the team display, which has
         # no empty state of its own beyond the faint rows.
-        idle = getattr(self, "check_idle_bar", None)
-        if idle is not None:
-            idle.setVisible(not team)
+        for widget in (getattr(self, "check_idle_bar", None),
+                       getattr(self, "row_timer_font", None),
+                       getattr(self, "row_timer_size", None)):
+            if widget is not None:
+                widget.setVisible(not team)
 
     def _on_layout_picked(self, key: str) -> None:
         if key not in LAYOUTS or key == self._layout_key:
