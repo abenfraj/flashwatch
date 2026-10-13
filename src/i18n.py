@@ -871,6 +871,9 @@ STRINGS: dict[str, tuple[str, str]] = {
     "guide.layout_result": ("Résultat dans le Practice Tool",
                             "The result in the Practice Tool"),
     "guide.layout_recommended": ("Recommandé", "Recommended"),
+    # The theme chip on the tuning step: one word, where the settings window has
+    # room for the parenthesis.
+    "guide.theme_clean": ("Épuré", "Clean"),
 
     # -- 5. tune it ------------------------------------------------------
     "guide.tune_title": ("Le régler", "Tune it"),

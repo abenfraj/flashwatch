@@ -63,7 +63,7 @@ from PySide6.QtWidgets import QWidget
 
 from i18n import ENGLISH, FRENCH, language_for, locale_for, tr
 from overlay import (FACE_AUTO, LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST,
-                     LAYOUTS, THEMES, available_countdown_faces)
+                     LAYOUT_TEAM, LAYOUTS, THEMES, available_countdown_faces)
 from settings import DEFAULTS
 from theme import GUIDE, menu_family
 
@@ -1227,7 +1227,13 @@ def paint_game(painter: QPainter, rect: QRectF, guide, mode: str) -> None:
     kind = guide.current_layout()
     placed = QRectF(rect.left() + rect.width() * 0.24, rect.top() + 26,
                     rect.width() * 0.52, 74)
-    if mode == "proof":
+    if kind == LAYOUT_TEAM:
+        # Down the right edge, under the score, clear of the minimap: where the
+        # real one goes.
+        placed = QRectF(rect.right() - 178, rect.top() + 34, 150, 250)
+        if mode == "place":
+            placed = QRectF(rect.right() - 250, rect.top() + 88, 150, 250)
+    elif mode == "proof":
         placed = QRectF(rect.left() + rect.width() * 0.30, rect.top() + 26,
                         rect.width() * 0.40, 74)
     elif mode == "place":
@@ -1351,7 +1357,7 @@ def overlay_style(settings) -> dict:
     and from nothing at all in the little thumbnails, and a function that
     reached for the settings itself could not do both.
     """
-    theme = THEMES.get(str(settings.get("theme", "light")), THEMES["light"])
+    theme = THEMES.get(str(settings.get("theme", "clean")), THEMES["clean"])
     return {
         "theme": theme,
         "opacity": float(settings.get("overlay_opacity", 0.92)),
@@ -1359,6 +1365,7 @@ def overlay_style(settings) -> dict:
         "face": face_name(str(settings.get("timer_font", FACE_AUTO))),
         "timer_scale": float(settings.get("timer_font_scale", 0.5)),
         "vertical": bool(settings.get("bar_vertical", False)),
+        "rest": float(settings.get("team_rest_opacity", 0.45)),
     }
 
 
@@ -1387,6 +1394,8 @@ def paint_overlay(painter: QPainter, rect: QRectF, kind: str,
     Returns the rectangle it actually drew in, which is not the one it was given
     once a scale or a vertical track has had its say: the caller frames it.
     """
+    if kind == LAYOUT_TEAM:
+        return _paint_team_sketch(painter, rect, single, style)
     painter.save()
     theme = style["theme"] if style else None
     vertical = bool(style and style["vertical"] and kind == LAYOUT_BAR)
@@ -1503,6 +1512,94 @@ def paint_overlay(painter: QPainter, rect: QRectF, kind: str,
                  align=Qt.AlignHCenter)
     painter.restore()
     return rect
+
+
+def _paint_team_sketch(painter: QPainter, rect: QRectF, single: bool,
+                       style: dict | None) -> QRectF:
+    """The enemy-team display, drawn the way it looks over a game.
+
+    Schematic champions -- the guide ships no portraits -- but the spells are
+    the real thing's states: plain while up, greyed with a dark wedge and the
+    seconds left while down, and the enemy with nothing down drawn faint. Sized
+    from the rectangle's width, since it is drawn both as a 112 px thumbnail and
+    as a column over the game.
+    """
+    painter.save()
+    theme = style["theme"] if style else None
+    grown = clamp(style["scale"], 0.5, 2.0) if style else 1.0
+    rows = 2 if single else (3 if rect.width() < 130 and rect.height() < 120 else 5)
+    k = rect.width() / 150.0 * grown
+    portrait, spell, gap, row_gap = 30 * k, 26 * k, 3 * k, 6 * k
+    pad = 6 * k
+    width = pad * 2 + portrait + 5 * k + spell * 3 + gap * 2
+    height = pad * 2 + rows * portrait + (rows - 1) * row_gap
+    drawn = QRectF(rect.left(), rect.top(), width, height)
+    if rect.height() < 120:
+        # A thumbnail: centred in the slot it was given rather than hung from
+        # its corner.
+        drawn.moveCenter(rect.center())
+    if theme is not None and theme.get("panel_alpha", 0) > 0:
+        fill = _themed(theme, "panel")
+        fill.setAlpha(max(0, min(255, int(fill.alpha() * theme["panel_alpha"]
+                                          * clamp(style["opacity"], 0.1, 1.0)))))
+        box(painter, drawn, 8 * k, fill=fill, edge=_themed(theme, "border"))
+
+    hues = (QColor(150, 64, 52), QColor(70, 110, 160), QColor(170, 120, 60),
+            QColor(110, 70, 150), QColor(60, 130, 110))
+    spells = (QColor(236, 214, 60), QColor(120, 90, 210), QColor(210, 80, 60))
+    # (row, spell) that are down, with the seconds shown and how far through.
+    down = {(0, 0): ("4:12", 0.18), (2, 1): ("47", 0.81), (3, 2): ("1:30", 0.5)}
+    if single:
+        down = {(0, 0): ("4:12", 0.18)}
+    rest = clamp(style.get("rest", 0.45), 0.1, 1.0) if style else 0.45
+    for row in range(rows):
+        top = drawn.top() + pad + row * (portrait + row_gap)
+        busy = any(r == row for r, _s in down)
+        painter.setOpacity(1.0 if busy else rest)
+        face = QRectF(drawn.left() + pad, top, portrait, portrait)
+        painter.setPen(QPen(QColor(0, 0, 0, 170), max(1.0, 1.2 * k)))
+        painter.setBrush(hues[row % len(hues)])
+        painter.drawEllipse(face)
+        x = face.right() + 5 * k
+        y = top + (portrait - spell) / 2
+        for index in range(3):
+            square = QRectF(x, y, spell, spell)
+            state = down.get((row, index))
+            colour = QColor(78, 82, 92) if state else spells[index]
+            painter.setPen(QPen(QColor(0, 0, 0, 160), max(1.0, k)))
+            painter.setBrush(colour)
+            painter.drawRoundedRect(square, 4 * k, 4 * k)
+            if state:
+                text, progress = state
+                painter.save()
+                clip = QPainterPath()
+                clip.addRoundedRect(square, 4 * k, 4 * k)
+                painter.setClipPath(clip)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(6, 8, 14, 150))
+                reach = spell * 0.5
+                painter.drawPie(square.adjusted(-reach, -reach, reach, reach),
+                                int((90 - 360 * progress) * 16),
+                                -int(360 * 16 * (1 - progress)))
+                painter.restore()
+                font = QFont(style["face"]) if style else px(1, QFont.Bold)
+                font.setWeight(QFont.Bold)
+                font.setPixelSize(max(5, int(spell * (0.42 if len(text) >= 4
+                                                      else 0.52))))
+                colour = (QColor(255, 203, 87) if text == "47"
+                          else QColor(246, 248, 252))
+                halo = QColor(0, 0, 0, 225)
+                painter.setFont(font)
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    painter.setPen(halo)
+                    painter.drawText(square.translated(dx, dy), Qt.AlignCenter,
+                                     text)
+                painter.setPen(colour)
+                painter.drawText(square, Qt.AlignCenter, text)
+            x += spell + gap
+    painter.setOpacity(1.0)
+    painter.restore()
+    return drawn
 
 
 # ---------------------------------------------------------------------------
@@ -1840,8 +1937,14 @@ class LayoutScreen(Screen):
     """4 -- pick a display, and watch the panel on the right become it."""
 
     key = STEP_LAYOUT
-    ROWS = ((LAYOUT_BAR, "ui.layout_bar"), (LAYOUT_CARDS, "ui.layout_cards"),
-            (LAYOUT_LIST, "ui.layout_list"))
+    ROWS = ((LAYOUT_TEAM, "ui.layout_team"), (LAYOUT_BAR, "ui.layout_bar"),
+            (LAYOUT_CARDS, "ui.layout_cards"), (LAYOUT_LIST, "ui.layout_list"))
+    # Four rows where the mockup drew three, so a little tighter: the same card,
+    # 88 px tall on a 98 px rhythm instead of 106 on 120, so the footer stays
+    # where the mockup put it. The note under them gives way when it no longer
+    # fits -- see paint().
+    ROW_STEP = 98
+    ROW_HEIGHT = 88
 
     def paint(self, painter: QPainter, guide) -> None:
         y = self.heading(painter, guide, COL_X, COL_TOP, "monitor",
@@ -1854,8 +1957,15 @@ class LayoutScreen(Screen):
         for index, (key, rect) in enumerate(rows):
             self._row(painter, guide, rect, key, index)
         bottom = rows[-1][1].bottom() if rows else y
-        self.note(painter, guide, COL_X, bottom + 20, COL_W,
-                  tr("guide.layout_note"), delay=0.62)
+        # Only with room for it above the footer rule. The last step says the
+        # same thing again, so losing it here costs nothing; overlapping the
+        # Back button would cost the screen.
+        note_font = px(19, QFont.Medium)
+        note_lines = _count_lines(tr("guide.layout_note"), note_font,
+                                  COL_W - (26 + 38 + 20) - 26)
+        if bottom + 20 + max(82.0, note_lines * 30 + 44) <= FOOT_RULE - 12:
+            self.note(painter, guide, COL_X, bottom + 20, COL_W,
+                      tr("guide.layout_note"), delay=0.62)
 
         # The connector: the mockup's one piece of pure connective tissue, and it
         # earns its place -- it is what makes the panel read as the *consequence*
@@ -1879,7 +1989,8 @@ class LayoutScreen(Screen):
         font = px(24, QFont.Medium)
         lines = _count_lines(tr("guide.layout_lead"), font, COL_W)
         top = COL_TOP + 62 + 26 + lines * 39 + 22
-        return [(key, QRectF(COL_X, top + index * 120, COL_W, 106))
+        return [(key, QRectF(COL_X, top + index * self.ROW_STEP, COL_W,
+                             self.ROW_HEIGHT))
                 for index, (key, _) in enumerate(self.ROWS)]
 
     def _row(self, painter: QPainter, guide, rect: QRectF, key: str,
@@ -1905,7 +2016,7 @@ class LayoutScreen(Screen):
         label_key = dict(self.ROWS)[key]
         line(painter, thumb.right() + 18, rect.center().y() - 15,
              tr(label_key), px(21, QFont.DemiBold), c("ink"))
-        if key == LAYOUT_BAR:
+        if key == LAYOUT_TEAM:
             pill_font = px(15, QFont.Bold)
             text = tr("guide.layout_recommended")
             width = QFontMetricsF(pill_font).horizontalAdvance(text) + 28
@@ -1945,8 +2056,8 @@ class TuneScreen(Screen):
     ROW_PITCH = 58.0
 
     # value key, label key, and how the number is worded
-    THEME_CHIPS = (("light", "ui.theme_light"), ("dark", "ui.theme_dark"),
-                   ("neon", "ui.theme_neon"))
+    THEME_CHIPS = (("clean", "guide.theme_clean"), ("light", "ui.theme_light"),
+                   ("dark", "ui.theme_dark"), ("neon", "ui.theme_neon"))
     # setting, label, low, high, step, and how to write the value out
     SLIDERS = (
         ("overlay_opacity", "ui.opacity", 0.35, 1.0, 0.01,
@@ -2025,7 +2136,8 @@ class TuneScreen(Screen):
     @classmethod
     def _chip_rect(cls, field: QRectF, index: int) -> QRectF:
         area = cls._control_rect(field)
-        width = (area.width() - 16) / 3
+        count = len(cls.THEME_CHIPS)
+        width = (area.width() - 8 * (count - 1)) / count
         return QRectF(area.left() + index * (width + 8), area.top(), width,
                       area.height())
 
@@ -2089,7 +2201,7 @@ class TuneScreen(Screen):
         painter.save()
         painter.setOpacity(painter.opacity() * self._grown(guide, 0.18))
         self._field_label(painter, field, "ui.theme")
-        current = str(guide.settings.get("theme", "light"))
+        current = str(guide.settings.get("theme", "clean"))
         for index, (value, label) in enumerate(self.THEME_CHIPS):
             chip(painter, self._chip_rect(field, index), tr(label),
                  1.0 if value == current else 0.0,
