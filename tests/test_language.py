@@ -72,7 +72,9 @@ SAME_ON_PURPOSE = {"app.title", "app.tray_tooltip",
                    # a picker that offered "French" to a French speaker would be
                    # asking the one person who cannot answer it.
                    "guide.language_fr_name", "guide.language_en_name",
-                   "guide.language_en_sub"}
+                   "guide.language_en_sub",
+                   # The mode's own name, which League does not translate.
+                   "mode.aram"}
 identical = {key for key, (fr, en) in STRINGS.items() if fr == en}
 check("nothing is left untranslated by accident",
       identical <= SAME_ON_PURPOSE, str(sorted(identical - SAME_ON_PURPOSE)))
@@ -100,6 +102,7 @@ literals = set(re.findall(r"""["']([a-z_]+\.[a-z0-9_]+)["']""", source))
 from audio import PRESETS as audio_presets       # noqa: E402
 from onboarding import STEP_NAV                   # noqa: E402
 from zone_overlay import ZONE_LOADING, ZONE_SCOREBOARD, ZONES  # noqa: E402
+from live_client import MODES                     # noqa: E402
 
 # The stepper's seven labels and the two language cards, built from the same
 # lists the guide builds them from.
@@ -111,7 +114,10 @@ built = (set(STEP_NAV.values())
          | {f"zone.{zone}_hint" for zone in (ZONE_SCOREBOARD, ZONE_LOADING)}
          # One name per notification voice, from the same table the settings
          # window fills its list from.
-         | {f"sfx.{preset.key}" for preset in audio_presets})
+         | {f"sfx.{preset.key}" for preset in audio_presets}
+         # One name per game mode, from the list the settings window and the
+         # status line both build them from.
+         | {f"mode.{mode}" for mode in MODES})
 
 orphans = sorted(key for key in STRINGS
                  if key not in literals and key not in built)

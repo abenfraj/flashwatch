@@ -70,6 +70,10 @@ CONFIRMED_MIN_ROW_WIDTH = 0.14
 PAD_LINES_ABOVE = 6
 PAD_LINES_BELOW = 3
 MIN_REGION_WIDTH_FRACTION = 0.42
+# The same floor for an area drawn by hand, a little lower: its owner has put
+# its left edge on the chat, so less slack is needed to the right, and a row
+# that still runs into the edge widens it further (see CaptureWorker).
+MANUAL_MIN_WIDTH_FRACTION = 0.30
 
 # Chat is left-aligned near the window's left edge, whatever the resolution or
 # HUD scale. A confirmation whose text starts past this fraction of the window is
@@ -188,6 +192,29 @@ def region_from_chat_rows(
         rows=len(chat_rows),
     )
     return clamp_to_window(region, window_rect)
+
+
+def fit_manual_region(region: ChatRegion,
+                      window_rect: tuple[int, int, int, int] | None) -> ChatRegion:
+    """A hand-placed chat area, made at least as wide as a chat line can be.
+
+    The user decides where the chat is; they cannot be expected to know how far
+    the longest line will run. A detected area is never narrower than
+    MIN_REGION_WIDTH_FRACTION of the window, because the lines to come are
+    longer than the ones seen so far -- a summoner name with its tag, a long
+    champion, a long spell -- and the same floor applies to one drawn by hand.
+    Position and height are left exactly as drawn.
+    """
+    if window_rect is None:
+        return region
+    left, _top, width, _height = window_rect
+    floor = int(width * MANUAL_MIN_WIDTH_FRACTION)
+    if region.width >= floor:
+        return region
+    widened = ChatRegion(region.x, region.y, floor, region.height,
+                         source=region.source, confirmed=region.confirmed,
+                         rows=region.rows)
+    return clamp_to_window(widened, window_rect)
 
 
 def clamp_to_window(region: ChatRegion,

@@ -126,6 +126,7 @@ check("a note pointing at ourselves is not a source",
 # --------------------------------------------------- keys from another version
 mixed = install_dir("newer-version")
 write_config(mixed, {
+    "settings_version": settings_module.SETTINGS_VERSION,
     "theme": "light",                    # known
     "a_setting_from_the_future": 42,     # not known to this build
 })

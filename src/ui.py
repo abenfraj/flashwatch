@@ -69,7 +69,8 @@ import autostart
 import icons
 from chat_detector import ChatRegion
 from i18n import ENGLISH, FRENCH, language_for, locale_for, tr
-from overlay import LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST, LAYOUTS
+from live_client import MODE_SETTING, MODES
+from overlay import LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST, LAYOUT_TEAM, LAYOUTS
 from theme import (DANGER, INK, INK_FAINT, MENU, PAINT, READY, SIGNAL, SOON,
                    art_path, control_qss, mark_pixmap, menu_family)
 from audio import PRESETS as audio_presets
@@ -86,13 +87,15 @@ log = logging.getLogger(__name__)
 ROLES = ["", *lane_roles]
 # Ordered with the default first: a selector that opens on something other than
 # what is applied reads as a pending change.
-THEME_KEYS = {"light": "ui.theme_light", "dark": "ui.theme_dark",
-              "neon": "ui.theme_neon"}
+THEME_KEYS = {"clean": "ui.theme_clean", "light": "ui.theme_light",
+              "dark": "ui.theme_dark", "neon": "ui.theme_neon"}
 
 # The state pill: (property suffix, translation key) per state name.
 PILL_STATES = {
     "in_game": ("pill_ok", "ui.pill_in_game"),
     "demo": ("pill_warn", "ui.pill_demo"),
+    # A game is on, in a mode switched off in the settings (ARAM, Arena...).
+    "paused": ("pill_warn", "ui.pill_paused"),
     "client": ("pill_warn", "ui.pill_client"),
     "waiting": ("pill", "ui.pill_waiting"),
     "loading": ("pill", "ui.pill_loading"),
@@ -110,6 +113,7 @@ HEADLINES = {
     "loading": ("ui.home_headline_boot", "ui.home_headline_boot_hint"),
     "in_game": ("ui.home_headline_live", "ui.home_headline_live_hint"),
     "demo": ("ui.home_headline_demo", "ui.home_headline_demo_hint"),
+    "paused": ("ui.home_headline_paused", "ui.home_headline_paused_hint"),
 }
 HEADLINE_IDLE = ("ui.home_headline_idle", "ui.home_headline_idle_hint")
 
@@ -159,7 +163,34 @@ def paint_layout_sketch(painter: QPainter, rect: QRect, kind: str) -> None:
     painter.setBrush(QColor(*PAINT["sketch_bg"]))
     painter.drawRoundedRect(rect, 4, 4)
 
-    if kind == LAYOUT_BAR:
+    if kind == LAYOUT_TEAM:
+        # Three rows of a portrait and its spells, one of them down: the dark
+        # wedge and the number, the way the display draws a spell on cooldown.
+        rows = 3
+        pad = 6
+        height = (rect.height() - pad * 2) // rows
+        size = max(5, height - 4)
+        for index in range(rows):
+            top = rect.top() + pad + index * height
+            x = rect.left() + pad + 4
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(dim)
+            painter.drawEllipse(QRect(x, top + 1, size, size))
+            x += size + 4
+            for spell in range(3):
+                box = QRect(x, top + 1, size, size)
+                down = (index, spell) in ((0, 0), (1, 2), (2, 1))
+                painter.setBrush(QColor(INK_FAINT) if down else ready)
+                painter.drawRoundedRect(box, 2, 2)
+                if down:
+                    shade = QColor(0, 0, 0, 110)
+                    painter.setBrush(shade)
+                    painter.drawPie(box.adjusted(-size // 2, -size // 2,
+                                                 size // 2, size // 2),
+                                    90 * 16, -int(360 * 16 * 0.6))
+                x += size + 3
+
+    elif kind == LAYOUT_BAR:
         # A rail with three tokens on it, spread the way progress spreads them.
         y = rect.center().y() - rect.height() // 6
         left = rect.left() + 10
@@ -1841,6 +1872,7 @@ class ControlWindow(QWidget):
         rows = self._column(10)
         self.layout_tiles: dict[str, LayoutTile] = {}
         for key, title_key, hint_key in (
+                (LAYOUT_TEAM, "ui.layout_team", "ui.layout_team_hint"),
                 (LAYOUT_BAR, "ui.layout_bar", "ui.layout_bar_hint"),
                 (LAYOUT_CARDS, "ui.layout_cards", "ui.layout_cards_hint"),
                 (LAYOUT_LIST, "ui.layout_list", "ui.layout_list_hint")):
@@ -1903,7 +1935,7 @@ class ControlWindow(QWidget):
         self.combo_theme = Select()
         for key, label_key in THEME_KEYS.items():
             self.combo_theme.addItem(tr(label_key), key)
-        index = self.combo_theme.findData(str(self.settings.get("theme", "dark")))
+        index = self.combo_theme.findData(str(self.settings.get("theme", "clean")))
         if index >= 0:
             self.combo_theme.setCurrentIndex(index)
         self.combo_theme.currentIndexChanged.connect(self._on_settings_changed)
@@ -2011,11 +2043,50 @@ class ControlWindow(QWidget):
         self.check_sort_role = self._switch(tr("ui.sort_by_role"), small=True)
         self.check_sort_role.setChecked(bool(self.settings.get("sort_by_role")))
         self.check_sort_role.toggled.connect(self._on_settings_changed)
+        # The team display's own three. Shown with it only, like the track's
+        # vertical switch above -- see _sync_layout_tiles.
+        self.check_team_horizontal = self._switch(tr("ui.team_horizontal"),
+                                                  small=True)
+        self.check_team_horizontal.setToolTip(tr("ui.team_horizontal_hint"))
+        self.check_team_horizontal.setChecked(
+            bool(self.settings.get("team_horizontal")))
+        self.check_team_horizontal.toggled.connect(self._on_settings_changed)
+        self.check_team_hide_rested = self._switch(tr("ui.team_hide_rested"),
+                                                   small=True)
+        self.check_team_hide_rested.setToolTip(tr("ui.team_hide_rested_hint"))
+        self.check_team_hide_rested.setChecked(
+            bool(self.settings.get("team_hide_rested")))
+        self.check_team_hide_rested.toggled.connect(self._on_settings_changed)
         for box in (self.check_visible, self.check_hide_until_game,
                     self.check_idle_bar, self.check_bar_vertical,
+                    self.check_team_horizontal, self.check_team_hide_rested,
                     self.check_sort_role):
             switches.addWidget(box)
         look_layout.addLayout(switches)
+        self.space(look_layout, 10)
+
+        self.slider_team_rest = QSlider(Qt.Horizontal)
+        self.slider_team_rest.setRange(10, 100)
+        self.slider_team_rest.setValue(
+            int(round(float(self.settings.get("team_rest_opacity", 0.45)) * 100)))
+        self.slider_team_rest.setToolTip(tr("ui.team_rest_hint"))
+        self.slider_team_rest.valueChanged.connect(self._on_settings_changed)
+        self.slider_team_rest.valueChanged.connect(self._sync_team_rest_label)
+        self.size_of(self.slider_team_rest, height=42)
+        self.label_team_rest = self.label(f"{self.slider_team_rest.value()}%", 15,
+                                          W600, role="value", wrap=False)
+        self.label_team_rest.setAlignment(Qt.AlignCenter)
+        rest_box, rest_layout = self._card("sunken", (0, 0, 0, 0), 0)
+        self.size_of(rest_box, 66, 36)
+        rest_layout.addWidget(self.label_team_rest)
+        self.row_team_rest = QWidget()
+        rest_row = self._labelled(tr("ui.team_rest"), self.slider_team_rest,
+                                  140, 22)
+        rest_row.setContentsMargins(0, 0, 0, 0)
+        rest_row.addWidget(rest_box)
+        self.row_team_rest.setLayout(rest_row)
+        look_layout.addWidget(self.row_team_rest)
+        self._sync_team_options()
         self.space(look_layout, 14)
 
         advanced = Disclosure(tr("ui.advanced"), self)
@@ -2077,6 +2148,22 @@ class ControlWindow(QWidget):
     def _sync_opacity_label(self, value: int) -> None:
         self.label_opacity.setText(f"{value}%")
 
+    def _sync_team_rest_label(self, value: int) -> None:
+        self.label_team_rest.setText(f"{value}%")
+
+    def _sync_team_options(self) -> None:
+        team = self._layout_key == LAYOUT_TEAM
+        for widget in (getattr(self, "check_team_horizontal", None),
+                       getattr(self, "check_team_hide_rested", None),
+                       getattr(self, "row_team_rest", None)):
+            if widget is not None:
+                widget.setVisible(team)
+        # The empty-bar switch says nothing about the team display, which has
+        # no empty state of its own beyond the faint rows.
+        idle = getattr(self, "check_idle_bar", None)
+        if idle is not None:
+            idle.setVisible(not team)
+
     def _on_layout_picked(self, key: str) -> None:
         if key not in LAYOUTS or key == self._layout_key:
             return
@@ -2093,6 +2180,7 @@ class ControlWindow(QWidget):
         vertical = getattr(self, "check_bar_vertical", None)
         if vertical is not None:
             vertical.setVisible(self._layout_key == LAYOUT_BAR)
+        self._sync_team_options()
 
     def _on_demo_toggled(self, checked: bool) -> None:
         self.button_demo.setText(tr("ui.demo_stop") if checked
@@ -2147,6 +2235,33 @@ class ControlWindow(QWidget):
         self.space(language_column, 16)
         language_column.addWidget(self.combo_language)
         layout.addWidget(language)
+
+        # Where it runs. Second only to the language, because a mode that is off
+        # is the first thing to check when the overlay "does nothing".
+        modes, modes_column = self._settings_card("eye", tr("ui.modes"),
+                                                  tr("ui.modes_tip"))
+        self.space(modes_column, 14)
+        mode_switches = self._column(10)
+        self.mode_switches: dict[str, Switch] = {}
+        for mode in MODES:
+            box = self._switch(tr(f"mode.{mode}"))
+            box.setChecked(bool(self.settings.get(MODE_SETTING[mode])))
+            box.toggled.connect(self._on_settings_changed)
+            mode_switches.addWidget(box)
+            self.mode_switches[mode] = box
+        modes_column.addLayout(mode_switches)
+        self.space(modes_column, 14)
+        modes_column.addWidget(self._rule())
+        self.space(modes_column, 14)
+        self.check_live_client = self._switch(tr("ui.live_client"))
+        self.check_live_client.setChecked(bool(self.settings.get("live_client",
+                                                                 True)))
+        self.check_live_client.toggled.connect(self._on_settings_changed)
+        modes_column.addWidget(self.check_live_client)
+        self.space(modes_column, 8)
+        modes_column.addWidget(self.label(tr("ui.live_client_tip"), 15, W500,
+                                          role="dim", line=24))
+        layout.addWidget(modes)
 
         tracking, tracking_column = self._settings_card("branch",
                                                         tr("ui.tracking"))
@@ -2723,6 +2838,9 @@ class ControlWindow(QWidget):
             "hide_until_in_game": self.check_hide_until_game.isChecked(),
             "bar_show_when_idle": self.check_idle_bar.isChecked(),
             "bar_vertical": self.check_bar_vertical.isChecked(),
+            "team_horizontal": self.check_team_horizontal.isChecked(),
+            "team_hide_rested": self.check_team_hide_rested.isChecked(),
+            "team_rest_opacity": self.slider_team_rest.value() / 100.0,
             "theme": self.combo_theme.currentData(),
             "overlay_opacity": self.slider_opacity.value() / 100.0,
             "overlay_scale": self.spin_scale.value(),
@@ -2745,6 +2863,9 @@ class ControlWindow(QWidget):
             "capture_interval_ms": self.spin_interval.value(),
             "update_check_enabled": self.check_updates.isChecked(),
             "open_window_on_launch": self.check_open_window.isChecked(),
+            "live_client": self.check_live_client.isChecked(),
+            **{MODE_SETTING[mode]: box.isChecked()
+               for mode, box in self.mode_switches.items()},
         })
         self.settings_changed.emit()
 
@@ -2795,7 +2916,7 @@ class ControlWindow(QWidget):
         loading, self._loading = self._loading, True
         try:
             for combo, key, fallback in (
-                    (self.combo_theme, "theme", "dark"),
+                    (self.combo_theme, "theme", "clean"),
                     (self.combo_timer_font, "timer_font", FACE_AUTO)):
                 index = combo.findData(str(self.settings.get(key, fallback)))
                 if index >= 0:
@@ -2813,9 +2934,15 @@ class ControlWindow(QWidget):
                     (self.check_hide_until_game, "hide_until_in_game"),
                     (self.check_idle_bar, "bar_show_when_idle"),
                     (self.check_bar_vertical, "bar_vertical"),
+                    (self.check_team_horizontal, "team_horizontal"),
+                    (self.check_team_hide_rested, "team_hide_rested"),
                     (self.check_sort_role, "sort_by_role"),
                     (self.check_hide_ready, "hide_ready_entries")):
                 box.setChecked(bool(self.settings.get(key)))
+            self.slider_team_rest.setValue(
+                int(round(float(self.settings.get("team_rest_opacity", 0.45))
+                          * 100)))
+            self._sync_team_rest_label(self.slider_team_rest.value())
         finally:
             self._loading = loading
 

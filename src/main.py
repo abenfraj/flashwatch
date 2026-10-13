@@ -9,6 +9,15 @@ hazards that a shared-widget design would invite.
     ------------------              --------------
     grab -> diff -> OCR      queue   drain -> TimerManager -> Overlay
     -> parse -> events      ------>  -> notifications -> audio
+
+    LiveWatcher thread
+    ------------------
+    127.0.0.1:2999  ->  latest LiveGame  ---- read on every refresh ---->
+                                              mode gate, roster, clock
+
+The game's data feed is read on a thread of its own, so a slow answer during the
+loading screen can never hold up the capture loop, and the UI only ever reads the
+latest reading it left behind.
 """
 
 from __future__ import annotations
@@ -18,6 +27,7 @@ import queue
 import sys
 import threading
 from pathlib import Path
+from time import monotonic
 
 # Allow "import overlay" etc. when launched as a script from any directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -29,6 +39,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 import autostart
 import chat_detector
 import i18n
+import live_client
 import self_test
 import settings as settings_module
 import single_instance
@@ -37,11 +48,12 @@ import updater
 from audio import Notifier
 from chat_detector import ChatRegion
 from i18n import tr
+from live_client import LiveWatcher, mode_enabled
 from message_parser import MessageParser
 from ocr import CaptureWorker
 from onboarding import Onboarding
 from overlay import Overlay
-from riot_assets import RiotAssets
+from riot_assets import RiotAssets, fold
 from roles import ROLES
 from settings import Settings
 from timer_manager import TimerManager
@@ -69,6 +81,13 @@ GUIDE_DELAY_MS = 700
 # replace entries that have run out, and the countdowns animate from the UI
 # refresh like any others.
 DEMO_TICK_MS = 2000
+
+# How long a game window may be up without the game's data feed answering before
+# the overlay stops waiting for it and behaves as if there were no feed at all.
+# The feed starts once the loading screen is over, so this is a loading screen
+# and then some; past it, something is blocking the feed and reading the chat
+# alone is better than showing nothing.
+LIVE_GRACE_SECONDS = 150.0
 
 # Where each hand-placed area is persisted.
 SETTING_FOR_ZONE = {
@@ -208,6 +227,12 @@ class Application:
         self.parser: MessageParser | None = None
         self.timers: TimerManager | None = None
         self.worker: CaptureWorker | None = None
+        # The game's data feed, read on its own thread once the data is loaded.
+        self.live: LiveWatcher | None = None
+        # When the current game window first appeared, for LIVE_GRACE_SECONDS.
+        self._window_since: float | None = None
+        # What was last handed to the parser, so it is only rebuilt on change.
+        self._parser_roster_key: tuple | None = None
 
         self.results: queue.Queue = queue.Queue(maxsize=64)
         self.overlay = Overlay(self.settings, self.assets)
@@ -614,15 +639,17 @@ class Application:
         if self.settings.get("chat_region_locked") and saved:
             try:
                 x, y, w, h = (int(v) for v in saved)
-                self.worker.set_manual_region(
+                region = self._fitted_chat_region(
                     ChatRegion(x, y, w, h, source="manual", confirmed=True))
+                self.worker.set_manual_region(region)
             except (TypeError, ValueError):
                 pass
 
         clock_region = self._saved_region("clock_region")
         if clock_region is not None:
             # A validated clock area is read from the start: its value is used, so
-            # there is nothing to wait for.
+            # there is nothing to wait for. Dropped again as soon as the game's
+            # data feed gives the real clock -- see _sync_live.
             self.worker.set_probe(ZONE_CLOCK, clock_region)
 
         self._sync_role_zones()
@@ -633,6 +660,12 @@ class Application:
             QTimer.singleShot(0, self._resync_test_mode)
 
         self.worker.start()
+        self.live = LiveWatcher(
+            wanted=self._live_wanted,
+            champions=lambda: self.assets.champions,
+            localised_spells=lambda: {fold(spell.name): key for key, spell
+                                      in self.assets.spells.items()})
+        self.live.start()
         self._set_boot_message(tr("boot.waiting"))
 
         # Icons are only needed for display, so fetch them after capture starts.
@@ -745,12 +778,122 @@ class Application:
         if not status.roles or status.roles == self._applied_roles:
             return
         self._applied_roles = dict(status.roles)
+        live = self.timers.live
+        if live is not None and live.enemies:
+            # The feed names the five enemies; a reading naming anybody else is
+            # of the wrong team or of nothing. Lanes the feed already gave are
+            # not argued with either -- it is the game's own assignment.
+            enemies = {p.champion_id for p in live.enemies}
+            given = {p.champion_id for p in live.enemies if p.position}
+            slots = {index: cid for index, cid in status.roles.items()
+                     if cid in enemies and cid not in given}
+            if not slots:
+                return
+            if self.timers.set_roles(slots, source=status.roles_source):
+                self._sync_team()
+            return
         if self.timers.set_roles(status.roles, source=status.roles_source):
             self._sync_team()
         if len(status.roles) >= len(ROLES) and self.worker is not None:
             # Every lane is filled in. Reading on would spend a capture and an
             # icon comparison every couple of seconds to learn nothing.
             self.worker.set_roles_wanted(False)
+
+    # ------------------------------------------------------------------
+    # The game's data feed
+    # ------------------------------------------------------------------
+    def _live_wanted(self) -> bool:
+        """Whether the feed is worth asking right now. Runs on its thread."""
+        worker = self.worker
+        return (worker is not None and bool(worker.status.in_game)
+                and bool(self.settings.get("live_client", True)))
+
+    def _live_game(self):
+        if self.live is None or not self.settings.get("live_client", True):
+            return None
+        return self.live.game
+
+    def _sync_live(self, status) -> bool:
+        """Apply the feed: the mode gate, the roster and the clock.
+
+        Returns whether the overlay should consider a game to be on. Three
+        answers, and the middle one is the reason this exists:
+
+        * a game in a mode that is on: yes -- roster to the parser and timers;
+        * a game in a mode that is off (ARAM, Arena...): no, and the capture is
+          paused outright, so nothing is read at all;
+        * a game window with no feed yet -- the loading screen: not yet. The
+          overlay waits for the feed to say which mode this is, so it never
+          flashes up over an ARAM loading screen, and gives up waiting after
+          LIVE_GRACE_SECONDS in case the feed is blocked.
+        """
+        if not status.in_game:
+            self._window_since = None
+        elif self._window_since is None:
+            self._window_since = monotonic()
+
+        game = self._live_game()
+        enabled = game is not None and mode_enabled(self.settings, game.category)
+        if self.worker is not None:
+            self.worker.set_paused(game is not None and not enabled)
+
+        roster_game = game if enabled else None
+        if self.timers is not None and self.timers.set_live_game(roster_game):
+            self._sync_team()
+        self._sync_parser_roster(roster_game)
+        self._sync_clock_probe(feed_clock=roster_game is not None)
+        self._last_live_game = game
+
+        if not status.in_game:
+            return False
+        if game is not None:
+            return enabled
+        waiting = (self.settings.get("live_client", True)
+                   and self._window_since is not None
+                   and monotonic() - self._window_since < LIVE_GRACE_SECONDS)
+        return not waiting
+
+    def _sync_parser_roster(self, game) -> None:
+        if self.parser is None:
+            return
+        key = game.roster_key() if game is not None and game.enemies else None
+        if key == self._parser_roster_key:
+            return
+        self._parser_roster_key = key
+        if key is None:
+            self.parser.set_roster(None)
+            return
+        self.parser.set_roster({p.champion_id: p.spells for p in game.enemies},
+                               [p.champion_id for p in game.allies])
+
+    def _sync_clock_probe(self, *, feed_clock: bool) -> None:
+        """Read the clock area only when the feed is not giving the real one.
+
+        Left alone while its framing tool is open: somebody placing the frame
+        wants to see what it reads, whatever else is supplying the clock.
+        """
+        if self.worker is None or ZONE_CLOCK in self.zone_frames:
+            return
+        want = not feed_clock and self._saved_region("clock_region") is not None
+        if want == self.worker.has_probe(ZONE_CLOCK):
+            return
+        self.worker.set_probe(ZONE_CLOCK,
+                              self._saved_region("clock_region") if want else None)
+
+    def _fitted_chat_region(self, region: ChatRegion) -> ChatRegion:
+        """A hand-placed chat area, widened to hold a whole chat line.
+
+        Saved back when it changed, so the frame reopens on what is really read.
+        """
+        status = getattr(self, "_latest_status", None)
+        window = (status.window_rect if status is not None
+                  and status.window_rect is not None else self._screen_rect())
+        fitted = chat_detector.fit_manual_region(region, window)
+        if fitted.width != region.width:
+            log.info("chat area %s widened to %d px to hold whole lines",
+                     region.describe(), fitted.width)
+            self.settings.set("chat_region", fitted.as_list())
+        return fitted
 
     # ------------------------------------------------------------------
     def _refresh_ui(self) -> None:
@@ -772,16 +915,22 @@ class Application:
             self.overlay.set_status(self._boot_message)
             return
 
-        self.overlay.set_game_active(bool(status.in_game))
+        active = self._sync_live(status)
+        self.overlay.set_game_active(active)
+        self.overlay.set_team(self.timers.team())
 
         # A real game outranks the trial: from here on the screen has actual
-        # cooldowns to show, and the overlay has to be click-through again.
+        # cooldowns to show, and the overlay has to be click-through again. Any
+        # game window counts, including one in a mode that is switched off -- the
+        # trial overrides every hide rule, so it must not outlive the moment a
+        # game is on screen whatever that game is.
         if self._demo and status.in_game:
             self._end_demo_for_game()
 
-        if status.game_clock is not None:
+        if status.game_clock is not None and self.timers.live is None:
             # The clock area was validated and reads cleanly: that is the game
-            # time itself, so it outranks anything inferred from chat timestamps.
+            # time itself, so it outranks anything inferred from chat timestamps
+            # -- but not the feed's clock, which is the real one.
             self.timers.note_clock(status.game_clock)
 
         self._apply_read_roles(status)
@@ -801,6 +950,8 @@ class Application:
             self.overlay.set_status("")
         elif not status.in_game:
             self.overlay.set_status(status.error or status.game)
+        elif not active:
+            self.overlay.set_status(tr("overlay.waiting_game"))
         else:
             self.overlay.set_status(tr("overlay.nothing_yet"))
 
@@ -812,18 +963,32 @@ class Application:
                           ms=status.last_ocr_ms,
                           skipped=status.skip_ratio * 100)
             self.control.update_status(
-                game=status.error or status.game,
+                game=status.error or self._describe_game(status),
                 region=status.region,
                 ocr=ocr_text,
                 timers=self.timers.active_count(),
                 clock=clock_text,
                 state=self._ui_state(status),
             )
+            rejected = list(status.colour_rejected)
+            if self.parser is not None:
+                rejected += [f"{tr('ui.debug_roster_reject')} {line}"
+                             for line in self.parser.roster_rejects[-6:]]
             self.control.update_debug(status.lines, status.near_misses,
-                                      status.colour_rejected)
+                                      rejected)
+
+    def _describe_game(self, status) -> str:
+        """The status line for the game: the mode, when the feed has named it."""
+        game = getattr(self, "_last_live_game", None)
+        if not status.in_game or game is None:
+            return status.game
+        mode = tr(f"mode.{game.category}")
+        if not mode_enabled(self.settings, game.category):
+            return tr("game.paused_mode", mode=mode)
+        return tr("game.live", mode=mode, enemies=len(game.enemies))
 
     def _ui_state(self, status) -> str:
-        """Which of the five states the control window's pill should show.
+        """Which of the states the control window's pill should show.
 
         Decided here rather than in the window: this is where the difference
         between "the client is up" and "nothing is running" is actually known.
@@ -836,6 +1001,10 @@ class Application:
             return "loading"
         if status.error:
             return "error"
+        game = getattr(self, "_last_live_game", None)
+        if (status.in_game and game is not None
+                and not mode_enabled(self.settings, game.category)):
+            return "paused"
         if status.in_game:
             return "in_game"
         if status.client_running:
@@ -914,6 +1083,7 @@ class Application:
         self.picker.start()
 
     def _on_region_selected(self, region: ChatRegion) -> None:
+        region = self._fitted_chat_region(region)
         self.settings.update({
             "chat_region": region.as_list(),
             "chat_region_locked": True,
@@ -1092,6 +1262,7 @@ class Application:
 
     def _on_test_applied(self, zone: str, region: ChatRegion) -> None:
         if zone == ZONE_CHAT:
+            region = self._fitted_chat_region(region)
             self.settings.update({
                 "chat_region": region.as_list(),
                 "chat_region_locked": True,
@@ -1436,6 +1607,8 @@ class Application:
             # thread reads that index continuously, and swapping the reference is
             # atomic where rebuilding it in place would be read half-empty.
             self.parser = MessageParser(assets)
+            # A new parser knows no roster yet; the next refresh hands it one.
+            self._parser_roster_key = None
             if self.worker is not None:
                 self.worker.parser = self.parser
         if self.timers is not None:
@@ -1476,6 +1649,8 @@ class Application:
         log.info("shutting down")
         if self.worker is not None:
             self.worker.stop()
+        if self.live is not None:
+            self.live.stop()
         self.overlay.save_geometry()
         self.settings.save()
         self.tray.hide()

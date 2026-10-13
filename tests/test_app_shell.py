@@ -201,11 +201,13 @@ application.overlay.set_game_active(False)
 check("the bar hides again when the game goes away",
       not application.overlay.isVisible())
 
-check("overlay defaults to the bar layout",
-      application.settings.get("overlay_layout") == "bar")
+check("overlay defaults to the enemy-team layout",
+      application.settings.get("overlay_layout") == "team")
 geometry = application.overlay.geometry()
-check("bar was placed at the top of the screen", geometry.y() < 80,
-      f"y={geometry.y()}")
+screen = application.app.primaryScreen().availableGeometry()
+check("the team display was placed against the right edge, near the top",
+      geometry.right() >= screen.right() - 40 and geometry.y() < screen.height() // 3,
+      f"{geometry.getRect()} on {screen.getRect()}")
 
 # ------------------------------------------- background pipeline starts
 state = {}
@@ -266,6 +268,77 @@ def finish():
     if status is not None:
         status.in_game = False
         application._refresh_ui()
+
+    # ------------------------------------------------- the game's data feed
+    # The mode gate, driven by a stand-in for the feed. A mode that is off must
+    # pause the capture outright; one that is on must hand the enemy roster to
+    # the parser and the timers; and a game window the feed has not named yet
+    # -- the loading screen -- must keep the overlay away until it does.
+    import live_client as live_module
+    from time import monotonic as _now
+
+    def feed_player(champion, team, name=None):
+        return {"championName": champion,
+                "rawChampionName": f"game_character_displayname_{champion}",
+                "team": team, "level": 8, "riotId": f"{name or champion}#T",
+                "summonerSpells": {
+                    "summonerSpellOne": {"rawDisplayName":
+                        "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"},
+                    "summonerSpellTwo": {"rawDisplayName":
+                        "GeneratedTip_SummonerSpell_SummonerDot_DisplayName"}}}
+
+    feed_players = ([feed_player("Garen", "ORDER", "Me")]
+                    + [feed_player(c, "CHAOS")
+                       for c in ("Darius", "Viego", "Ahri", "Jinx", "Thresh")])
+
+    def feed(mode, map_number):
+        return live_module.parse_game(
+            {"gameMode": mode, "mapNumber": map_number, "gameTime": 300.0},
+            feed_players, "Me#T", champions=application.assets.champions)
+
+    class FakeFeed:
+        game = None
+
+        def stop(self):
+            pass
+
+    real_feed, fake_feed = application.live, FakeFeed()
+    application.live = fake_feed
+    if status is not None and application.worker is not None:
+        # A copy: the live status object belongs to the capture thread, which
+        # is running and keeps writing "not in game" into it, since no game is.
+        import copy
+        status = copy.copy(status)
+        status.in_game = True
+        fake_feed.game = feed("ARAM", 12)
+        state["aram_hidden"] = application._sync_live(status) is False
+        state["aram_paused"] = application.worker.paused
+        state["aram_says_so"] = application._ui_state(status) == "paused"
+        fake_feed.game = feed("CLASSIC", 11)
+        state["rift_shown"] = application._sync_live(status) is True
+        state["rift_capturing"] = not application.worker.paused
+        state["rift_roster_to_parser"] = (
+            application.parser.roster is not None
+            and set(application.parser.roster.enemies)
+            == {"Darius", "Viego", "Ahri", "Jinx", "Thresh"})
+        state["rift_roster_to_timers"] = (
+            application.timers.roster()
+            == ["Darius", "Viego", "Ahri", "Jinx", "Thresh"]
+            or len(application.timers.roster()) == 5)
+        fake_feed.game = None
+        application._window_since = _now()
+        state["loading_screen_waits"] = application._sync_live(status) is False
+        application._window_since = _now() - app_main.LIVE_GRACE_SECONDS - 1
+        state["gives_up_waiting"] = application._sync_live(status) is True
+        application.settings.set("live_client", False)
+        application._window_since = _now()
+        state["feed_off_reads_chat_alone"] = application._sync_live(status) is True
+        state["feed_off_forgets_roster"] = application.parser.roster is None
+        application.settings.set("live_client", True)
+        status.in_game = False
+        application._sync_live(status)
+        application._refresh_ui()
+    application.live = real_feed
 
     state["assets"] = application.assets.ready
     state["worker"] = application.worker is not None and application.worker.is_alive()
@@ -513,6 +586,19 @@ check("and restores click-through", state.get("game_restores_click_through"))
 check("and clears the fake cooldowns", state.get("game_cleared_the_fakes"))
 check("the button follows the trial ending by itself",
       state.get("demo_button_released"))
+check("an ARAM game keeps the overlay away", state.get("aram_hidden"))
+check("and captures nothing at all", state.get("aram_paused"))
+check("and the window says it is paused", state.get("aram_says_so"))
+check("a Summoner's Rift game shows it", state.get("rift_shown"))
+check("and captures", state.get("rift_capturing"))
+check("the enemy roster reaches the parser", state.get("rift_roster_to_parser"))
+check("and the timers", state.get("rift_roster_to_timers"))
+check("the loading screen waits for the game to name its mode",
+      state.get("loading_screen_waits"))
+check("but not forever", state.get("gives_up_waiting"))
+check("with the feed switched off, chat alone is read straight away",
+      state.get("feed_off_reads_chat_alone"))
+check("and no roster lingers from it", state.get("feed_off_forgets_roster"))
 
 check("Riot assets loaded", state.get("assets"),
       f"{len(application.assets.champions)} champions")

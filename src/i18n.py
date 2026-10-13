@@ -93,6 +93,19 @@ STRINGS: dict[str, tuple[str, str]] = {
                          "Client open, not in a game"),
     "game.absent": ("League of Legends non detecte",
                     "League of Legends not detected"),
+    "game.live": ("En jeu : {mode} · {enemies} ennemis connus",
+                  "In game: {mode} · {enemies} enemies known"),
+    "game.paused_mode": ("En jeu : {mode} · en pause (mode désactivé)",
+                         "In game: {mode} · paused (mode switched off)"),
+
+    # -- game modes --------------------------------------------------------
+    "mode.rift": ("Faille de l'invocateur (classée, normale, Swiftplay)",
+                  "Summoner's Rift (ranked, normal, Swiftplay)"),
+    "mode.practice": ("Outil d'entraînement", "Practice Tool"),
+    "mode.aram": ("ARAM", "ARAM"),
+    "mode.arena": ("Arène", "Arena"),
+    "mode.other": ("Autres modes (URF, Un pour tous, Nexus Blitz…)",
+                   "Other modes (URF, One for All, Nexus Blitz…)"),
 
     # -- start-up / Riot data -------------------------------------------
     "boot.loading": ("Chargement des donnees Riot...", "Loading Riot data..."),
@@ -124,6 +137,8 @@ STRINGS: dict[str, tuple[str, str]] = {
     "overlay.waiting": ("En attente...", "Waiting..."),
     "overlay.nothing_yet": ("Aucun sort detecte pour le moment",
                             "No spell detected yet"),
+    "overlay.waiting_game": ("En attente des données de la partie…",
+                             "Waiting for the game's data…"),
 
     # -- tray menu -------------------------------------------------------
     "tray.overlay": ("Afficher l'overlay", "Show the overlay"),
@@ -226,6 +241,15 @@ STRINGS: dict[str, tuple[str, str]] = {
     "ui.pill_loading": ("CHARGEMENT", "LOADING"),
     "ui.pill_error": ("PROBLEME", "PROBLEM"),
     "ui.pill_demo": ("ESSAI", "TRIAL"),
+    "ui.pill_paused": ("EN PAUSE", "PAUSED"),
+    "ui.home_headline_paused": ("En pause pour ce mode de jeu",
+                                "Paused for this game mode"),
+    "ui.home_headline_paused_hint": (
+        "Flashwatch ne lit rien et n'affiche rien dans ce mode. Pour l'activer : "
+        "Réglages, puis Modes de jeu.",
+        "Flashwatch reads nothing and shows nothing in this mode. To turn it on: "
+        "Settings, then Game modes."),
+    "ui.debug_roster_reject": ("[pas un sort ennemi]", "[not an enemy spell]"),
 
     # -- home page --------------------------------------------------------
     "ui.state_game": ("Jeu :", "Game:"),
@@ -378,9 +402,11 @@ STRINGS: dict[str, tuple[str, str]] = {
     "ui.display_choose": ("Choisissez votre affichage",
                           "Pick the display you prefer"),
     "ui.display_choose_hint": (
-        "Les trois montrent exactement la meme information. Prenez celui que "
-        "votre oeil lit le plus vite en combat.",
-        "All three show exactly the same information. Take the one your eye reads "
+        "L'équipe ennemie montre tout, ce qui est prêt comme ce qui ne l'est pas ; "
+        "les trois autres ne montrent que ce qui est en recharge. Prenez celui "
+        "que votre oeil lit le plus vite en combat.",
+        "The enemy team shows everything, what is up as well as what is down; the "
+        "other three show only what is on cooldown. Take the one your eye reads "
         "fastest in a fight."),
     "ui.layout_bar": ("Barre chrono", "Chrono track"),
     "ui.layout_bar_hint": (
@@ -400,6 +426,32 @@ STRINGS: dict[str, tuple[str, str]] = {
         "progression. Le plus lisible, le plus haut.",
         "One row per spell: champion, spell, time left and a progress gauge. The "
         "most readable, and the tallest."),
+    "ui.layout_team": ("Équipe ennemie", "Enemy team"),
+    "ui.layout_team_hint": (
+        "Les cinq ennemis et tous leurs sorts, comme le jeu dessine les "
+        "compétences : grisés et balayés pendant le temps de recharge, nets quand "
+        "ils sont prêts. Le plus discret, et le seul qui montre aussi ce qui est "
+        "disponible.",
+        "All five enemies and every spell they have, drawn the way the game "
+        "draws abilities: greyed and swept while down, plain when ready. The most "
+        "discreet, and the only one that also shows what is up."),
+    "ui.team_horizontal": ("En ligne, le long d'un bord", "In a row, along an edge"),
+    "ui.team_horizontal_hint": (
+        "Les ennemis côte à côte au lieu d'une colonne, pour le haut ou le bas de "
+        "l'écran.",
+        "Enemies side by side instead of a column, for the top or bottom of the "
+        "screen."),
+    "ui.team_hide_rested": ("Masquer les ennemis sans sort en recharge",
+                            "Hide enemies with nothing on cooldown"),
+    "ui.team_hide_rested_hint": (
+        "L'affichage reste invisible jusqu'à ce qu'un sort ennemi soit utilisé.",
+        "The display stays invisible until an enemy uses a spell."),
+    "ui.team_rest": ("Ennemis au repos :", "Enemies at rest:"),
+    "ui.team_rest_hint": (
+        "Opacité d'un ennemi dont tous les sorts sont prêts. Ceux qui ont un sort "
+        "en recharge sont toujours affichés à pleine intensité.",
+        "How strongly an enemy with every spell up is drawn. One with a spell "
+        "down is always drawn at full strength."),
     "ui.position": ("Position a l'ecran", "Where it sits on screen"),
     "ui.position_hint": (
         "L'affichage se pose ou vous voulez : glissez-le n'importe ou, "
@@ -420,6 +472,23 @@ STRINGS: dict[str, tuple[str, str]] = {
     "ui.language": ("Langue du client", "Client language"),
     "ui.language_fr": ("Francais (client FR)", "French (FR client)"),
     "ui.language_en": ("Anglais (client EN)", "English (EN client)"),
+    "ui.modes": ("Modes de jeu", "Game modes"),
+    "ui.modes_tip": (
+        "Flashwatch ne se réveille que dans les modes cochés. Dans les autres, "
+        "il ne lit rien et n'affiche rien.",
+        "Flashwatch only wakes up in the modes ticked here. In the others it "
+        "reads nothing and shows nothing."),
+    "ui.live_client": ("Lire les données de la partie", "Read the game's data"),
+    "ui.live_client_tip": (
+        "Le jeu les publie sur votre PC pour les applications compagnons (l'API "
+        "locale de Riot) : le mode, l'horloge, les cinq ennemis, leurs sorts, "
+        "niveaux et objets -- rien que le tableau des scores ne montre déjà. "
+        "C'est ce qui rend chaque temps de recharge exact pour chaque ennemi. "
+        "Rien ne quitte votre PC.",
+        "The game publishes them on your PC for companion apps (Riot's local "
+        "API): the mode, the clock, the five enemies, their spells, levels and "
+        "items -- nothing the scoreboard does not already show. It is what makes "
+        "each cooldown exact for each enemy. Nothing leaves your PC."),
     "ui.language_tip": (
         "Langue du client League : elle decide des textes recherches dans le "
         "chat et des noms de champions et de sorts telecharges. L'interface "
@@ -468,11 +537,11 @@ STRINGS: dict[str, tuple[str, str]] = {
     "ui.demo_hint": (
         "Des sorts d'exemple s'affichent en continu, dans tous les etats : "
         "fraichement lance, a mi-course, bientot pret, deja dispo. De quoi "
-        "comparer les trois affichages, essayer un theme et poser la barre ou "
-        "vous voulez. Ca s'arrete tout seul quand une vraie partie demarre.",
+        "comparer les affichages, essayer un theme et poser l'overlay ou vous "
+        "voulez. Ca s'arrete tout seul quand une vraie partie demarre.",
         "Sample cooldowns stay on screen in every state: just cast, halfway, "
-        "nearly back, already up. Enough to compare the three displays, try a "
-        "theme and put the bar where you want it. It stops by itself when a real "
+        "nearly back, already up. Enough to compare the displays, try a theme "
+        "and put the overlay where you want it. It stops by itself when a real "
         "game starts."),
     "ui.demo_start": ("Afficher des sorts d'exemple", "Show sample cooldowns"),
     "ui.demo_stop": ("Arreter l'essai", "Stop the trial"),
@@ -480,6 +549,7 @@ STRINGS: dict[str, tuple[str, str]] = {
     "ui.theme_dark": ("Sombre", "Dark"),
     "ui.theme_light": ("Clair", "Light"),
     "ui.theme_neon": ("Neon", "Neon"),
+    "ui.theme_clean": ("Épuré (sans fond)", "Clean (no panel)"),
     "ui.opacity": ("Opacite :", "Opacity:"),
     "ui.scale": ("Echelle :", "Scale:"),
     "ui.timer_font": ("Police du chrono :", "Timer font:"),
@@ -552,16 +622,17 @@ STRINGS: dict[str, tuple[str, str]] = {
         "the OCR, since your own text is not drawn in red. \"used\" "
         "announcements are never filtered: the game prints those for enemies "
         "only."),
-    "ui.cosmic": ("Supposer Perspicacite cosmique (-18%)",
-                  "Assume Cosmic Insight (-18%)"),
-    "ui.ionian": ("Supposer Bottes ioniennes (-12%)",
-                  "Assume Ionian Boots of Lucidity (-12%)"),
+    "ui.cosmic": ("Supposer Perspicacité cosmique chez les ennemis en Inspiration",
+                  "Assume Cosmic Insight for enemies running Inspiration"),
+    "ui.ionian": ("Sans données de partie : supposer des Bottes ioniennes",
+                  "Without game data: assume Ionian Boots of Lucidity"),
     "ui.ultimate_note": (
-        "Les ultimes dependent du rang et de l'acceleration de competences, "
-        "invisibles a l'ecran. Ils sont estimes d'apres l'horloge de la partie "
-        "et marques d'un ~.",
-        "Ultimates depend on ability rank and haste, neither of which is visible "
-        "on screen. They are estimated from the game clock and marked with a ~."),
+        "Les ultimes dependent du rang et de l'acceleration de competences. Le "
+        "rang vient du niveau de l'ennemi et l'acceleration de ses objets ; ce "
+        "que les runes ajoutent reste invisible, d'ou le ~.",
+        "Ultimates depend on ability rank and haste. The rank comes from the "
+        "enemy's level and the haste from their items; what runes add stays "
+        "hidden, hence the ~."),
     "ui.notifications": ("Notifications", "Notifications"),
     "ui.audio": ("Activer le son", "Enable sound"),
     "ui.audio_ready": ("Signaler les sorts prets", "Announce ready spells"),

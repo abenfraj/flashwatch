@@ -205,7 +205,7 @@ for layout, (x, y, width, height) in placements.items():
     overlay.save_geometry()
 
 kept = {}
-for layout in LAYOUTS:
+for layout in placements:
     settings.set("overlay_layout", layout)
     overlay.sync_layout()
     rect = overlay.geometry()
@@ -214,7 +214,7 @@ for layout in LAYOUTS:
 check("each display comes back to its own rectangle", kept == placements,
       str(kept))
 check("and all three are on disk",
-      set(settings.get("layout_geometry")) >= set(LAYOUTS),
+      set(settings.get("layout_geometry")) >= set(placements),
       str(settings.get("layout_geometry")))
 # The vertical track keeps a slot of its own beside them, since standing the bar
 # on its end changes its shape rather than its display.
@@ -281,7 +281,8 @@ check("the rows start down a side, not across the top",
       tops[LAYOUT_LIST].height() > tops[LAYOUT_LIST].width(),
       f"{tops[LAYOUT_LIST].width()}x{tops[LAYOUT_LIST].height()}")
 check("each display got its own default rectangle",
-      len({(r.x(), r.y(), r.width(), r.height()) for r in tops.values()}) == 3,
+      len({(r.x(), r.y(), r.width(), r.height()) for r in tops.values()})
+      == len(LAYOUTS),
       str({k: v.getRect() for k, v in tops.items()}))
 
 # ------------------------------------------- carried over from an older build

@@ -201,11 +201,24 @@ COLOUR_ENEMY = "enemy"
 COLOUR_ALLY = "ally"
 COLOUR_UNKNOWN = "unknown"
 
-# Reading the whole explore band costs 0.6-1.3s, and the band contains the
+# Reading the whole explore band costs 0.4-1.3s, and the band contains the
 # moving game world, so the frame gate cannot suppress much of it. Throttling
 # keeps the exploring phase from monopolising a core. Chat lines persist on
 # screen for several seconds, so nothing is missed by looking less often.
 EXPLORE_MIN_INTERVAL = 0.7
+# ...and every pass that finds nothing waits longer before the next, up to this.
+# The start of a game is the common case: chat is empty for minutes, and reading
+# an empty band every 0.7 s was most of a core spent learning nothing. A line
+# stays up for several seconds even with the chat box closed, so a look every
+# three seconds still reads it more than once.
+EXPLORE_MAX_INTERVAL = 3.0
+EXPLORE_BACKOFF = 1.5
+
+# A chat row ending this close to the right edge of the area being read was cut
+# off by it -- and the cut-off part is where the spell name is. The area is
+# widened by this share and read again.
+TRUNCATION_MARGIN = 4
+WIDEN_STEP = 0.35
 
 
 def row_crop(frame_bgr: np.ndarray, box: tuple[int, int, int, int],
@@ -761,6 +774,14 @@ class CaptureWorker(threading.Thread):
         # game stops looking. Restored on every session change.
         self._roles_wanted = True
         self._session_started = time.monotonic()
+        # Set by the application when there is nothing to read: a mode the user
+        # switched off (ARAM, Arena...), or a loading screen the game's data feed
+        # has not yet named. Paused means *nothing* is captured -- not the chat,
+        # not the team areas -- which is the point of a mode being off.
+        self._paused = False
+        # How long to wait between two explore passes; grows while they find
+        # nothing. See EXPLORE_MAX_INTERVAL.
+        self._explore_interval = EXPLORE_MIN_INTERVAL
         self.icons = role_reader.IconMatcher(parser.assets)
         # Self-test runs waiting to be served, with the callback to answer on.
         self._self_tests: list = []
@@ -805,6 +826,18 @@ class CaptureWorker(threading.Thread):
         self._test_mode = active
         self.differ.reset()
 
+    def set_paused(self, paused: bool) -> None:
+        """Stop (or resume) reading anything, whatever the game is doing."""
+        if paused == self._paused:
+            return
+        self._paused = paused
+        self.differ.reset()
+        log.info("capture %s", "paused" if paused else "resumed")
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
     def set_probe(self, zone: str, region: ChatRegion | None) -> None:
         """Register (or drop) an extra rectangle to read every so often.
 
@@ -822,6 +855,9 @@ class CaptureWorker(threading.Thread):
             self._probes[zone] = region
         log.info("probe %s: %s", zone,
                  region.describe() if region is not None else "off")
+
+    def has_probe(self, zone: str) -> bool:
+        return zone in self._probes
 
     def set_role_region(self, zone: str, region: ChatRegion | None) -> None:
         """Register (or drop) an area the enemy team is listed in."""
@@ -926,6 +962,7 @@ class CaptureWorker(threading.Thread):
             self.status.roles = {}
             self.status.roles_source = ""
             self.status.role_notes.clear()
+            self._explore_interval = EXPLORE_MIN_INTERVAL
 
         self.status.window_rect = state.window_rect
 
@@ -934,10 +971,21 @@ class CaptureWorker(threading.Thread):
         # the chat frame does, and the clock is worth reading whenever it is
         # configured.
         self._read_probes()
-        if state.running:
+
+        if self._paused and not self._test_mode:
+            # A mode that is switched off. Nothing about it is worth a capture.
+            self.status.region = "-"
+            self.status.rows = []
+            self._publish(session_changed=session_changed, events=[])
+            return
+
+        if state.in_game:
             # Before the chat early-returns as well, and for a reason of its own:
             # the loading screen is the only chance to learn the lanes, and no
-            # chat exists on it yet.
+            # chat exists on it yet. In a game only: with just the client open
+            # the same rectangles hold champion select, whose portraits are
+            # *your* team, and reading them filled the log with rosters that
+            # were never the enemy's.
             self._read_roles()
 
         # A hand-placed region needs no window: in test mode the user is aiming
@@ -977,7 +1025,7 @@ class CaptureWorker(threading.Thread):
             return
 
         now = time.monotonic()
-        if exploring and now - self._last_explore < EXPLORE_MIN_INTERVAL:
+        if exploring and now - self._last_explore < self._explore_interval:
             self.status.skipped += 1
             self._publish(session_changed=session_changed, events=[], counted=True)
             return
@@ -1012,6 +1060,14 @@ class CaptureWorker(threading.Thread):
         if chat_rows:
             self._last_chat_seen = time.monotonic()
             self._verified_this_session = True
+        if exploring:
+            self._explore_interval = (
+                EXPLORE_MIN_INTERVAL if chat_rows
+                else min(EXPLORE_MAX_INTERVAL,
+                         self._explore_interval * EXPLORE_BACKOFF))
+        elif chat_rows and state.window_rect is not None:
+            self._widen_if_cut(region, chat_rows, frame.shape[1],
+                               state.window_rect)
 
         if exploring and chat_rows and state.window_rect is not None:
             # The timestamps themselves tell us where chat is.
@@ -1134,6 +1190,51 @@ class CaptureWorker(threading.Thread):
                 log.info("enemy team from the %s: %s", zone, slots)
             self.status.roles = dict(slots)
             self.status.roles_source = zone
+
+    def _widen_if_cut(self, region: ChatRegion,
+                      chat_rows: list[tuple[int, int, int, int]],
+                      captured_width: int,
+                      window_rect: tuple[int, int, int, int]) -> None:
+        """Grow the chat area to the right when it is cutting lines off.
+
+        A chat line is read left to right and the spell is the last word in it,
+        so an area a few pixels too narrow does not read a little worse -- it
+        reads nothing at all, every line ending at "used". That is what a hand-
+        drawn area 249 px wide did to a real install for two months: every row
+        was recognised as chat, none of them ever named a spell, and nothing on
+        screen said why.
+
+        So the evidence decides: a chat row that runs into the right edge was
+        cut, and the area grows until rows end inside it, never past the band
+        chat can occupy. A hand-placed area keeps its owner's position and
+        height; only its width is corrected, and saved, so the fix survives.
+        """
+        if self._test_mode:
+            # The frame being dragged is the user's to size; widening under the
+            # cursor would fight them.
+            return
+        if not any(box[0] + box[2] >= captured_width - TRUNCATION_MARGIN
+                   for box in chat_rows):
+            return
+        left, _top, width, _height = window_rect
+        limit = left + int(width * chat_detector.ZONE_RIGHT) - region.x
+        wanted = min(limit, int(region.width * (1.0 + WIDEN_STEP)) + 1)
+        if wanted <= region.width:
+            return
+        widened = chat_detector.clamp_to_window(
+            ChatRegion(region.x, region.y, wanted, region.height,
+                       source=region.source, confirmed=region.confirmed,
+                       rows=region.rows), window_rect)
+        if widened.width <= region.width:
+            return
+        log.info("chat lines run into the edge of %s, widening it to %d px",
+                 region.describe(), widened.width)
+        self._region = widened
+        self.differ.reset()
+        if widened.source == "manual":
+            self.settings.update({"chat_region": widened.as_list()})
+        else:
+            self._save_region(widened)
 
     @staticmethod
     def _describe_roles(slots: dict[int, str]) -> str:

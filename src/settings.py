@@ -71,19 +71,36 @@ CONFIG_PATH = ASSETS_DIR / "settings.json"
 BREADCRUMB_PATH = (Path(os.environ.get("LOCALAPPDATA", Path.home()))
                    / "Flashwatch" / "last-data-root.txt")
 
+# Bumped when a release changes a default that existing installs should adopt
+# once; see Settings._migrate. Not a setting anybody edits.
+SETTINGS_VERSION = 2
+
 DEFAULTS: dict[str, Any] = {
+    "settings_version": SETTINGS_VERSION,
     # --- overlay -------------------------------------------------------
-    # Which of the three displays is drawn. None is "the right one": a 4K
-    # ultrawide and a 1080p laptop, a jungler watching two enemies and a support
-    # watching five, do not want the same thing, so the choice is the user's.
+    # Which display is drawn. None is "the right one": a 4K ultrawide and a
+    # 1080p laptop, a jungler watching two enemies and a support watching five,
+    # do not want the same thing, so the choice is the user's.
     #
+    # "team"  : the five enemies down the right edge, every spell they have,
+    #           drawn like the game's own ability icons -- greyed and swept
+    #           while down, plain while up. The default.
     # "bar"   : horizontal track at the top centre; each spell rides left to
     #           right as its cooldown runs down, so position *is* progress.
     # "cards" : one fixed card per cooldown -- portrait, progress ring, spell
     #           badge, countdown. Nothing moves, which is what makes it readable
     #           mid-fight.
     # "list"  : compact rows, one per spell, each with a progress gauge.
-    "overlay_layout": "bar",
+    "overlay_layout": "team",
+    # The team display: a row of columns along an edge instead of a column of
+    # rows down a side.
+    "team_horizontal": False,
+    # How strongly an enemy with nothing on cooldown is drawn. Faint by default:
+    # what is up is worth seeing, but not at the strength of what is down.
+    "team_rest_opacity": 0.45,
+    # Draw only the enemies with something down, so the display is invisible
+    # until a spell is used.
+    "team_hide_rested": False,
     # Geometry per layout: {"bar": [x, y, w, h], ...}. Kept apart because the
     # three shapes have nothing in common -- a position and size that suit a wide
     # top strip would put the vertical rows half off screen, and switching
@@ -113,10 +130,12 @@ DEFAULTS: dict[str, Any] = {
     "overlay_locked": True,          # locked == click-through
     "overlay_opacity": 0.92,
     "overlay_scale": 1.0,
-    # Light by default: it is the product's face, and the light overlay is the
-    # only one of the three that stays legible over a bright game as well as a
-    # dark one -- at the cost of being a little more opaque. dark | light | neon
-    "theme": "light",
+    # No panel by default: the overlay is icons and numbers with their own dark
+    # edges, straight over the game, which is what "discreet" means over a
+    # screen that changes every second. The light panel stays one click away for
+    # anybody who prefers a backing -- it is the most legible over a bright
+    # victory screen, at the cost of being a box. clean | light | dark | neon
+    "theme": "clean",
     # The countdown's face. "auto" takes the first of the built-in preferences
     # this machine actually has (Bahnschrift, then Segoe UI, then a mono); any
     # other value names one of the faces offered in the settings, and is ignored
@@ -392,6 +411,39 @@ class Settings:
                         self._data[key] = value
                     else:
                         self._foreign[key] = value
+                version = raw.get("settings_version", 1)
+            if self._migrate(version):
+                self.save()
+
+    def _migrate(self, version) -> bool:
+        """Carry a settings file from an older release onto this one's defaults.
+
+        Only for the handful of defaults a release *means* every install to
+        adopt; everything else the user set is theirs and stays. Returns whether
+        anything changed.
+
+        Version 2 is the overhaul: the enemy-team display and the panel-less
+        theme replace whatever display was in use, once. The old ones were the
+        reason people closed the program, and nobody would find the new one in a
+        list they had stopped opening. The scale goes back to 1 with them, since
+        it was set for a different display's icon sizes; everything is one
+        click away in the settings.
+        """
+        try:
+            version = int(version)
+        except (TypeError, ValueError):
+            version = 1
+        if version >= SETTINGS_VERSION:
+            return False
+        with self._lock:
+            if version < 2:
+                log.info("settings from an older version: switching to the "
+                         "enemy-team display and the clean theme")
+                self._data["overlay_layout"] = "team"
+                self._data["theme"] = "clean"
+                self._data["overlay_scale"] = 1.0
+            self._data["settings_version"] = SETTINGS_VERSION
+        return True
 
     def save(self) -> None:
         with self._lock:

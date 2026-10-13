@@ -28,6 +28,7 @@ from PySide6.QtGui import (QColor, QCursor, QFont, QFontMetrics, QPainter,
                            QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import QWidget
 
+from cooldowns import format_short
 from i18n import tr
 from timer_manager import ActiveTimer
 
@@ -48,13 +49,21 @@ RESIZE_GRIP = 14
 # grabbed again, not to impose a shape.
 MIN_WIDTH, MIN_HEIGHT = 110, 46
 
-# The three displays. Same data, three readings of it -- and no way to know from
-# here which one suits a given player's screen and role, so all three ship and
+# The displays. Same data, different readings of it -- and no way to know from
+# here which one suits a given player's screen and role, so all of them ship and
 # the choice is a setting.
+#
+# "team" is the default: the five enemies, each with every spell they have, the
+# way the game's own HUD draws abilities -- an icon, darkened and swept while it
+# is down, the seconds left written on it. It is the one display that can show
+# a spell that is *up*, which is half of what a player wants to know, and the
+# one that becomes possible once the game's data feed names the enemy's spells.
+# The other three only ever show what is on cooldown.
+LAYOUT_TEAM = "team"
 LAYOUT_BAR = "bar"
 LAYOUT_CARDS = "cards"
 LAYOUT_LIST = "list"
-LAYOUTS = (LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST)
+LAYOUTS = (LAYOUT_TEAM, LAYOUT_BAR, LAYOUT_CARDS, LAYOUT_LIST)
 
 # The track stood on its end. Not a fourth display -- it is the same display,
 # reading the same way -- so it is a setting on the bar rather than a fourth tile
@@ -70,6 +79,10 @@ LAYOUT_BAR_V = "bar_vertical"
 # ``align`` is "top" (centred on the top edge) or "left" (down the left side,
 # clear of the minimap and the item shop).
 LAYOUT_DEFAULTS = {
+    # Down the right edge, under the score and the clock: the one strip of the
+    # HUD with nothing in it, and on the side the minimap already draws the eye
+    # to. The size here is only a seed; the team display sizes itself.
+    LAYOUT_TEAM: {"fraction": 0.06, "height": 200, "align": "right"},
     LAYOUT_BAR: {"fraction": 0.30, "height": 58, "align": "top"},
     LAYOUT_CARDS: {"fraction": 0.26, "height": 80, "align": "top"},
     LAYOUT_LIST: {"fraction": 0.13, "height": 300, "align": "left"},
@@ -128,6 +141,33 @@ CARD_PAD = 6
 # The shadow flips with it. A black shadow under dark text on a light panel just
 # muddies it; what dark text needs is a *light* halo.
 THEMES: dict[str, dict] = {
+    # No panel at all: icons and numbers straight over the game, each carrying
+    # its own dark edge and halo. The most discreet of the four, and the default
+    # -- nothing on screen is a box, so nothing on screen hides the game. The
+    # numbers stay legible because they are drawn on the darkened spell icon (in
+    # the team display) or ringed with a full outline (everywhere else), never
+    # left to whatever the game happens to be showing behind them.
+    "clean": {
+        "panel": (8, 10, 16, 0),
+        "panel_alpha": 0.0,
+        "idle_alpha": 0.0,
+        "border": (0, 0, 0, 170),
+        "rail": (236, 240, 248, 120),
+        "title": (240, 244, 250, 255),
+        "role": (210, 216, 228, 255),
+        "name": (246, 248, 252, 255),
+        "spell": (220, 226, 236, 255),
+        "far": (126, 232, 162, 255),
+        "mid": (255, 206, 92, 255),
+        "near": (255, 112, 102, 255),
+        "ready": (132, 250, 178, 255),
+        "edit": (90, 200, 255, 255),
+        "row": (0, 0, 0, 0),
+        "badge": (10, 12, 18, 235),
+        "shadow": (0, 0, 0, 235),
+        # Text without a panel under it needs an outline, not a drop shadow.
+        "outline": True,
+    },
     "light": {
         "panel": (250, 251, 253, 255),
         "panel_alpha": 0.80,     # in play -- see the note above
@@ -218,6 +258,27 @@ MID_PROGRESS = 0.60
 CHIP_MIN = 10                 # px at scale 1, whatever the font does
 CHIP_TEXT_RATIO = 0.95        # diameter, as a share of the countdown's ascent
 CHIP_GAP = 3                  # px at scale 1, between the chip and the number
+
+# The team display, in pixels at scale 1. Sized for 1080p, where League's own
+# summoner icons are about this big; the scale setting does the rest.
+TEAM_PORTRAIT = 30            # the champion, a circle
+TEAM_SPELL = 27               # each spell, a rounded square
+TEAM_GAP = 3                  # between two spells
+TEAM_SPLIT = 5                # between the portrait and its spells
+TEAM_ROW_GAP = 5              # between two enemies, one above the other
+TEAM_COLUMN_GAP = 14          # between two enemies side by side: wider, since a
+                              # row of spells would otherwise run into the next
+TEAM_PAD = 5                  # inside the window, all round
+# Seconds left at which a countdown on an icon turns from white to amber: the
+# moment to start caring, whatever the spell.
+TEAM_SOON_SECONDS = 15.0
+# Fixed rather than themed: the number always sits on a darkened icon, so it is
+# always light-on-dark whatever the panel behind the display looks like.
+TEAM_TEXT = (246, 248, 252, 255)
+TEAM_TEXT_SOON = (255, 203, 87, 255)
+TEAM_TEXT_HALO = (0, 0, 0, 225)
+TEAM_COOLDOWN_SHADE = (6, 8, 14, 150)     # over the part of the icon still down
+TEAM_COOLDOWN_DIM = (6, 8, 14, 70)        # over the whole icon while it is down
 
 
 # The countdown's face, in order of preference, with the size multiplier that
@@ -466,16 +527,20 @@ class IconCache:
     frame. With the track repainting thirty times a second that was the single
     most expensive thing the program did. Cutting the circle once, at the size it
     will be drawn, turns each icon back into a plain blit.
+
+    The team display's square spell icons are cut the same way, with rounded
+    corners, and in a second, greyed version for while the spell is down --
+    the way the game itself shows an ability on cooldown.
     """
 
     def __init__(self) -> None:
-        self._cache: dict[tuple[str, int, bool], QPixmap] = {}
+        self._cache: dict[tuple, QPixmap] = {}
 
-    def get(self, path: Path | None, size: int, *,
-            round_: bool = False) -> QPixmap | None:
+    def get(self, path: Path | None, size: int, *, round_: bool = False,
+            corner: float = 0.0, grey: bool = False) -> QPixmap | None:
         if path is None or size <= 0:
             return None
-        key = (str(path), size, round_)
+        key = (str(path), size, round_, round(corner, 1), grey)
         hit = self._cache.get(key)
         if hit is not None:
             return hit if not hit.isNull() else None
@@ -485,10 +550,33 @@ class IconCache:
             return None
         scaled = pixmap.scaled(size, size, Qt.KeepAspectRatio,
                                Qt.SmoothTransformation)
+        if grey:
+            scaled = self._greyed(scaled)
         if round_:
             scaled = self._rounded(scaled, size)
+        elif corner > 0:
+            scaled = self._cornered(scaled, size, corner)
         self._cache[key] = scaled
         return scaled
+
+    @staticmethod
+    def _greyed(pixmap: QPixmap) -> QPixmap:
+        from PySide6.QtGui import QImage
+        image = pixmap.toImage().convertToFormat(QImage.Format_Grayscale8)
+        return QPixmap.fromImage(image)
+
+    @staticmethod
+    def _cornered(pixmap: QPixmap, size: int, corner: float) -> QPixmap:
+        out = QPixmap(size, size)
+        out.fill(Qt.transparent)
+        painter = QPainter(out)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        clip = QPainterPath()
+        clip.addRoundedRect(QRectF(0, 0, size, size), corner, corner)
+        painter.setClipPath(clip)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.end()
+        return out
 
     @staticmethod
     def _rounded(pixmap: QPixmap, size: int) -> QPixmap:
@@ -518,6 +606,11 @@ class Overlay(QWidget):
         self.assets = assets
         self.icons = IconCache()
         self._timers: list[ActiveTimer] = []
+        # The enemy team, for the team display: every enemy and every spell.
+        self._team: list = []
+        # What the team display last drew, to the second, so a refresh that
+        # changes nothing visible costs no repaint.
+        self._team_signature: tuple | None = None
         self._status = ""
         self._game_active = False
         # True while the trial mode is running, which overrides every hide rule.
@@ -619,6 +712,7 @@ class Overlay(QWidget):
             self.place_default(save=True)
             return
         self.setGeometry(*rect)
+        self._fit_team_window()
         self._ensure_on_screen()
 
     def _migrate_geometry(self) -> None:
@@ -632,6 +726,9 @@ class Overlay(QWidget):
         if self._geometry_store():
             return
         layout = self.geometry_key()
+        if layout == LAYOUT_TEAM:
+            # No older build ever drew it, so no older position belongs to it.
+            return
         if layout in (LAYOUT_BAR, LAYOUT_BAR_V) and not self.settings.get("bar_placed"):
             return
         rect = self._valid_rect([self.settings.get("overlay_x", 40),
@@ -653,9 +750,14 @@ class Overlay(QWidget):
 
         width = max(MIN_WIDTH, int(available.width() * spec["fraction"]))
         height = max(MIN_HEIGHT, int(spec["height"]))
+        if layout == LAYOUT_TEAM:
+            width, height = self._team_window_size()
         if spec["align"] == "left":
             x = available.left() + int(available.width() * 0.012)
             y = available.top() + int(available.height() * 0.16)
+        elif spec["align"] == "right":
+            x = available.right() - width - int(available.width() * 0.006)
+            y = available.top() + int(available.height() * 0.14)
         else:
             x = available.left() + (available.width() - width) // 2
             y = available.top() + LAYOUT_DEFAULT_MARGIN
@@ -854,6 +956,36 @@ class Overlay(QWidget):
             self._status = text
             self.update()
 
+    def set_team(self, members: list) -> None:
+        """The enemy team, for the team display. Called on every refresh.
+
+        Repaints only when something visible changed -- a countdown ticking over
+        a whole second, a spell coming back, an enemy appearing -- since this runs
+        ten times a second for the whole game and most of those calls change
+        nothing on screen.
+        """
+        self._team = list(members or ())
+        if self.current_layout() != LAYOUT_TEAM:
+            return
+        now = monotonic()
+        signature = tuple(
+            (member.champion_id, tuple(
+                (slot.spell_key,
+                 -1 if slot.timer is None else int(slot.timer.remaining(now) + 0.999),
+                 bool(slot.timer is not None and slot.timer.uncertain))
+                for slot in member.slots))
+            for member in self._team)
+        if signature == self._team_signature:
+            return
+        shape_changed = (self._team_signature is None
+                         or [len(m[1]) for m in signature]
+                         != [len(m[1]) for m in self._team_signature])
+        self._team_signature = signature
+        if shape_changed:
+            self._fit_team_window()
+        self.refresh_visibility()
+        self.update()
+
     def resizeEvent(self, event) -> None:
         """A resize re-lays the track out; it does not move the cooldowns.
 
@@ -900,7 +1032,9 @@ class Overlay(QWidget):
     def mousePressEvent(self, event) -> None:
         if event.button() != Qt.LeftButton:
             return
-        if self._grip_rect().contains(event.position().toPoint()):
+        # The team display sizes itself; it is moved, never resized by hand.
+        if (self.current_layout() != LAYOUT_TEAM
+                and self._grip_rect().contains(event.position().toPoint())):
             self._resize_origin = (QCursor.pos(), self.size())
         else:
             self._drag_origin = QCursor.pos() - self.frameGeometry().topLeft()
@@ -950,7 +1084,9 @@ class Overlay(QWidget):
         self._apply_minimum_height(scale)
 
         layout = self.current_layout()
-        if layout == LAYOUT_CARDS:
+        if layout == LAYOUT_TEAM:
+            self._paint_team(painter, theme, scale, locked)
+        elif layout == LAYOUT_CARDS:
             self._paint_cards(painter, theme, scale, locked)
         elif layout == LAYOUT_LIST:
             self._paint_list(painter, theme, scale, locked)
@@ -1132,11 +1268,7 @@ class Overlay(QWidget):
         """
         chip, box = countdown_layout(rect, text, QFontMetrics(font), align,
                                      uncertain, scale)
-        painter.setFont(font)
-        painter.setPen(_colour(theme, "shadow"))
-        painter.drawText(box.translated(1, 1), align, text)
-        painter.setPen(colour)
-        painter.drawText(box, align, text)
+        self._paint_outlined_text(painter, box, text, font, colour, align, theme)
         if chip is not None:
             self._paint_uncertain_mark(painter, theme, chip, scale)
 
@@ -1182,7 +1314,7 @@ class Overlay(QWidget):
         return self.assets.icon_for_spell(timer.spell_key)
 
     def _paint_grip(self, painter: QPainter, theme: dict, locked: bool) -> None:
-        if locked:
+        if locked or self.current_layout() == LAYOUT_TEAM:
             return
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QPen(_colour(theme, "border"), 1.6))
@@ -1199,6 +1331,317 @@ class Overlay(QWidget):
         window could not be found in order to be moved.
         """
         return locked and not bool(self.settings.get("bar_show_when_idle", True))
+
+    # ------------------------------------------------------------------
+    # Display 0: the enemy team
+    # ------------------------------------------------------------------
+    # Five rows, one per enemy in lane order: the champion, then each of its
+    # spells as the game draws an ability -- an icon that is plain while the
+    # spell is up, and greyed, swept and numbered while it is down. A spell that
+    # comes back gets a green ring for as long as READY lingers elsewhere.
+    #
+    # Discreet by construction. There is no box unless the theme asks for one,
+    # and an enemy with nothing down is drawn faint (the "rest" opacity), so at a
+    # glance the only things at full strength are the spells that matter.
+    def team_is_horizontal(self) -> bool:
+        return bool(self.settings.get("team_horizontal", False))
+
+    def _team_metrics(self, scale: float) -> dict:
+        return {
+            "portrait": int(round(TEAM_PORTRAIT * scale)),
+            "spell": int(round(TEAM_SPELL * scale)),
+            "gap": max(1, int(round(TEAM_GAP * scale))),
+            "split": max(2, int(round(TEAM_SPLIT * scale))),
+            "row_gap": max(2, int(round(
+                (TEAM_COLUMN_GAP if self.team_is_horizontal() else TEAM_ROW_GAP)
+                * scale))),
+            "pad": max(2, int(round(TEAM_PAD * scale))),
+        }
+
+    def _team_shape(self) -> tuple[int, int]:
+        """(members, spells per member) the window is sized for.
+
+        Five, always, unless more are known: the window must not grow and shrink
+        as the roster fills in at the start of a game, and every game on the
+        Rift has five enemies. The spell count follows the ultimate setting.
+        """
+        members = max(5, len(self._team))
+        slots = 3 if self.settings.get("track_ultimates", True) else 2
+        for member in self._team:
+            slots = max(slots, len(member.slots))
+        return members, slots
+
+    def _team_block(self, metrics: dict, slots: int) -> tuple[int, int]:
+        """Width and height of one enemy's block."""
+        spells = slots * metrics["spell"] + max(0, slots - 1) * metrics["gap"]
+        if self.team_is_horizontal():
+            return (max(metrics["portrait"], spells),
+                    metrics["portrait"] + metrics["split"] + metrics["spell"])
+        return (metrics["portrait"] + metrics["split"] + spells,
+                max(metrics["portrait"], metrics["spell"]))
+
+    def _team_window_size(self, scale: float | None = None) -> tuple[int, int]:
+        if scale is None:
+            scale = self._scale()
+        metrics = self._team_metrics(scale)
+        members, slots = self._team_shape()
+        block_w, block_h = self._team_block(metrics, slots)
+        if self.team_is_horizontal():
+            width = members * block_w + (members - 1) * metrics["row_gap"]
+            height = block_h
+        else:
+            width = block_w
+            height = members * block_h + (members - 1) * metrics["row_gap"]
+        return (max(MIN_WIDTH, width + 2 * metrics["pad"]),
+                max(MIN_HEIGHT, height + 2 * metrics["pad"]))
+
+    def _scale(self) -> float:
+        try:
+            value = float(self.settings.get("overlay_scale", 1.0))
+        except (TypeError, ValueError):
+            value = 1.0
+        return max(0.6, min(2.0, value))
+
+    def _fit_team_window(self) -> None:
+        """Size the window to the team, keeping it where it was put.
+
+        The team display has one right size -- its content -- so it is not
+        resized by hand; the scale setting is what makes it bigger. When it grows
+        or shrinks it keeps the edge nearest the screen's side still, so a panel
+        placed against the right edge stays against it.
+        """
+        if self.current_layout() != LAYOUT_TEAM:
+            return
+        width, height = self._team_window_size()
+        rect = self.geometry()
+        if rect.width() == width and rect.height() == height:
+            return
+        screen = self.screen()
+        right_side = (screen is not None
+                      and rect.center().x() > screen.geometry().center().x())
+        x = rect.right() + 1 - width if right_side else rect.x()
+        self.setGeometry(x, rect.y(), width, height)
+
+    def team_cells(self, scale: float | None = None) -> list[tuple]:
+        """Where every enemy and spell goes: ``[(member, portrait, [spell rects])]``.
+
+        Pure geometry, apart from the painting, so the one property that matters
+        -- nothing overlapping, everything inside the window -- can be checked
+        without a screen.
+        """
+        if scale is None:
+            scale = self._scale()
+        metrics = self._team_metrics(scale)
+        _members, slots = self._team_shape()
+        block_w, block_h = self._team_block(metrics, slots)
+        horizontal = self.team_is_horizontal()
+        cells = []
+        for index, member in enumerate(self._team):
+            if horizontal:
+                left = metrics["pad"] + index * (block_w + metrics["row_gap"])
+                top = metrics["pad"]
+                portrait = QRectF(left + (block_w - metrics["portrait"]) / 2.0, top,
+                                  metrics["portrait"], metrics["portrait"])
+                count = len(member.slots)
+                row = (count * metrics["spell"]
+                       + max(0, count - 1) * metrics["gap"])
+                x = left + (block_w - row) / 2.0
+                y = top + metrics["portrait"] + metrics["split"]
+            else:
+                left = metrics["pad"]
+                top = metrics["pad"] + index * (block_h + metrics["row_gap"])
+                portrait = QRectF(left, top + (block_h - metrics["portrait"]) / 2.0,
+                                  metrics["portrait"], metrics["portrait"])
+                x = left + metrics["portrait"] + metrics["split"]
+                y = top + (block_h - metrics["spell"]) / 2.0
+            rects = []
+            for _slot in member.slots:
+                rects.append(QRectF(x, y, metrics["spell"], metrics["spell"]))
+                x += metrics["spell"] + metrics["gap"]
+            cells.append((member, portrait, rects))
+        return cells
+
+    def _team_rest_opacity(self) -> float:
+        try:
+            value = float(self.settings.get("team_rest_opacity", 0.45))
+        except (TypeError, ValueError):
+            value = 0.45
+        return max(0.0, min(1.0, value))
+
+    def _paint_team(self, painter: QPainter, theme: dict, scale: float,
+                    locked: bool) -> None:
+        wanted = self._team_window_size(scale)
+        if (self.width(), self.height()) != wanted:
+            # Resizing from inside a paint is refused; ask for it just after.
+            QTimer.singleShot(0, self._fit_team_window)
+
+        if not self._team:
+            if locked:
+                # Nothing known yet. Discreet means nothing, but a single faint
+                # line says the program is alive and where its display is.
+                if self._status:
+                    painter.setOpacity(0.55)
+                    self._paint_outlined_text(
+                        painter, QRectF(self.rect()).adjusted(4, 4, -4, -4),
+                        self._status, QFont("Segoe UI", max(6, int(7.5 * scale))),
+                        _colour(theme, "name") if theme.get("outline")
+                        else _colour(theme, "role"),
+                        Qt.AlignCenter | Qt.TextWordWrap, theme)
+                    painter.setOpacity(1.0)
+                return
+            self._paint_backing(painter, theme, scale, locked, idle=True,
+                                radius=8.0 * scale, alpha=0.6)
+            self._paint_unlocked_hint(painter, theme, scale, self.rect())
+            return
+
+        busy = any(member.busy for member in self._team)
+        if theme.get("panel_alpha", 0) > 0 or not locked:
+            self._paint_backing(painter, theme, scale, locked, idle=not busy,
+                                radius=8.0 * scale)
+
+        rest = self._team_rest_opacity()
+        hide_rest = bool(self.settings.get("team_hide_rested", False)) and locked
+        corner = max(2.0, 4.0 * scale)
+        for member, portrait, rects in self.team_cells(scale):
+            if not member.busy and hide_rest:
+                continue
+            painter.setOpacity(1.0 if (member.busy or not locked) else rest)
+            self._paint_team_portrait(painter, theme, member, portrait, scale)
+            for slot, rect in zip(member.slots, rects):
+                self._paint_team_spell(painter, theme, member, slot, rect,
+                                       corner, scale)
+        painter.setOpacity(1.0)
+
+    def _paint_team_portrait(self, painter: QPainter, theme: dict, member,
+                             rect: QRectF, scale: float) -> None:
+        icon = self.icons.get(self.assets.icon_for_champion(member.champion_id),
+                              round(rect.width()), round_=True)
+        if icon is not None:
+            painter.drawPixmap(rect.topLeft(), icon)
+        else:
+            painter.setBrush(QColor(28, 32, 42, 230))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(rect)
+            font = QFont("Segoe UI", 1, QFont.Bold)
+            font.setPixelSize(max(7, int(rect.width() * 0.36)))
+            painter.setFont(font)
+            painter.setPen(QColor(*TEAM_TEXT))
+            painter.drawText(rect, Qt.AlignCenter,
+                             (member.champion_name or "?")[:2].upper())
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(0, 0, 0, 170), max(1.0, 1.2 * scale)))
+        painter.drawEllipse(rect.adjusted(0.5, 0.5, -0.5, -0.5))
+
+    def _team_spell_icon(self, member, slot) -> Path | None:
+        if slot.kind == "ultimate":
+            champion = self.assets.champions.get(member.champion_id)
+            ult = champion.ultimate if champion else None
+            if ult is not None and ult.icon_path and ult.icon_path.exists():
+                return ult.icon_path
+            if ult is not None and ult.ddragon_id:
+                return self.assets.icon_for_spell(ult.ddragon_id)
+            return None
+        return self.assets.icon_for_spell(slot.spell_key)
+
+    def _paint_team_spell(self, painter: QPainter, theme: dict, member, slot,
+                          rect: QRectF, corner: float, scale: float) -> None:
+        """One spell, the way the game draws an ability.
+
+        Up: the plain icon. Down: the icon greyed, a dark wedge over the part of
+        the cooldown still to run -- it shrinks clockwise from twelve o'clock, as
+        every cooldown in League does -- and the seconds left written on it.
+        Just back: a green ring, while READY would linger in the other displays.
+        """
+        timer = slot.timer
+        size = round(rect.width())
+        path = QPainterPath()
+        path.addRoundedRect(rect, corner, corner)
+        down = timer is not None and not timer.is_ready()
+
+        icon = self.icons.get(self._team_spell_icon(member, slot), size,
+                              corner=corner, grey=down)
+        if icon is not None:
+            painter.drawPixmap(rect.topLeft(), icon)
+        else:
+            painter.fillPath(path, QColor(30, 34, 44, 235))
+            font = QFont("Segoe UI", 1, QFont.Bold)
+            font.setPixelSize(max(6, int(rect.height() * 0.5)))
+            painter.setFont(font)
+            painter.setPen(QColor(*TEAM_TEXT))
+            painter.drawText(rect, Qt.AlignCenter,
+                             (slot.spell_name or "?")[:1].upper())
+
+        if down:
+            painter.fillPath(path, QColor(*TEAM_COOLDOWN_DIM))
+            progress = self._progress(timer)
+            painter.save()
+            painter.setClipPath(path)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(*TEAM_COOLDOWN_SHADE))
+            # Big enough that the wedge reaches the corners of the square.
+            reach = rect.width() * 0.5
+            wedge = rect.adjusted(-reach, -reach, reach, reach)
+            start = 90.0 - 360.0 * progress
+            painter.drawPie(wedge, int(start * 16), -int(360 * 16 * (1.0 - progress)))
+            painter.restore()
+
+            remaining = timer.remaining()
+            text = format_short(remaining)
+            if timer.approximate and len(text) <= 2:
+                text = f"~{text}"
+            font = QFont(countdown_face()[0], 1, QFont.Bold)
+            share = 0.42 if len(text) >= 4 else 0.52
+            font.setPixelSize(max(6, int(rect.height() * share)))
+            if hasattr(font, "setFeature"):
+                try:
+                    font.setFeature(QFont.Tag("tnum"), 1)
+                except Exception:                     # noqa: BLE001
+                    pass
+            colour = QColor(*(TEAM_TEXT_SOON if remaining <= TEAM_SOON_SECONDS
+                              else TEAM_TEXT))
+            self._paint_outlined_text(painter, rect, text, font, colour,
+                                      Qt.AlignCenter, {"outline": True},
+                                      halo=QColor(*TEAM_TEXT_HALO))
+        elif timer is not None:
+            # Back up, and still inside the READY linger: say so, in green.
+            pen = QPen(_colour(THEMES["clean"], "ready"), max(1.5, 2.0 * scale))
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(-1.0, -1.0, 1.0, 1.0),
+                                    corner + 1.0, corner + 1.0)
+
+        # The edge that keeps an icon an icon over any background.
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(0, 0, 0, 160), max(1.0, 1.0 * scale)))
+        painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner)
+
+        if timer is not None and timer.uncertain and down:
+            size = max(8.0, rect.width() * 0.38)
+            chip = QRectF(rect.right() - size * 0.75, rect.top() - size * 0.25,
+                          size, size)
+            self._paint_uncertain_mark(painter, THEMES["clean"], chip, scale)
+
+    def _paint_outlined_text(self, painter: QPainter, rect, text: str,
+                             font: QFont, colour: QColor, align, theme: dict,
+                             *, halo: QColor | None = None) -> None:
+        """Text that stays legible over anything: a halo all round, then the ink.
+
+        A drop shadow is enough on a panel; with no panel, the side of a glyph
+        away from the shadow sits straight on the game. Eight one-pixel offsets
+        make a ring instead, which is what HUD text does.
+        """
+        painter.setFont(font)
+        box = QRectF(rect)
+        if theme.get("outline"):
+            painter.setPen(halo if halo is not None else _colour(theme, "shadow"))
+            for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1),
+                           (-1, -1), (1, 1), (-1, 1), (1, -1)):
+                painter.drawText(box.translated(dx, dy), align, text)
+        else:
+            painter.setPen(_colour(theme, "shadow"))
+            painter.drawText(box.translated(1, 1), align, text)
+        painter.setPen(colour)
+        painter.drawText(box, align, text)
 
     # ------------------------------------------------------------------
     # Display 1: the chrono track
