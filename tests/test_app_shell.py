@@ -205,8 +205,9 @@ check("overlay defaults to the enemy-team layout",
       application.settings.get("overlay_layout") == "team")
 geometry = application.overlay.geometry()
 screen = application.app.primaryScreen().availableGeometry()
-check("the team display was placed against the right edge, near the top",
-      geometry.right() >= screen.right() - 40 and geometry.y() < screen.height() // 3,
+check("the team display was placed against the right edge, under the kill feed",
+      geometry.right() >= screen.right() - 40
+      and screen.height() * 0.25 < geometry.y() < screen.height() // 2,
       f"{geometry.getRect()} on {screen.getRect()}")
 
 # ------------------------------------------- background pipeline starts
@@ -310,6 +311,7 @@ def finish():
         import copy
         status = copy.copy(status)
         status.in_game = True
+        status.game_foreground = True
         fake_feed.game = feed("ARAM", 12)
         state["aram_hidden"] = application._sync_live(status) is False
         state["aram_paused"] = application.worker.paused
@@ -325,6 +327,13 @@ def finish():
             application.timers.roster()
             == ["Darius", "Viego", "Ahri", "Jinx", "Thresh"]
             or len(application.timers.roster()) == 5)
+        # Alt-tabbed away: the overlay follows the game to the back, after a
+        # moment, and comes back with it.
+        status.game_foreground = False
+        application._game_front_at = _now() - app_main.UNFOCUSED_GRACE_SECONDS - 1
+        state["alt_tab_hides"] = application._sync_live(status) is False
+        status.game_foreground = True
+        state["focus_brings_it_back"] = application._sync_live(status) is True
         fake_feed.game = None
         application._window_since = _now()
         state["loading_screen_waits"] = application._sync_live(status) is False
@@ -593,6 +602,9 @@ check("a Summoner's Rift game shows it", state.get("rift_shown"))
 check("and captures", state.get("rift_capturing"))
 check("the enemy roster reaches the parser", state.get("rift_roster_to_parser"))
 check("and the timers", state.get("rift_roster_to_timers"))
+check("alt-tabbing away from the game hides the overlay",
+      state.get("alt_tab_hides"))
+check("and coming back shows it again", state.get("focus_brings_it_back"))
 check("the loading screen waits for the game to name its mode",
       state.get("loading_screen_waits"))
 check("but not forever", state.get("gives_up_waiting"))

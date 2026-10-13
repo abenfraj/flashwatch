@@ -756,8 +756,11 @@ class Overlay(QWidget):
             x = available.left() + int(available.width() * 0.012)
             y = available.top() + int(available.height() * 0.16)
         elif spec["align"] == "right":
+            # Against the right edge, a little over a third of the way down:
+            # under the kill feed, which runs down from the top-right corner,
+            # and well above the minimap.
             x = available.right() - width - int(available.width() * 0.006)
-            y = available.top() + int(available.height() * 0.14)
+            y = available.top() + int(available.height() * 0.38)
         else:
             x = available.left() + (available.width() - width) // 2
             y = available.top() + LAYOUT_DEFAULT_MARGIN

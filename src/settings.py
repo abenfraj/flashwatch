@@ -122,6 +122,9 @@ DEFAULTS: dict[str, Any] = {
     # game the bar has nothing to say and would sit over the client or the
     # desktop; it still appears while unlocked, so it can be positioned.
     "hide_until_in_game": True,
+    # Step aside when the game is not the window in front: alt-tab to a browser
+    # and a topmost overlay would otherwise float over it.
+    "hide_when_unfocused": True,
     "overlay_x": 40,
     "overlay_y": 120,
     "overlay_width": 260,

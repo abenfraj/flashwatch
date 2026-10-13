@@ -312,6 +312,9 @@ class PipelineStatus:
     # into a state pill, and parsing a translated sentence to find out what it
     # said would break the moment the wording changed.
     client_running: bool = False
+    # The game is the window in front (or this program is). The overlay steps
+    # aside when the player alt-tabs to something else.
+    game_foreground: bool = False
     region: str = "-"
     last_ocr_ms: float = 0.0
     frames: int = 0
@@ -942,6 +945,7 @@ class CaptureWorker(threading.Thread):
         self.status.game = state.describe()
         self.status.in_game = state.in_game
         self.status.client_running = state.client_running
+        self.status.game_foreground = state.foreground
 
         if session_changed:
             # New game or game closed: forget everything about the old one.

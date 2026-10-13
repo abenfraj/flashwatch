@@ -16,8 +16,15 @@ import logging
 import time
 from dataclasses import dataclass
 
+import os
+
 import psutil
 import win32gui
+
+try:
+    import win32process
+except ImportError:                                   # pragma: no cover
+    win32process = None
 
 from i18n import tr
 
@@ -58,6 +65,10 @@ class GameState:
     # Client area in virtual-screen coordinates: (left, top, width, height).
     window_rect: tuple[int, int, int, int] | None = None
     session_id: str = ""
+    # Whether the game is the window in front -- or this program is, which
+    # counts as the game for the overlay's purposes: somebody tuning the overlay
+    # from the settings window is still looking at the game behind it.
+    foreground: bool = False
 
     @property
     def running(self) -> bool:
@@ -87,6 +98,27 @@ def _client_rect_on_screen(hwnd: int) -> tuple[int, int, int, int] | None:
     if width < 640 or height < 480:
         return None
     return (origin_x, origin_y, width, height)
+
+
+def game_in_front(hwnd: int, game_pid: int = 0) -> bool:
+    """Whether the window in front is the game's, or one of this program's.
+
+    Read off the foreground window and nothing else. True when unsure: a failed
+    call must never hide the overlay over a game the player is looking at.
+    """
+    try:
+        front = win32gui.GetForegroundWindow()
+    except win32gui.error:
+        return True
+    if not front or front == hwnd:
+        return True
+    if win32process is None:
+        return True
+    try:
+        _thread, pid = win32process.GetWindowThreadProcessId(front)
+    except Exception:                                 # noqa: BLE001
+        return True
+    return pid in (game_pid, os.getpid()) and pid != 0
 
 
 def find_game_window() -> int:
@@ -166,6 +198,7 @@ class GameDetector:
             hwnd=hwnd,
             window_rect=rect,
             session_id=session_id,
+            foreground=in_game and game_in_front(hwnd, game_pid),
         )
 
         changed = session_id != previous_session

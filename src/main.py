@@ -89,6 +89,9 @@ DEMO_TICK_MS = 2000
 # alone is better than showing nothing.
 LIVE_GRACE_SECONDS = 150.0
 
+# How long the game may be behind another window before the overlay goes too.
+UNFOCUSED_GRACE_SECONDS = 1.5
+
 # Where each hand-placed area is persisted.
 SETTING_FOR_ZONE = {
     ZONE_CHAT: "chat_region",
@@ -101,6 +104,9 @@ SETTING_FOR_ZONE = {
 # the application's own sake and go on being read after the framing tool closes,
 # so they are registered with the worker separately.
 ROLE_ZONES = (ZONE_LOADING, ZONE_SCOREBOARD)
+
+# The frames the tray menu offers.
+TRAY_ZONES = (ZONE_CHAT,)
 
 # Labels for the tray entries that open each frame.
 TRAY_TEST_KEYS = {
@@ -391,7 +397,11 @@ class Application:
         self.action_lock.toggled.connect(self._on_overlay_locked)
 
         self.actions_test: dict[str, QAction] = {}
-        for zone in ZONES:
+        # The chat only. The clock, the loading screen and the scoreboard are
+        # fallbacks for a game whose data feed is not answering, and four framing
+        # tools in a menu people open to quit or to find the window was three too
+        # many; all four stay on the Troubleshooting page.
+        for zone in TRAY_ZONES:
             action = self.tray_menu.addAction(tr(TRAY_TEST_KEYS[zone]))
             action.setCheckable(True)
             action.setChecked(zone in self.zone_frames)
@@ -846,12 +856,31 @@ class Application:
 
         if not status.in_game:
             return False
+        if not self._game_in_front(status):
+            return False
         if game is not None:
             return enabled
         waiting = (self.settings.get("live_client", True)
                    and self._window_since is not None
                    and monotonic() - self._window_since < LIVE_GRACE_SECONDS)
         return not waiting
+
+    def _game_in_front(self, status) -> bool:
+        """Whether the overlay belongs on screen as far as focus is concerned.
+
+        In borderless the game is a window like any other, and a topmost overlay
+        left up after alt-tabbing floats over the browser, the desktop and
+        Discord. So it follows the game to the back -- after a moment, so a
+        loading screen or a split-second focus change does not make it blink --
+        unless the setting asks for it to stay.
+        """
+        if not self.settings.get("hide_when_unfocused", True):
+            return True
+        now = monotonic()
+        if getattr(status, "game_foreground", True):
+            self._game_front_at = now
+            return True
+        return now - getattr(self, "_game_front_at", now) < UNFOCUSED_GRACE_SECONDS
 
     def _sync_parser_roster(self, game) -> None:
         if self.parser is None:

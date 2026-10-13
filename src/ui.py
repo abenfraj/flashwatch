@@ -2028,6 +2028,12 @@ class ControlWindow(QWidget):
         self.check_hide_until_game.setChecked(
             bool(self.settings.get("hide_until_in_game")))
         self.check_hide_until_game.toggled.connect(self._on_settings_changed)
+        self.check_hide_unfocused = self._switch(tr("ui.hide_unfocused"),
+                                                 small=True)
+        self.check_hide_unfocused.setToolTip(tr("ui.hide_unfocused_tip"))
+        self.check_hide_unfocused.setChecked(
+            bool(self.settings.get("hide_when_unfocused", True)))
+        self.check_hide_unfocused.toggled.connect(self._on_settings_changed)
         self.check_idle_bar = self._switch(tr("ui.bar_when_idle"), small=True)
         self.check_idle_bar.setToolTip(tr("ui.bar_when_idle_hint"))
         self.check_idle_bar.setChecked(bool(self.settings.get("bar_show_when_idle")))
@@ -2058,6 +2064,7 @@ class ControlWindow(QWidget):
             bool(self.settings.get("team_hide_rested")))
         self.check_team_hide_rested.toggled.connect(self._on_settings_changed)
         for box in (self.check_visible, self.check_hide_until_game,
+                    self.check_hide_unfocused,
                     self.check_idle_bar, self.check_bar_vertical,
                     self.check_team_horizontal, self.check_team_hide_rested,
                     self.check_sort_role):
@@ -2836,6 +2843,7 @@ class ControlWindow(QWidget):
         self.settings.update({
             "overlay_layout": self._layout_key,
             "hide_until_in_game": self.check_hide_until_game.isChecked(),
+            "hide_when_unfocused": self.check_hide_unfocused.isChecked(),
             "bar_show_when_idle": self.check_idle_bar.isChecked(),
             "bar_vertical": self.check_bar_vertical.isChecked(),
             "team_horizontal": self.check_team_horizontal.isChecked(),
@@ -2932,6 +2940,7 @@ class ControlWindow(QWidget):
                 int(self.settings.get("ready_linger_seconds", 5)))
             for box, key in (
                     (self.check_hide_until_game, "hide_until_in_game"),
+                    (self.check_hide_unfocused, "hide_when_unfocused"),
                     (self.check_idle_bar, "bar_show_when_idle"),
                     (self.check_bar_vertical, "bar_vertical"),
                     (self.check_team_horizontal, "team_horizontal"),

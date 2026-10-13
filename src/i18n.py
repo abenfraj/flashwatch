@@ -446,6 +446,13 @@ STRINGS: dict[str, tuple[str, str]] = {
     "ui.team_hide_rested_hint": (
         "L'affichage reste invisible jusqu'à ce qu'un sort ennemi soit utilisé.",
         "The display stays invisible until an enemy uses a spell."),
+    "ui.hide_unfocused": ("Masquer quand le jeu passe en arrière-plan",
+                          "Hide when the game is in the background"),
+    "ui.hide_unfocused_tip": (
+        "En mode sans bordure, un Alt-Tab vers le navigateur ou Discord laissait "
+        "l'overlay par-dessus. Il suit maintenant le jeu.",
+        "In borderless, alt-tabbing to a browser or Discord left the overlay on "
+        "top of it. It now follows the game."),
     "ui.team_rest": ("Ennemis au repos :", "Enemies at rest:"),
     "ui.team_rest_hint": (
         "Opacité d'un ennemi dont tous les sorts sont prêts. Ceux qui ont un sort "
