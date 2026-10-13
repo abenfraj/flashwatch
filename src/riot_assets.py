@@ -10,7 +10,15 @@ French client says "Saut eclair", not "Flash", and hardcoding either would be
 wrong -- we ask Riot instead.
 
 Cached on disk under assets/cache/, keyed by patch version, so a restart is
-offline and instant.
+offline and instant. Files left by earlier patches are removed once the current
+one has loaded: at two to three megabytes a patch and a patch a fortnight, the
+cache otherwise grew by tens of megabytes a year for nobody's benefit.
+
+Three files per patch: the spells (names, cooldowns), the champions (names,
+ultimates) and the items -- the last only for the haste they grant, which is what
+turns an enemy's boots into the right Flash timer. Items are always read in
+English, because that is the wording the haste is parsed out of; nothing from
+them is ever shown.
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,7 +34,8 @@ from typing import Any, Callable, Iterable
 
 import requests
 
-from cooldowns import COOLDOWNS, DDRAGON_SPELL_IDS
+from cooldowns import (COOLDOWNS, DDRAGON_SPELL_IDS,
+                       FALLBACK_ITEM_SUMMONER_HASTE, FIXED_COOLDOWNS)
 from i18n import tr
 from settings import CACHE_DIR, CHAMPION_ICON_DIR, SPELL_ICON_DIR, ensure_dirs
 
@@ -38,6 +48,20 @@ ICON_CONCURRENCY = 12
 
 # Ultimates are always the 4th ability in Data Dragon's spell list.
 ULTIMATE_INDEX = 3
+
+# Summoner's Rift, in Data Dragon's per-map item availability.
+RIFT_MAP = "11"
+
+# How haste reads in an English item description. Two shapes, both real:
+# "<attention>20</attention> Ability Haste" in the stats block, and
+# "Gain 10 Summoner Spell Haste." in a passive.
+_ABILITY_HASTE_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(?:</attention>)?\s*Ability Haste", re.IGNORECASE)
+_SUMMONER_HASTE_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(?:</attention>)?\s*Summoner Spell Haste", re.IGNORECASE)
+
+# Every cache file name carries the patch it belongs to, right after the kind.
+_CACHE_FILE_RE = re.compile(r"^(?:championFull|summoner|item)-(?P<version>[^-]+)-")
 
 
 def strip_accents(text: str) -> str:
@@ -63,7 +87,7 @@ class SpellInfo:
     canonical: str                 # English key used everywhere internally
     ddragon_id: str                # e.g. SummonerFlash
     name: str                      # localised display name
-    cooldown: int                  # seconds, base
+    cooldown: float                # seconds, base, from this patch's data
     icon_path: Path | None = None
 
 
@@ -81,6 +105,20 @@ class UltimateInfo:
             return 0.0
         index = max(0, min(rank - 1, len(self.cooldown_by_rank) - 1))
         return self.cooldown_by_rank[index]
+
+    def rank_at_level(self, level: int) -> int:
+        """The rank this ultimate most likely has at champion ``level``.
+
+        Almost every ultimate unlocks at 6 and ranks up at 11 and 16. The few
+        with a fourth rank (Karma, Jayce, Elise, Nidalee...) have it from level 1,
+        on the same 5-level rhythm. A player can delay a rank, but almost nobody
+        does, and it is still far better than guessing from the game clock.
+        """
+        level = max(1, min(18, int(level or 1)))
+        ranks = len(self.cooldown_by_rank)
+        thresholds = (1, 6, 11, 16) if ranks >= 4 else (6, 11, 16)
+        rank = sum(1 for threshold in thresholds if level >= threshold)
+        return max(1, min(max(1, ranks), rank))
 
 
 @dataclass(slots=True)
@@ -103,8 +141,17 @@ class RiotAssets:
         self.version: str | None = None
         self.champions: dict[str, ChampionInfo] = {}     # champion_id -> info
         self.spells: dict[str, SpellInfo] = {}           # canonical -> info
+        # Haste each item grants, by item id, on Summoner's Rift.
+        self.item_summoner_haste: dict[int, float] = dict(FALLBACK_ITEM_SUMMONER_HASTE)
+        self.item_ability_haste: dict[int, float] = {}
         self._session = requests.Session()
         self._session.headers["User-Agent"] = "flashwatch/1.0"
+        # As many pooled connections as there are parallel icon downloads.
+        # urllib3's default of ten under twelve workers threw a connection away
+        # on every burst, and said so in the log each time.
+        adapter = requests.adapters.HTTPAdapter(pool_connections=4,
+                                                pool_maxsize=ICON_CONCURRENCY)
+        self._session.mount("https://", adapter)
         self.ready = False
         self.icons_ready = False
 
@@ -156,7 +203,15 @@ class RiotAssets:
 
         self._load_champions()
         report(tr("assets.champions", count=len(self.champions)))
+        # Optional: without it the two boots still count, from the fallback
+        # table, and nothing else depends on the file.
+        try:
+            self._load_items()
+        except (requests.RequestException, ValueError, OSError) as exc:
+            log.warning("item data unavailable, using the built-in haste table "
+                        "(%s)", exc)
         self.ready = True
+        self.prune_cache()
 
     def _resolve_version(self) -> str:
         marker = CACHE_DIR / "version.txt"
@@ -193,8 +248,103 @@ class RiotAssets:
                 canonical=canonical,
                 ddragon_id=ddragon_id,
                 name=str(entry.get("name") or canonical),
-                cooldown=COOLDOWNS[canonical],
+                cooldown=self._patch_cooldown(canonical, entry),
             )
+
+    @staticmethod
+    def _patch_cooldown(canonical: str, entry: dict[str, Any]) -> float:
+        """This patch's cooldown for a spell, from its Data Dragon entry.
+
+        The table in cooldowns.py is the fallback, not the source. A value that
+        does not parse, or one too small to be real, is a data problem and not a
+        free spell, so the table answers instead.
+        """
+        fixed = FIXED_COOLDOWNS.get(canonical)
+        if fixed is not None:
+            return float(fixed)
+        try:
+            value = float((entry.get("cooldown") or [0])[0])
+        except (TypeError, ValueError, IndexError):
+            value = 0.0
+        if value < 5:
+            return float(COOLDOWNS[canonical])
+        if value != COOLDOWNS[canonical]:
+            log.info("%s cooldown this patch: %.0fs", canonical, value)
+        return value
+
+    def _load_items(self) -> None:
+        """The haste every Summoner's Rift item grants, read from its tooltip.
+
+        Data Dragon's ``stats`` block has no field for haste, so the number is
+        taken from the description, which is why this file is always the English
+        one: the pattern is English, and the numbers are the same in every
+        language.
+        """
+        url = f"{DDRAGON}/cdn/{self.version}/data/en_US/item.json"
+        data = self._cached_json(f"item-{self.version}-en_US.json", url)
+        summoner: dict[int, float] = {}
+        ability: dict[int, float] = {}
+        for item_id, entry in (data.get("data") or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            maps = entry.get("maps") or {}
+            if maps and not maps.get(RIFT_MAP, False):
+                continue
+            try:
+                key = int(item_id)
+            except (TypeError, ValueError):
+                continue
+            description = str(entry.get("description") or "")
+            found = _SUMMONER_HASTE_RE.search(description)
+            if found:
+                summoner[key] = float(found.group(1))
+            found = _ABILITY_HASTE_RE.search(description)
+            if found:
+                ability[key] = float(found.group(1))
+        if summoner:
+            self.item_summoner_haste = summoner
+        self.item_ability_haste = ability
+        log.info("items: %d grant summoner haste, %d ability haste",
+                 len(summoner), len(ability))
+
+    def summoner_haste(self, items) -> float:
+        """Summoner spell haste from a list of item ids."""
+        return float(sum(self.item_summoner_haste.get(int(item), 0.0)
+                         for item in items or ()))
+
+    def ability_haste(self, items) -> float:
+        """Ability haste from a list of item ids. Items only: runes are hidden."""
+        return float(sum(self.item_ability_haste.get(int(item), 0.0)
+                         for item in items or ()))
+
+    def prune_cache(self) -> int:
+        """Delete data files for patches other than the one now loaded.
+
+        Every locale of the current patch is kept -- switching language should
+        not have to download again -- and icons are not touched, since they are
+        keyed by name rather than patch and are mostly the same from one to the
+        next. Never raises: a file in use or a read-only folder only means the
+        old copy stays a little longer.
+        """
+        if not self.version:
+            return 0
+        removed = 0
+        try:
+            candidates = list(CACHE_DIR.glob("*.json"))
+        except OSError:
+            return 0
+        for path in candidates:
+            match = _CACHE_FILE_RE.match(path.name)
+            if match is None or match.group("version") == self.version:
+                continue
+            try:
+                path.unlink()
+                removed += 1
+            except OSError as exc:
+                log.debug("could not remove %s (%s)", path, exc)
+        if removed:
+            log.info("removed %d data file(s) from earlier patches", removed)
+        return removed
 
     def _load_champions(self) -> None:
         """Load every champion, including ultimate data, in one request.

@@ -189,7 +189,8 @@ check("an already-expired ping creates no timer",
       all(t.champion_id != "Darius" for t in tm_late.snapshot()))
 
 # --------------------------------------------- Cosmic Insight assumption
-# With the rune assumed, Flash is 246s not 300s. The *stated* remaining time is
+# With the rune assumed, Flash is 254s not 300s -- 18 summoner haste, which is
+# 300 x 100/118, not the 300 x 0.82 this used to assume. The *stated* remaining time is
 # still authoritative -- the rune only changes the full cooldown, which is what
 # places the marker along the bar.
 settings._data["assume_cosmic_insight"] = True
@@ -199,13 +200,14 @@ for _ in range(PRIME_FRAMES):
 tm_rune.handle_events(parser.parse_lines(
     [f"Ayoub (Lux): Attendez Ahri {flash} - 245 sec."]))
 runed = next(t for t in tm_rune.snapshot() if t.spell_key == "Flash")
-check("rune shortens the full cooldown", abs(runed.duration - 246) < 1,
+check("rune shortens the full cooldown", abs(runed.duration - 254) < 1,
       f"duration={runed.duration}")
 check("stated remaining is still honoured with the rune",
       abs(runed.remaining() - 245) < 2, f"{runed.remaining():.0f}s")
-# 245 of 246 elapsed = marker at the very start of the track, not 1/5 along.
+# 245 left of 254 = nine seconds in, the very start of the track -- not the
+# fifth of the way along that a 300 s full cooldown would put it.
 progress = (runed.duration - runed.remaining()) / runed.duration
-check("marker starts at the beginning of the track", progress < 0.02,
+check("marker starts at the beginning of the track", progress < 0.05,
       f"progress={progress:.3f}")
 settings._data["assume_cosmic_insight"] = False
 

@@ -24,7 +24,7 @@ import numpy as np
 
 import chat_detector
 import self_test
-from cooldowns import COOLDOWNS, MODIFIER_COSMIC_INSIGHT
+from cooldowns import HASTE_COSMIC_INSIGHT, apply_haste
 from message_parser import looks_like_chat_line
 from ocr import OcrEngine
 from riot_assets import RiotAssets
@@ -181,8 +181,9 @@ check("the timers name the sample's champions",
       {timer.champion_id for timer in started} == {"Yasuo", "Karma"},
       str(sorted(timer.champion_id for timer in started)))
 
-# Both spells are 240s base, and Cosmic Insight is assumed by default.
-want = round(COOLDOWNS["Exhaust"] * MODIFIER_COSMIC_INSIGHT)
+# Both spells are 240s base this patch, and Cosmic Insight -- 18 summoner haste,
+# not 18% off -- is assumed by default.
+want = round(apply_haste(assets.spells["Exhaust"].cooldown, HASTE_COSMIC_INSIGHT))
 for timer in started:
     remaining = timer.remaining()
     check(f"{timer.champion_id}'s timer runs the full cooldown",

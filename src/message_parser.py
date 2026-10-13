@@ -70,6 +70,16 @@ that calls timers wrongly is worse than a team that does not call them at all.
 
 Anything else -- ordinary player chat, emotes, the kill feed -- falls through and
 is discarded.
+
+**When the game's own data feed is up, the parser also knows who is playing.**
+:meth:`MessageParser.set_roster` hands it the five enemies and their two
+summoner spells each, and that changes what a line can mean. A line naming an
+ally is somebody's own team and never an enemy cooldown; a line naming a spell
+the champion did not take is a misread; a name that matches nobody in the game
+was bent by the OCR and belongs to the closest enemy, if one is close. So the
+roster both rejects more and accepts more: the candidates go from 172
+champions and eleven spells to five and two, which is what lets a looser match
+be safe.
 """
 
 from __future__ import annotations
@@ -170,6 +180,13 @@ DIGIT_FIXES = str.maketrans({"O": "0", "o": "0", "D": "0", "Q": "0",
 
 MIN_CHAMPION_RATIO = 0.78
 MIN_SPELL_RATIO = 0.80
+
+# How loose a match may be once the roster is known. Against five enemies, or
+# against the two spells one of them took, a name has to be badly bent before
+# it is mistaken for another -- so one more wrong glyph is forgiven, and a
+# similarity ratio well below the open-field one still decides.
+ROSTER_EXTRA_EDITS = 1
+ROSTER_MIN_RATIO = 0.62
 
 # A chat line leads with the game clock. Allowing a few characters of slack
 # covers an OCR'd bracket or stray speck before it.
@@ -361,6 +378,59 @@ class SpellEvent:
         return self.source == "call"
 
 
+@dataclass(frozen=True, slots=True)
+class Roster:
+    """Who is in the game, as far as the parser cares.
+
+    ``enemies`` maps each enemy champion to the summoner spells it took -- an
+    empty set when that is not known, which then restricts nothing.
+    """
+
+    enemies: dict[str, frozenset[str]]
+    allies: frozenset[str] = frozenset()
+
+    def in_game(self, champion_id: str) -> bool:
+        return champion_id in self.enemies or champion_id in self.allies
+
+
+def _loose_pick(candidate: str, options: dict[str, str], *,
+                allow_ratio: bool = True) -> str | None:
+    """The one option ``candidate`` is closest to, among a handful.
+
+    For the small closed sets the roster produces. One edit more than the open
+    field allows, then a ratio well below it -- and in both cases a tie between
+    two *different* values is refused, because two enemies equally close to a
+    misread is exactly the case where guessing starts the wrong timer.
+    """
+    if not candidate or not options:
+        return None
+    if candidate in options:
+        return options[candidate]
+    budget = _edit_budget(len(candidate)) + ROSTER_EXTRA_EDITS
+    scored: dict[str, int] = {}
+    for folded, value in options.items():
+        distance = _edit_distance(candidate, folded, budget)
+        if distance <= budget:
+            scored[value] = min(distance, scored.get(value, distance))
+    if scored:
+        best = min(scored.values())
+        winners = [value for value, distance in scored.items() if distance == best]
+        return winners[0] if len(winners) == 1 else None
+    if not allow_ratio:
+        return None
+    ratios: dict[str, float] = {}
+    for folded, value in options.items():
+        ratio = SequenceMatcher(None, candidate, folded).ratio()
+        if ratio >= ROSTER_MIN_RATIO:
+            ratios[value] = max(ratio, ratios.get(value, 0.0))
+    if not ratios:
+        return None
+    best_ratio = max(ratios.values())
+    winners = [value for value, ratio in ratios.items()
+               if best_ratio - ratio < 0.04]
+    return winners[0] if len(winners) == 1 else None
+
+
 def _best_match(candidate: str, options: dict[str, str],
                 threshold: float, *, allow_ratio: bool = True) -> str | None:
     """Fuzzy-match ``candidate`` against ``{folded_option: return_value}``.
@@ -421,11 +491,133 @@ class MessageParser:
         # the bare English "flash" is what a French-client player types.
         self._summoner_localised: dict[str, str] = {}
         self._ult_index: dict[str, str] = {}
+        # Who is in the game, when the game's data feed has said. Replaced as a
+        # whole rather than edited, because the capture thread reads it while
+        # the UI thread sets it: swapping one reference is atomic, mutating a
+        # dict in place is not.
+        self._roster: Roster | None = None
+        self._enemy_index: dict[str, str] = {}
         self.rebuild_index()
         # Lines that named a champion but failed to parse. Surfaced in the
         # debug panel: if the system wording differs from what we expect,
         # this is where it shows up.
         self.near_misses: list[str] = []
+        # Lines that parsed but were refused because of who they named: an
+        # ally, or a spell the enemy does not have. Surfaced next to the near
+        # misses, since a roster that is wrong would look like silence.
+        self.roster_rejects: list[str] = []
+
+    # ------------------------------------------------------------------
+    # The roster
+    # ------------------------------------------------------------------
+    def set_roster(self, enemies: dict[str, object] | None,
+                   allies=()) -> None:
+        """Tell the parser who is playing. ``None`` forgets it.
+
+        ``enemies`` maps a champion id to the summoner spells it took (any
+        iterable of canonical keys, possibly empty).
+        """
+        if enemies is None:
+            self._roster = None
+            self._enemy_index = {}
+            return
+        roster = Roster(
+            enemies={cid: frozenset(spells or ()) for cid, spells in enemies.items()
+                     if cid},
+            allies=frozenset(cid for cid in allies if cid))
+        index: dict[str, str] = {}
+        for champion_id in roster.enemies:
+            champion = self.assets.champions.get(champion_id)
+            if champion is None:
+                continue
+            for alias in champion.aliases:
+                index[alias] = champion_id
+        self._enemy_index = index
+        self._roster = roster
+
+    @property
+    def roster(self) -> Roster | None:
+        return self._roster
+
+    def _in_game(self, champion: ChampionInfo | None, candidate: str, *,
+                 lenient: bool) -> ChampionInfo | None:
+        """Hold a resolved champion up against the roster.
+
+        * no roster: unchanged;
+        * an enemy: kept;
+        * an ally: refused -- a teammate's own cooldown is not an enemy timer;
+        * anybody else, or nobody: the OCR bent a name, so the closest *enemy*
+          is taken if one is close. Only on the lenient path when nothing was
+          found at all: the strict resolvers refuse for reasons (a lowercase
+          name, a determiner) that a closer look must not overrule.
+        """
+        roster = self._roster
+        if roster is None:
+            return champion
+        if champion is not None:
+            if champion.champion_id in roster.enemies:
+                return champion
+            if champion.champion_id in roster.allies:
+                return None
+        elif not lenient:
+            return None
+        folded = fold(candidate)
+        champion_id = _loose_pick(folded, self._enemy_index, allow_ratio=lenient)
+        if champion_id is None and lenient:
+            words = strip_accents(candidate).split()
+            for take in (2, 1):
+                if len(words) > take:
+                    champion_id = _loose_pick(fold("".join(words[-take:])),
+                                              self._enemy_index,
+                                              allow_ratio=False)
+                    if champion_id:
+                        break
+        return self.assets.champions.get(champion_id) if champion_id else None
+
+    def _their_spells(self, champion: ChampionInfo) -> frozenset[str]:
+        roster = self._roster
+        if roster is None:
+            return frozenset()
+        return roster.enemies.get(champion.champion_id, frozenset())
+
+    def _spell_options(self, spells, *, localised_only: bool) -> dict[str, str]:
+        options: dict[str, str] = {}
+        for canonical in spells:
+            spell = self.assets.spells.get(canonical)
+            if spell is not None:
+                options[fold(spell.name)] = canonical
+            if not localised_only:
+                options[fold(canonical)] = canonical
+        return options
+
+    def _vet_spell(self, champion: ChampionInfo, canonical: str | None,
+                   text: str) -> tuple[str | None, bool]:
+        """Check a summoner spell against what this enemy took.
+
+        Returns ``(canonical, refused)``. ``refused`` is True when the line named
+        a spell outright and it is not one of theirs -- a misread, or a line about
+        somebody else -- so the caller stops there instead of trying the ult.
+        """
+        theirs = self._their_spells(champion)
+        if not theirs or canonical is None or canonical in theirs:
+            return canonical, False
+        log.debug("%s does not have %s: %r", champion.champion_id, canonical, text)
+        return None, True
+
+    def _loose_spell(self, champion: ChampionInfo, folded: str, *,
+                     localised_only: bool) -> str | None:
+        """One of this enemy's two spells, matched loosely, or None."""
+        theirs = self._their_spells(champion)
+        if not theirs:
+            return None
+        return _loose_pick(folded, self._spell_options(
+            theirs, localised_only=localised_only), allow_ratio=not localised_only)
+
+    def _record_roster_reject(self, text: str) -> None:
+        if text in self.roster_rejects:
+            return
+        self.roster_rejects.append(text)
+        del self.roster_rejects[:-30]
 
     def rebuild_index(self) -> None:
         """Build folded lookup tables from the loaded Riot data."""
@@ -797,8 +989,14 @@ class MessageParser:
             champion_id = _best_match(folded, self._champion_index,
                                       MIN_CHAMPION_RATIO, allow_ratio=False)
         if champion_id is None:
-            return None
-        return self.assets.champions.get(champion_id)
+            if self._roster is None:
+                return None
+            # A nickname or a typo for one of the five ("kaisa", "mf", "j4"
+            # are not here, but "draven" spelt "dravn" is).
+            champion_id = _loose_pick(folded, self._enemy_index, allow_ratio=False)
+            return self.assets.champions.get(champion_id) if champion_id else None
+        return self._in_game(self.assets.champions.get(champion_id), candidate,
+                             lenient=False)
 
     def _build_call(self, target: tuple[str, str], spell: tuple[str, str, str],
                     ready: int, raw: str, game_time: int | None
@@ -927,9 +1125,8 @@ class MessageParser:
         if champion_id is None:
             champion_id = _best_match(folded, self._champion_index,
                                       MIN_CHAMPION_RATIO)
-        if champion_id is None:
-            return None
-        return self.assets.champions.get(champion_id)
+        champion = self.assets.champions.get(champion_id) if champion_id else None
+        return self._in_game(champion, candidate, lenient=True)
 
     def _resolve_champion_strict(self, candidate: str) -> ChampionInfo | None:
         """Champion half of an attributed line: the whole side, or nothing.
@@ -953,8 +1150,14 @@ class MessageParser:
             champion_id = _best_match(folded, self._champion_index,
                                       MIN_CHAMPION_RATIO, allow_ratio=False)
         if champion_id is None:
-            return None
-        return self.assets.champions.get(champion_id)
+            # Nobody, in the open field. Against five enemies a bent name can
+            # still be told apart -- capitalisation already passed above, so the
+            # strict test that mattered has been applied.
+            champion_id = (_loose_pick(folded, self._enemy_index, allow_ratio=False)
+                           if self._roster is not None else None)
+            return self.assets.champions.get(champion_id) if champion_id else None
+        return self._in_game(self.assets.champions.get(champion_id), candidate,
+                             lenient=False)
 
     @staticmethod
     def _strip_determiners(text: str) -> str:
@@ -975,6 +1178,7 @@ class MessageParser:
         canonical = self._summoner_index.get(folded)
         if canonical is None:
             canonical = _best_match(folded, self._summoner_index, MIN_SPELL_RATIO)
+        canonical, refused = self._vet_spell(champion, canonical, candidate)
         if canonical is not None:
             spell = self.assets.spells.get(canonical)
             name = spell.name if spell else canonical
@@ -995,6 +1199,16 @@ class MessageParser:
             if folded in {"ultime", "ultimate", "sonultime", "ult"}:
                 return "ultimate", "ULT", ult.name
 
+        # Last, with the roster: a name too bent for the open field may still be
+        # unmistakably one of the two spells this enemy took.
+        if refused:
+            # Named a spell outright, and not one this enemy took.
+            self._record_roster_reject(candidate)
+            return None
+        canonical = self._loose_spell(champion, folded, localised_only=False)
+        if canonical is not None:
+            spell = self.assets.spells.get(canonical)
+            return "summoner", canonical, spell.name if spell else canonical
         return None
 
     def _resolve_spell_strict(self, candidate: str,
@@ -1028,6 +1242,7 @@ class MessageParser:
         if canonical is None:
             canonical = _best_match(folded, self._summoner_localised,
                                     MIN_SPELL_RATIO)
+        canonical, refused = self._vet_spell(champion, canonical, candidate)
         if canonical is not None:
             spell = self.assets.spells.get(canonical)
             return "summoner", canonical, spell.name if spell else canonical
@@ -1042,6 +1257,15 @@ class MessageParser:
                     or ratio >= MIN_SPELL_RATIO):
                 return "ultimate", "ULT", ult.name
 
+        # The localised names only, and edits only: this is the attributed path,
+        # where "used flash" on a French client is a human typing.
+        if refused:
+            self._record_roster_reject(candidate)
+            return None
+        canonical = self._loose_spell(champion, folded, localised_only=True)
+        if canonical is not None:
+            spell = self.assets.spells.get(canonical)
+            return "summoner", canonical, spell.name if spell else canonical
         return None
 
     def champion_named(self, text: str) -> str | None:

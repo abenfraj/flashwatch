@@ -14,6 +14,14 @@ a fresh 5-minute Flash timer for a Flash that is already back up. Two defences:
     time since we saw it, estimates the current game clock. An event's age is
     then `estimated_now - its timestamp`, and the timer starts already partly
     elapsed. A spell whose cooldown has fully expired never becomes a timer.
+    When the game's data feed is up, the clock is the game's own and this
+    estimate is not needed at all.
+
+**Whose cooldown, and how long.** With the data feed, every enemy's level,
+items and rune trees are known, so a cooldown is worked out for *that* enemy:
+Flash on a jungler without Inspiration is 300 s, on a mid laner with Cosmic
+Insight and Crimson Lucidity 217 s. Without the feed the settings' global
+assumptions stand in, as they always did.
 
 **Duplicates.** The same line is re-read every frame. The game's own timestamp
 makes each cast uniquely identifiable, so `champion|spell|mm:ss` is a stable
@@ -27,7 +35,9 @@ import logging
 import time
 from dataclasses import dataclass, field, replace
 
-from cooldowns import format_remaining, get_cooldown
+from cooldowns import (COOLDOWNS, HASTE_COSMIC_INSIGHT, HASTE_IONIAN_BOOTS,
+                       UNLEASHED_TELEPORT_AT, apply_haste, format_remaining,
+                       unleashed_teleport)
 from message_parser import MAX_CALL_LEAD, SpellEvent
 from riot_assets import RiotAssets
 from roles import ROLE_ORDER, ROLES, assign_slots
@@ -78,6 +88,37 @@ CLOCK_CONFIRM_TOLERANCE = 2.5    # seconds of slack, on top of the time elapsed
 # fake entries by hand, and a different key there would file them where nothing
 # else looks.
 ULT_KEY = "ULT"
+
+# A clock from the game's data feed moving back by more than this is a restart
+# (a Practice Tool reset, or a new game the process check has not caught yet),
+# not jitter between two readings.
+LIVE_CLOCK_REWIND = 20.0
+
+
+@dataclass(slots=True)
+class TeamSlot:
+    """One spell of one enemy, for the team display."""
+
+    kind: str                     # "summoner" | "ultimate"
+    spell_key: str
+    spell_name: str
+    timer: "ActiveTimer | None" = None
+
+
+@dataclass(slots=True)
+class TeamMember:
+    """One enemy, with every spell the display has a place for."""
+
+    champion_id: str
+    champion_name: str
+    role: str = ""
+    level: int = 0
+    slots: list[TeamSlot] = field(default_factory=list)
+
+    @property
+    def busy(self) -> bool:
+        """Whether anything of theirs is on cooldown (or has just come back)."""
+        return any(slot.timer is not None for slot in self.slots)
 
 
 @dataclass(slots=True)
@@ -176,6 +217,15 @@ class TimerManager:
         # second reading to confirm it.
         self._clock_candidate: tuple[float, float] | None = None
         self.history: list[tuple[float, SpellEvent]] = []
+        # The latest reading of the game's data feed, and its enemies by
+        # champion. Empty when the feed is not answering, which puts every rule
+        # below back on the settings' assumptions.
+        self._live = None
+        self._live_enemies: dict = {}
+        self._live_roster_key: tuple | None = None
+        # The trial's champions and the two spells each is shown with, so the
+        # team display has full rows to draw without a game.
+        self._demo_spells: dict[str, tuple[str, ...]] = {}
 
     # ------------------------------------------------------------------
     # Session lifecycle
@@ -198,6 +248,47 @@ class TimerManager:
         self._new_game_hints.clear()
         self._clock_candidate = None
         self.history.clear()
+        # The feed's roster is re-applied on the next reading; forgetting the key
+        # is what makes that happen, since the roles it set were cleared above.
+        self._live_roster_key = None
+
+    # ------------------------------------------------------------------
+    # The game's data feed
+    # ------------------------------------------------------------------
+    @property
+    def live(self):
+        return self._live
+
+    def set_live_game(self, game) -> bool:
+        """Adopt a reading of the game's data feed (or ``None`` without one).
+
+        Cheap and idempotent: called on every refresh. The clock is taken every
+        time, the roster only when it changed. Returns True when the roster was
+        (re)applied, so the caller knows to refresh what lists it.
+        """
+        self._live = game
+        if game is None:
+            self._live_enemies = {}
+            return False
+        self._live_enemies = {player.champion_id: player for player in game.enemies
+                              if player.champion_id}
+        self.note_clock(game.now(), trusted=True)
+
+        key = game.roster_key()
+        if key == self._live_roster_key:
+            return False
+        self._live_roster_key = key
+        for champion_id, player in self._live_enemies.items():
+            if player.position:
+                self.set_role(champion_id, player.position, manual=False)
+        if self._live_enemies:
+            log.info("enemy team from the game: %s", ", ".join(
+                f"{p.champion_id}({p.position or '?'}: {'/'.join(p.spells)})"
+                for p in self._live_enemies.values()))
+        return True
+
+    def live_enemy(self, champion_id: str):
+        return self._live_enemies.get(champion_id)
 
     @property
     def priming(self) -> bool:
@@ -217,7 +308,7 @@ class TimerManager:
         seen_at_game, seen_at_wall = self._clock_ref
         return seen_at_game + (time.monotonic() - seen_at_wall)
 
-    def note_clock(self, seconds: float) -> bool:
+    def note_clock(self, seconds: float, *, trusted: bool = False) -> bool:
         """Adopt a game clock read off the screen. Returns True if it was taken.
 
         Two consistent readings are required before the reference moves. The
@@ -227,8 +318,23 @@ class TimerManager:
         walked back. Two readings a moment apart, agreeing to within a couple of
         seconds *after* accounting for the time between them, cannot both be the
         same accident.
+
+        ``trusted`` is the game's data feed, which is the clock itself and needs
+        none of that: it is taken as it is, forwards or back. Back by a lot is a
+        restart -- the Practice Tool's reset, or a new game seen before its
+        process -- and is handled like one.
         """
         now = time.monotonic()
+        if trusted:
+            seconds = float(seconds)
+            estimate = self.estimated_game_time()
+            if (estimate is not None and seconds + LIVE_CLOCK_REWIND < estimate
+                    and seconds <= NEW_GAME_MAX_CLOCK):
+                self.reset(reason="the game clock restarted")
+                self._frames_seen = PRIME_FRAMES
+            self._clock_ref = (seconds, now)
+            self._clock_candidate = None
+            return True
         candidate = self._clock_candidate
         self._clock_candidate = (float(seconds), now)
         if candidate is None:
@@ -275,6 +381,10 @@ class TimerManager:
         Note the asymmetry: the clock only ever moves *forward* here. An old
         history line cannot drag it back, which is what makes stale chat safe.
         """
+        if self._live is not None:
+            # The game's own clock is in charge. A chat timestamp can only be
+            # worse -- an OCR'd "72:34" for "12:34" would otherwise jump it.
+            return False
         now = time.monotonic()
         estimate = self.estimated_game_time()
 
@@ -328,6 +438,11 @@ class TimerManager:
             if resolved is None:
                 return None
             event = resolved
+
+        # The self-test reads a fixed sample with its own champions in it, so it
+        # is the one caller the roster does not apply to.
+        if not force and not self._fits_roster(event):
+            return None
 
         # Captured *before* this event advances the clock. The comparison of the
         # ping's own timestamp against where we already believed the game clock
@@ -440,6 +555,27 @@ class TimerManager:
     # ------------------------------------------------------------------
     # Timer calls typed by a teammate
     # ------------------------------------------------------------------
+    def _fits_roster(self, event: SpellEvent) -> bool:
+        """Whether the feed's roster allows this event. True without a roster.
+
+        The parser applies the same rule to what it reads; this is the second
+        line, for what reaches here by another route -- a call resolved from a
+        lane, the self-test, a parser built before the roster arrived.
+        """
+        if not self._live_enemies:
+            return True
+        player = self._live_enemies.get(event.champion_id)
+        if player is None:
+            log.info("ignoring %r: %s is not on the enemy team", event.raw_line,
+                     event.champion_name or event.champion_id)
+            return False
+        if (event.kind == "summoner" and player.spells
+                and event.spell_key not in player.spells):
+            log.info("ignoring %r: %s took %s, not %s", event.raw_line,
+                     event.champion_name, "/".join(player.spells), event.spell_key)
+            return False
+        return True
+
     def _resolve_call(self, event: SpellEvent) -> SpellEvent | None:
         """Turn "jgl flash 950" into an event about an actual champion.
 
@@ -685,30 +821,79 @@ class TimerManager:
 
     def _duration_for(self, event: SpellEvent) -> tuple[float, bool]:
         """Cooldown in seconds, and whether it is only an approximation."""
+        player = self._live_enemies.get(event.champion_id)
         if event.kind == "summoner":
-            return float(get_cooldown(
-                event.spell_key,
-                cosmic_insight=bool(self.settings.get("assume_cosmic_insight")),
-                ionian_boots=bool(self.settings.get("assume_ionian_boots")),
-            )), False
+            return self.summoner_cooldown(event.spell_key, player,
+                                          game_time=event.game_time), False
 
         champion = self.assets.champions.get(event.champion_id)
         ult = champion.ultimate if champion else None
         if ult is None or not ult.cooldown_by_rank:
             return 0.0, True
 
-        rank = self._estimate_ult_rank(event.game_time)
+        if player is not None:
+            # The level is on the feed, and the rank follows from it far more
+            # reliably than from the clock.
+            rank = ult.rank_at_level(player.level)
+        else:
+            rank = self._estimate_ult_rank(event.game_time)
         base = ult.cooldown_for_rank(rank)
-        # Ability haste is not visible on screen yet; the planned scoreboard
-        # reader will populate this map from the enemy's items.
+        haste = 0.0
+        if player is not None:
+            haste = self.assets.ability_haste(player.items)
         haste_map = self.settings.get("ability_haste") or {}
         try:
-            haste = float(haste_map.get(event.champion_id, 0) or 0)
+            haste += float(haste_map.get(event.champion_id, 0) or 0)
         except (TypeError, ValueError):
-            haste = 0.0
-        if haste > 0:
-            base *= 100.0 / (100.0 + haste)
-        return base, True
+            pass
+        # Still approximate: runes and champion passives grant haste the feed
+        # does not show. Items are a floor, and usually most of it.
+        return apply_haste(base, haste), True
+
+    def summoner_cooldown(self, spell_key: str, player=None, *,
+                          game_time: float | None = None) -> float:
+        """A summoner spell's full cooldown, for one enemy if we know them.
+
+        * the base is this patch's, from Data Dragon;
+        * Teleport becomes Unleashed Teleport at 10:00, whose cooldown depends on
+          the caster's level -- known from the feed, estimated otherwise;
+        * haste: with the feed, the enemy's own boots, and Cosmic Insight only if
+          they took Inspiration (and the setting assumes it then). Without it,
+          the two global assumptions in the settings.
+        """
+        spell = self.assets.spells.get(spell_key)
+        base = float(spell.cooldown if spell is not None
+                     else COOLDOWNS.get(spell_key, 0))
+        if base <= 0:
+            return 0.0
+
+        if spell_key == "Teleport":
+            now = game_time if game_time is not None else self.estimated_game_time()
+            if now is not None and now >= UNLEASHED_TELEPORT_AT:
+                level = (player.level if player is not None
+                         else self._estimated_level(now))
+                base = unleashed_teleport(level)
+
+        cosmic = bool(self.settings.get("assume_cosmic_insight"))
+        if player is not None:
+            haste = self.assets.summoner_haste(player.items)
+            if cosmic and player.may_have_cosmic_insight:
+                haste += HASTE_COSMIC_INSIGHT
+        else:
+            haste = HASTE_COSMIC_INSIGHT if cosmic else 0.0
+            if self.settings.get("assume_ionian_boots"):
+                haste += HASTE_IONIAN_BOOTS
+        return float(round(apply_haste(base, haste)))
+
+    @staticmethod
+    def _estimated_level(game_time: float) -> int:
+        """A champion's level from the clock alone, for when the feed is off.
+
+        A laner is around level 9 at ten minutes and 13 at twenty; this is that
+        curve, slightly low on purpose because supports drag the average down.
+        """
+        minutes = max(0.0, float(game_time)) / 60.0
+        return max(1, min(18, int(round(1.5 + minutes * 0.6))))
 
     def _estimate_ult_rank(self, game_time: int | None) -> int:
         """Guess ultimate rank from the game clock.
@@ -769,7 +954,14 @@ class TimerManager:
         return learnt
 
     def role_of(self, champion_id: str) -> str:
-        return self._roles.get(champion_id, "")
+        role = self._roles.get(champion_id, "")
+        if role:
+            return role
+        # The trial's entries carry their role on the timer itself.
+        for timer in self._timers.values():
+            if timer.champion_id == champion_id and timer.role:
+                return timer.role
+        return ""
 
     def champion_for_role(self, role: str) -> str | None:
         """Who plays ``role``, or None if nobody does or two claim to.
@@ -785,11 +977,58 @@ class TimerManager:
         return matches[0]
 
     def roster(self) -> list[str]:
-        """Every enemy champion we know of, in lane order then alphabetical."""
-        known = set(self._roles) | {timer.champion_id
-                                    for timer in self._timers.values()}
-        return sorted(known, key=lambda cid: (ROLE_ORDER.get(self._roles.get(cid, ""),
+        """Every enemy champion we know of, in lane order then alphabetical.
+
+        With the game's data feed that is exactly its five enemies (plus anything
+        a timer is running for, which can only be the trial). Without it, whoever
+        a reader or a ping has named -- and a reader can be wrong, which is why
+        the feed's answer replaces theirs rather than adding to it.
+        """
+        timed = {timer.champion_id for timer in self._timers.values()}
+        if self._live_enemies:
+            known = set(self._live_enemies) | timed
+        else:
+            known = set(self._roles) | timed
+        return sorted(known, key=lambda cid: (ROLE_ORDER.get(self.role_of(cid),
                                                              len(ROLES)), cid))
+
+    def team(self) -> list[TeamMember]:
+        """The enemy team for the team display: everybody, every spell.
+
+        Spells come from the feed when it is up -- both summoners, known from the
+        first second -- and otherwise from whatever has been seen used. The
+        ultimate gets a place when ultimates are tracked.
+        """
+        timers = {timer.key: timer for timer in self.snapshot()}
+        track_ults = bool(self.settings.get("track_ultimates", True))
+        members: list[TeamMember] = []
+        for champion_id in self.roster():
+            champion = self.assets.champions.get(champion_id)
+            player = self._live_enemies.get(champion_id)
+            name = (champion.name if champion is not None
+                    else getattr(player, "champion_name", "") or champion_id)
+            if player is not None and player.spells:
+                keys = list(player.spells)
+            else:
+                keys = list(self._demo_spells.get(champion_id, ()))
+            for (owner, key), _timer in timers.items():
+                if owner == champion_id and key != ULT_KEY and key not in keys:
+                    keys.append(key)
+            slots: list[TeamSlot] = []
+            for key in keys:
+                spell = self.assets.spells.get(key)
+                slots.append(TeamSlot("summoner", key,
+                                      spell.name if spell is not None else key,
+                                      timers.get((champion_id, key))))
+            ult = champion.ultimate if champion is not None else None
+            if ult is not None and (track_ults or (champion_id, ULT_KEY) in timers):
+                slots.append(TeamSlot("ultimate", ULT_KEY, ult.name,
+                                      timers.get((champion_id, ULT_KEY))))
+            members.append(TeamMember(champion_id=champion_id, champion_name=name,
+                                      role=self.role_of(champion_id),
+                                      level=getattr(player, "level", 0) or 0,
+                                      slots=slots))
+        return members
 
     def _role_for(self, event: SpellEvent) -> str:
         known = self._roles.get(event.champion_id)
@@ -885,10 +1124,21 @@ class TimerManager:
     DEMO_SAMPLES = (
         ("Darius", "Flash", "summoner", 300.0, 282.0, "TOP", False),
         ("Viego", "Smite", "summoner", 90.0, 47.0, "JUNGLE", False),
-        ("Ahri", "Teleport", "summoner", 360.0, 154.0, "MID", True),
+        ("Ahri", "Teleport", "summoner", 300.0, 154.0, "MID", True),
         ("Jinx", "Heal", "summoner", 240.0, 24.0, "ADC", False),
         ("Thresh", "Exhaust", "summoner", 240.0, 0.0, "SUPPORT", False),
     )
+
+    # Both summoners for each trial champion, the first being the one on
+    # cooldown above: the team display draws every spell an enemy has, and one
+    # spell per row would not look like a game.
+    DEMO_SPELLS = {
+        "Darius": ("Flash", "Teleport"),
+        "Viego": ("Smite", "Flash"),
+        "Ahri": ("Flash", "Teleport"),
+        "Jinx": ("Flash", "Heal"),
+        "Thresh": ("Flash", "Exhaust"),
+    }
 
     def add_demo(self, *, first: bool = False) -> int:
         """Top the trial mode's fake cooldowns up. Returns how many were added.
@@ -909,6 +1159,7 @@ class TimerManager:
         """
         now = time.monotonic()
         added = 0
+        self._demo_spells = dict(self.DEMO_SPELLS)
         for (champion_id, spell_key, kind, duration, remaining, role,
              uncertain) in self.DEMO_SAMPLES:
             key = (champion_id, spell_key)
@@ -972,6 +1223,7 @@ class TimerManager:
         keys = {(champion_id, spell_key)
                 for champion_id, spell_key, *_rest in self.DEMO_SAMPLES}
         keys.add(("Ahri", ULT_KEY))
+        self._demo_spells = {}
         removed = 0
         for key in keys:
             if self._timers.pop(key, None) is not None:

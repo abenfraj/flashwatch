@@ -139,6 +139,23 @@ DEFAULTS: dict[str, Any] = {
     # of READY badges says nothing about what is actually down.
     "ready_linger_seconds": 5,
 
+    # --- where it runs --------------------------------------------------
+    # Which kinds of game Flashwatch wakes up for, decided from the game's own
+    # data feed (see live_client.py). Summoner's Rift and the Practice Tool by
+    # default; nothing appears in ARAM, Arena or the rotating modes unless it is
+    # asked to. In a mode that is off, nothing is captured or read at all.
+    "mode_rift": True,
+    "mode_practice": True,
+    "mode_aram": False,
+    "mode_arena": False,
+    "mode_other": False,
+    # Read the game's data feed -- Riot's Live Client Data API, served by the
+    # game on this machine for companion apps. It gives the mode, the exact
+    # clock, the five enemies and their spells, levels and items: everything the
+    # scoreboard shows, and nothing it does not. Off falls back to reading the
+    # screen alone, as every version before this one did.
+    "live_client": True,
+
     # --- capture / OCR -------------------------------------------------
     "capture_interval_ms": 200,
     "ocr_lines_kept": 40,
@@ -219,13 +236,18 @@ DEFAULTS: dict[str, Any] = {
     "auto_roles": True,
 
     # --- cooldown modifiers -------------------------------------------
-    # Cosmic Insight (18% summoner haste) is near-universal, so it is assumed by
-    # default. It matters less than it looks: when the game states the remaining
-    # time the number is authoritative regardless. It affects the cast-announcement
-    # path, and the full cooldown used to place a marker on the bar -- with the
-    # rune a Flash is 246s, so a ping reporting 245s left correctly puts the
-    # marker at the very start of the track instead of a fifth of the way along.
+    # Cosmic Insight is 18 summoner spell haste: a Flash of 254 s instead of 300.
+    # The game's data feed shows each enemy's rune *trees* but not the runes in
+    # them, so with the feed this means "assume it for an enemy who took
+    # Inspiration" -- an enemy without the tree cannot have it, and gets the full
+    # cooldown. Without the feed it is assumed for everybody, as before.
+    #
+    # When the game states the remaining time the number is authoritative
+    # regardless; this decides the cast-announcement path and the full length
+    # a marker is placed against.
     "assume_cosmic_insight": True,
+    # Ionian Boots of Lucidity (10 summoner haste). Only consulted without the
+    # feed: with it, every enemy's items are known and counted exactly.
     "assume_ionian_boots": False,
     # Per-champion ability haste, keyed by champion id, e.g. {"Ahri": 20}.
     # Populated by hand for now; the planned scoreboard reader will fill this
