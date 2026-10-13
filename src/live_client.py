@@ -58,6 +58,14 @@ log = logging.getLogger(__name__)
 
 BASE_URL = "https://127.0.0.1:2999/liveclientdata"
 
+# The one warning this module expects: an unverified HTTPS request to the game's
+# own loopback address. Filtered once, here, for that host only -- set at import
+# rather than around each request, because ``warnings.catch_warnings`` swaps the
+# process-wide filter list and is not safe from a background thread.
+warnings.filterwarnings(
+    "ignore", message=r"Unverified HTTPS request is being made to host "
+                      r"'127\.0\.0\.1'")
+
 # Short, because the answer is local: a game that is up answers in a couple of
 # milliseconds, and one that is not refuses the connection at once. The timeout
 # only matters for the loading screen, where the port is sometimes open before
@@ -421,12 +429,8 @@ class LiveClient:
         self._session.headers["User-Agent"] = "flashwatch"
 
     def _get(self, path: str) -> Any:
-        with warnings.catch_warnings():
-            # The one place the warning is expected: an unverified request to
-            # the game's own loopback address. Silenced here and nowhere else.
-            warnings.filterwarnings("ignore", message=r".*Unverified HTTPS")
-            response = self._session.get(f"{self.base_url}/{path}",
-                                         timeout=REQUEST_TIMEOUT)
+        response = self._session.get(f"{self.base_url}/{path}",
+                                     timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         return response.json()
 

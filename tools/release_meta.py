@@ -14,6 +14,13 @@ How the number moves: the newest ``vX.Y.Z`` tag, bumped by one. Patch by default
 minor or major if the range of commits says so -- ``[minor]`` or ``[major]``
 anywhere in a commit message, which is the lightest convention that still lets a
 notable change announce itself. ``--bump`` overrides everything, for a manual run.
+
+What the notes say: the subject of every commit in the range that changed the
+program. A commit marked ``[skip release]`` changed the site, the docs or the
+workflow -- it is why no release was cut for it -- so it is not news on the
+release that eventually ships, and is left out. A version can also carry a
+hand-written summary for players, in ``.github/highlights/vX.Y.Z.md``; when the
+file for the version being cut exists, it leads the notes.
 """
 
 from __future__ import annotations
@@ -33,6 +40,7 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / "src" / "version.py"
 NOTES_FILE = ROOT / "RELEASE_NOTES.md"
+HIGHLIGHTS_DIR = ROOT / ".github" / "highlights"
 
 FIRST_VERSION = (0, 1, 0)
 TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
@@ -69,17 +77,39 @@ def latest_tag() -> tuple[str, tuple[int, int, int]] | tuple[None, None]:
     return tag, version
 
 
-def commits_since(tag: str | None) -> list[str]:
-    """Subject lines since ``tag``, newest first, merges left out."""
+def commits_since(tag: str | None) -> list[tuple[str, str]]:
+    """``(subject, body)`` since ``tag``, newest first, merges left out.
+
+    Bodies as well as subjects, because both conventions this script honours --
+    the bump markers and ``[skip release]`` -- are promised to work anywhere in
+    a commit message, and a subject-only read quietly broke that promise.
+    """
     span = f"{tag}..HEAD" if tag else "HEAD"
-    raw = git("log", span, "--no-merges", "--pretty=format:%s")
-    return [line.strip() for line in raw.splitlines() if line.strip()]
+    raw = git("log", span, "--no-merges", "--pretty=format:%s%x1f%b%x1e")
+    commits = []
+    for record in raw.split("\x1e"):
+        if not record.strip():
+            continue
+        subject, _sep, body = record.strip("\n").partition("\x1f")
+        if subject.strip():
+            commits.append((subject.strip(), body.strip()))
+    return commits
 
 
-def decide_bump(commits: list[str], forced: str | None) -> str:
+def _pairs(commits):
+    """Accept ``(subject, body)`` pairs or bare subjects, for older callers."""
+    for commit in commits:
+        if isinstance(commit, tuple):
+            yield commit
+        else:
+            yield commit, ""
+
+
+def decide_bump(commits, forced: str | None) -> str:
     if forced:
         return forced
-    blob = " \n".join(commits).lower()
+    blob = " \n".join(f"{subject}\n{body}"
+                      for subject, body in _pairs(commits)).lower()
     if "[major]" in blob:
         return "major"
     if "[minor]" in blob:
@@ -98,50 +128,73 @@ def next_version(current: tuple[int, int, int] | None, bump: str) -> tuple[int, 
     return (major, minor, patch + 1)
 
 
-def format_notes(version: str, commits: list[str], previous: str | None) -> str:
-    """The release body, as a user reading the download page will see it."""
-    interesting = [c for c in commits if not BORING.match(c)]
-    # Strip the markers: they are instructions to the workflow and to this
-    # script, not news. "[skip release]" was missing from this list and duly
-    # turned up in a published changelog, which is how it earned its place.
-    interesting = [re.sub(r"\s*\[(minor|major|skip release)\]\s*", " ", c,
-                          flags=re.I).strip()
-                   for c in interesting]
+SKIP_MARK = re.compile(r"\[skip release\]", re.IGNORECASE)
 
-    lines = ["## Nouveautés"]
-    if interesting:
-        lines += [f"- {c}" for c in interesting]
+
+def news(commits) -> list[str]:
+    """The subjects worth a line on the release page."""
+    lines = []
+    for subject, body in _pairs(commits):
+        if SKIP_MARK.search(subject) or SKIP_MARK.search(body):
+            # The site, the docs, the workflow: not the program being released.
+            continue
+        if BORING.match(subject):
+            continue
+        # Strip the markers: they are instructions to the workflow and to this
+        # script, not news.
+        lines.append(re.sub(r"\s*\[(minor|major)\]\s*", " ", subject,
+                            flags=re.I).strip())
+    return lines
+
+
+def highlights_for(version: str, directory: Path = HIGHLIGHTS_DIR) -> str:
+    try:
+        return (directory / f"v{version}.md").read_text("utf-8").strip()
+    except OSError:
+        return ""
+
+
+def format_notes(version: str, commits, previous: str | None, *,
+                 highlights: str | None = None) -> str:
+    """The release body, as a user reading the download page will see it.
+
+    English first: the download page opens in English, and GitHub's own release
+    page is read from everywhere. The install steps follow in French too,
+    shorter, for the players the program speaks French to.
+    """
+    if highlights is None:
+        highlights = highlights_for(version)
+    lines: list[str] = []
+    if highlights:
+        lines += [highlights, ""]
+
+    lines.append("## What's new")
+    changes = news(commits)
+    if changes:
+        lines += [f"- {change}" for change in changes]
     else:
-        lines.append("- Corrections internes, aucun changement visible.")
+        lines.append("- Internal fixes, nothing visible changed.")
 
     lines += [
         "",
-        "## Installation",
+        "## Install",
         "",
-        "**Vous avez déjà Flashwatch ?** Ne retéléchargez rien : lancez-le, il "
-        "propose la mise à jour tout seul (bandeau en haut de la fenêtre de "
-        "réglages) et remplace son propre exécutable. Vos réglages sont conservés.",
+        "**Already have Flashwatch?** Nothing to download: start it and it offers "
+        "the update itself (banner at the top of its window), then replaces its "
+        "own executable. Your settings are kept.",
         "",
-        "**Première installation :** téléchargez `Flashwatch.exe` ci-dessous, "
-        "placez-le dans son propre dossier et double-cliquez.",
+        "**First install:** download `Flashwatch.exe` below, put it in a folder of "
+        "its own and double-click it. Windows says \"Windows protected your PC\" "
+        "because the file is not signed: *More info* -> *Run anyway*. Internet is "
+        "needed on the first launch, for the champion icons.",
         "",
-        "Windows affichera « Windows a protégé votre PC » : *Informations "
-        "complémentaires* → *Exécuter quand même*. L'exécutable n'est pas signé, "
-        "c'est tout ce que cet avertissement signifie.",
-        "",
-        "Rien ne s'ouvre à l'écran : l'icône apparaît dans la zone de "
-        "notification, en bas à droite. Internet est nécessaire au premier "
-        "lancement (téléchargement des icônes de champions).",
-        "",
-        "Vos réglages sont conservés : ils vivent dans le dossier `assets` créé à "
-        "côté de l'exécutable, pas dans le fichier lui-même. Et si vous "
-        "retéléchargez l'exécutable ailleurs plutôt que de le mettre à jour "
-        "depuis l'application, il récupère tout seul la configuration de "
-        "l'installation précédente.",
+        "**En français :** déjà installé, lancez-le et acceptez la mise à jour "
+        "proposée. Sinon, téléchargez `Flashwatch.exe`, placez-le dans son propre "
+        "dossier et double-cliquez (*Informations complémentaires* -> *Exécuter "
+        "quand même*).",
     ]
     if previous:
-        lines += ["", "---", "",
-                  f"Version précédente : `{previous}`."]
+        lines += ["", "---", "", f"Previous version: `{previous}`."]
     return "\n".join(lines) + "\n"
 
 

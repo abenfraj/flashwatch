@@ -918,6 +918,16 @@ DO NOT:
 
 
 
+EXCEPTION, decided by the project owner (October 2026): the app may read Riot's
+official \*Live Client Data API\* at `https://127.0.0.1:2999/liveclientdata/` --
+read-only, on the player's own machine, served by the game for companion apps.
+It is used for the game mode (so nothing runs in ARAM/Arena unless enabled), the
+exact game clock, and the enemy roster with summoner spells, levels, items and
+rune trees -- all information the scoreboard already shows. It is never written
+to, and it is not a Riot server. See `src/live_client.py`.
+
+
+
 ONLY:
 
 

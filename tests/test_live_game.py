@@ -198,6 +198,34 @@ check("no game answering is None, not an exception",
 loading = LiveClient(session=FakeSession({"gamestats": {}, "playerlist": "nope"}))
 check("a half-ready feed is None", loading.fetch() is None)
 
+# Over a real socket, once: the plumbing a fake session cannot prove -- the
+# request goes out, JSON comes back, a closed port is a quiet None.
+import http.server, json as _json
+class Feed(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        name = self.path.rsplit("/", 1)[-1]
+        body = {"gamestats": STATS, "playerlist": PLAYERS,
+                "activeplayername": "Me#EUW"}.get(name)
+        self.send_response(200 if body is not None else 404)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        if body is not None:
+            self.wfile.write(_json.dumps(body).encode())
+    def log_message(self, *args):
+        pass
+server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Feed)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+port = server.server_address[1]
+real = LiveClient(base_url=f"http://127.0.0.1:{port}/liveclientdata")
+over_socket = real.fetch(champions=assets.champions)
+check("a real local server is read end to end",
+      over_socket is not None and len(over_socket.enemies) == 5)
+server.shutdown()
+server.server_close()
+started = time.monotonic()
+check("a closed port is None, and fast",
+      real.fetch() is None and time.monotonic() - started < 2.5)
+
 watch_session = FakeSession({"gamestats": STATS, "playerlist": PLAYERS,
                              "activeplayername": "Me#EUW"})
 watcher = live_client.LiveWatcher(wanted=lambda: True,
