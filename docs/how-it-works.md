@@ -1154,6 +1154,7 @@ Each file is a standalone script that exits non-zero on failure:
 .venv\Scripts\python tests\test_replay_render.py      # replay: the overlay, frame by frame
 .venv\Scripts\python tests\test_replay_sidecar.py     # replay: a roster read off the footage
 .venv\Scripts\python tests\test_replay_cli.py         # replay: the command and its exit codes
+.venv\Scripts\python tests\test_replay_records.py     # replay: what events.json says on noisy footage
 ```
 
 `test_capture_pipeline.py` and `test_ocr_performance.py` render synthetic
