@@ -51,6 +51,7 @@ from typing import Any, Callable, Iterable
 
 import requests
 
+import clock
 from cooldowns import DDRAGON_SPELL_IDS
 from riot_assets import fold
 
@@ -198,7 +199,7 @@ class LiveGame:
 
     def now(self, at: float | None = None) -> float:
         """The game clock as of ``at`` (default: now)."""
-        at = time.monotonic() if at is None else at
+        at = clock.now() if at is None else at
         return self.game_time + max(0.0, at - self.fetched_at)
 
     @property
@@ -386,7 +387,7 @@ def parse_game(stats: dict, players: Iterable[dict], active_name: str,
         map_number=map_number,
         category=mode_category(mode, map_number),
         game_time=max(0.0, game_time),
-        fetched_at=time.monotonic() if fetched_at is None else fetched_at,
+        fetched_at=clock.now() if fetched_at is None else fetched_at,
         players=_with_inferred_positions(parsed),
         active_riot_id=active_name or "",
         active_team=active_team,

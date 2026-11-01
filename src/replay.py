@@ -30,7 +30,9 @@ import numpy as np
 
 import clock
 from chat_detector import ChatRegion
+from cooldowns import DDRAGON_SPELL_IDS
 from game_detector import GameState
+from live_client import parse_game
 from message_parser import MessageParser
 from ocr import CaptureWorker
 from riot_assets import RiotAssets
@@ -46,6 +48,17 @@ DEFAULT_FPS = 5.0
 # Where video second 0 sits on the clock. Not zero, so that nothing measured
 # against a zero-initialised field ("last seen at 0") looks recent by accident.
 CLOCK_BASE = 10_000.0
+
+# What a sidecar may say, and how it is spelled. The rune trees are Riot's ids,
+# the ones the data feed reports; positions are the feed's own words.
+LOCALES = ("en_US", "fr_FR")
+RUNE_TREES = {"precision": 8000, "domination": 8100, "sorcery": 8200,
+              "inspiration": 8300, "resolve": 8400}
+POSITIONS = ("", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")
+SIDECAR_FIELDS = ("locale", "chat_region", "game_clock_offset", "enemies")
+
+# The player a replay "is": on the other team from every enemy in the sidecar.
+REPLAY_RIOT_ID = "Replay#0"
 
 
 class ReplayInputError(Exception):
@@ -143,6 +156,132 @@ def iter_video_frames(path: Path, fps: float = DEFAULT_FPS, start: float = 0.0,
         capture.release()
 
 
+def load_sidecar(path: Path, assets: RiotAssets | None = None) -> dict:
+    """Read and check a sidecar, or raise ReplayInputError naming the field.
+
+    Champions are checked against Riot's data (``assets``, bootstrapped here if
+    not given), spells against the cooldown table, so a typo is refused here
+    rather than silently timing nobody.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise ReplayInputError(f"sidecar not found: {path}")
+    try:
+        data = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ReplayInputError(f"sidecar {path}: not valid JSON ({exc})") from exc
+
+    def bad(field: str, why: str) -> ReplayInputError:
+        return ReplayInputError(f"sidecar {path}: {field}: {why}")
+
+    if not isinstance(data, dict):
+        raise bad("sidecar", "expected a JSON object")
+    for key in data:
+        if key not in SIDECAR_FIELDS:
+            raise bad(key, f"unknown field (known: {', '.join(SIDECAR_FIELDS)})")
+
+    out: dict = {}
+    locale = data.get("locale", "en_US")
+    if locale not in LOCALES:
+        raise bad("locale", f"must be en_US or fr_FR, not {locale!r}")
+    out["locale"] = locale
+
+    if "chat_region" in data:
+        region = data["chat_region"]
+        if (not isinstance(region, list) or len(region) != 4
+                or not all(isinstance(v, int) and not isinstance(v, bool)
+                           for v in region)
+                or region[0] < 0 or region[1] < 0 or region[2] <= 0
+                or region[3] <= 0):
+            raise bad("chat_region", "four whole numbers in video pixels: "
+                                     "x, y, width, height")
+        out["chat_region"] = region
+
+    if "game_clock_offset" in data:
+        offset = data["game_clock_offset"]
+        if not isinstance(offset, (int, float)) or isinstance(offset, bool):
+            raise bad("game_clock_offset", "a number of seconds")
+        out["game_clock_offset"] = float(offset)
+
+    if "enemies" in data:
+        if "game_clock_offset" not in data:
+            raise bad("game_clock_offset", "required with enemies: the game "
+                                           "clock is video seconds + offset")
+        enemies = data["enemies"]
+        if not isinstance(enemies, list) or not 1 <= len(enemies) <= 5:
+            raise bad("enemies", "a list of one to five enemies")
+        if assets is None:
+            assets = RiotAssets(locale)
+            assets.bootstrap()
+        spells_by_name = {name.lower(): name for name in DDRAGON_SPELL_IDS}
+        out["enemies"] = []
+        for index, enemy in enumerate(enemies):
+            where = f"enemies[{index}]"
+            if not isinstance(enemy, dict):
+                raise bad(where, "expected an object")
+            info = assets.champion_by_name(str(enemy.get("champion", "")))
+            if info is None:
+                raise bad(f"{where}.champion",
+                          f"unknown champion {enemy.get('champion')!r}")
+            spells = enemy.get("spells")
+            if (not isinstance(spells, list) or not 1 <= len(spells) <= 2
+                    or not all(isinstance(s, str) and s.lower() in spells_by_name
+                               for s in spells)):
+                raise bad(f"{where}.spells", "one or two of "
+                          + ", ".join(DDRAGON_SPELL_IDS))
+            level = enemy.get("level", 1)
+            if not isinstance(level, int) or isinstance(level, bool) \
+                    or not 1 <= level <= 18:
+                raise bad(f"{where}.level", "a whole number from 1 to 18")
+            items = enemy.get("items", [])
+            if not isinstance(items, list) or not all(
+                    isinstance(i, int) and not isinstance(i, bool) for i in items):
+                raise bad(f"{where}.items", "a list of item ids")
+            trees = enemy.get("rune_trees", [])
+            if not isinstance(trees, list) or not all(
+                    isinstance(t, str) and t.lower() in RUNE_TREES for t in trees):
+                raise bad(f"{where}.rune_trees", "names among "
+                          + ", ".join(name.title() for name in RUNE_TREES))
+            position = enemy.get("position", "")
+            if position not in POSITIONS:
+                raise bad(f"{where}.position", "one of "
+                          + ", ".join(p for p in POSITIONS if p))
+            out["enemies"].append({
+                "champion_id": info.champion_id, "champion_name": info.name,
+                "spells": [spells_by_name[s.lower()] for s in spells],
+                "level": level, "items": items,
+                "rune_trees": [t.lower() for t in trees], "position": position})
+    return out
+
+
+def _feed_players(enemies: list[dict]) -> list[dict]:
+    """The sidecar's enemies as the data feed would list them, plus the player."""
+    def spell(name: str) -> dict:
+        ddragon = DDRAGON_SPELL_IDS[name]
+        return {"displayName": name,
+                "rawDisplayName": f"GeneratedTip_SummonerSpell_{ddragon}_DisplayName"}
+
+    players = [{"championName": "", "team": "ORDER", "riotId": REPLAY_RIOT_ID,
+                "riotIdGameName": REPLAY_RIOT_ID.split("#")[0],
+                "summonerSpells": {}, "items": [], "runes": {}, "level": 1}]
+    for index, enemy in enumerate(enemies):
+        slots = dict(zip(("summonerSpellOne", "summonerSpellTwo"),
+                         (spell(name) for name in enemy["spells"])))
+        trees = [RUNE_TREES[name] for name in enemy["rune_trees"]]
+        runes = dict(zip(("primaryRuneTree", "secondaryRuneTree"),
+                         ({"id": tree} for tree in trees)))
+        players.append({
+            "championName": enemy["champion_name"],
+            "rawChampionName": f"game_character_displayname_{enemy['champion_id']}",
+            "team": "CHAOS", "level": enemy["level"],
+            "position": enemy["position"],
+            "riotId": f"Enemy{index}#0", "riotIdGameName": f"Enemy{index}",
+            "summonerSpells": slots,
+            "items": [{"itemID": item} for item in enemy["items"]],
+            "runes": runes})
+    return players
+
+
 class _ReplayDetector:
     """The game is always on screen; the first poll is the start of a session."""
 
@@ -159,7 +298,14 @@ class ReplaySession:
     """The app's capture worker and timer manager, fed one video frame at a time."""
 
     def __init__(self, out_dir: Path, *, locale: str = "en_US", width: int,
-                 height: int) -> None:
+                 height: int, sidecar: dict | None = None) -> None:
+        sidecar = sidecar or {}
+        locale = sidecar.get("locale", locale)
+        region = sidecar.get("chat_region")
+        if region is not None and (region[0] + region[2] > width
+                                   or region[1] + region[3] > height):
+            raise ReplayInputError(f"chat_region {region} reaches outside the "
+                                   f"{width}x{height} video")
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self._now = CLOCK_BASE
@@ -186,6 +332,18 @@ class ReplaySession:
         self.worker.engine.load()
         self._frame: np.ndarray | None = None
 
+        if region is not None:
+            # As the app does with a chat area the user framed and locked: kept
+            # across the session start, and read from the very first frame.
+            self.settings.update({"chat_region": list(region),
+                                  "chat_region_locked": True})
+            self.worker.set_manual_region(ChatRegion(*region, source="manual",
+                                                     confirmed=True))
+        self._players = _feed_players(sidecar.get("enemies") or [])
+        self._clock_offset = sidecar.get("game_clock_offset")
+        self.roster_from_sidecar = len(self._players) > 1
+        self._roster_applied = False
+
         self.records: list[ReplayRecord] = []
         self.timers: list[TimerRecord] = []
 
@@ -207,10 +365,30 @@ class ReplaySession:
         """Show the worker the frame at video second ``t`` and pass on what it read."""
         self._now = CLOCK_BASE + t
         self._frame = frame
+        if self.roster_from_sidecar:
+            self._apply_feed(t)
         chat_known = self.region is not None
         self.worker._iterate()
         self._drain(t, first_read=not chat_known)
         self.timer_manager.tick()
+
+    def _apply_feed(self, t: float) -> None:
+        """What ``main._sync_live`` does with a reading of the feed, every step.
+
+        Applied before the frame is read, as in an app whose feed was polled
+        before the ping arrived: the roster gates the parser and the clock
+        back-dates what is read.
+        """
+        game = parse_game({"gameMode": "CLASSIC", "mapNumber": 11,
+                           "gameTime": t + self._clock_offset},
+                          self._players, REPLAY_RIOT_ID,
+                          champions=self.assets.champions, fetched_at=clock.now())
+        self.timer_manager.set_live_game(game)
+        if not self._roster_applied:
+            self.parser.set_roster({p.champion_id: p.spells for p in game.enemies},
+                                   [p.champion_id for p in game.allies
+                                    if p.champion_id])
+            self._roster_applied = True
 
     def _drain(self, t: float, *, first_read: bool) -> None:
         # The same order as main._drain_results, so the manager sees a replay
@@ -259,7 +437,7 @@ class ReplaySession:
             "fps": fps,
             "duration": duration,
             "region": [int(v) for v in region.rect] if region is not None else None,
-            "roster_from_sidecar": False,
+            "roster_from_sidecar": self.roster_from_sidecar,
             "events": [asdict(record) for record in self.records],
             "timers": [asdict(record) for record in self.timers],
         }
