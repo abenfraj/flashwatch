@@ -194,5 +194,79 @@ check("a new game starts a new session", changed and state.in_game,
 check("and it is identified by the new process", state.session_id == "pid:1234",
       state.session_id)
 
+# ------------ 5. weak evidence must not restart a running, confirmed cooldown
+# The lines below are from a real recorded game (enryu, Nilah, Challenger), read
+# by the replay mode. Each one restarted a timer that was already right.
+import clock
+
+english_assets = RiotAssets("en_US")
+english_assets.bootstrap()
+english = MessageParser(english_assets)
+now = [5000.0]
+clock.use(lambda: now[0])
+
+
+def read_at(manager, seconds, line):
+    now[0] = 5000.0 + seconds
+    return manager.handle_events(english.parse_lines([line]))
+
+
+def timer_of(manager, champion, spell):
+    return next((t for t in manager.snapshot()
+                 if (t.champion_id, t.spell_key) == (champion, spell)), None)
+
+
+# The same ping, read again 28 s later with the colon of its timestamp lost.
+manager = primed()
+read_at(manager, 70.2, "03:02 Bard (Bard）:Qiyana used Fash")
+first = timer_of(manager, "Qiyana", "Flash")
+read_at(manager, 98.4, "0303Bard(Bard:Qiyanaused Fash")
+again = timer_of(manager, "Qiyana", "Flash")
+check("a ping re-read without its timestamp's colon leaves the timer alone",
+      first is not None and again is first
+      and again.started_at == first.started_at,
+      f"{first and first.started_at} -> {again and again.started_at}")
+
+# A bare ping on the same spell a minute later: the game printing "Qiyana
+# Flash" says the spell is down, which the confirmed timer already says.
+read_at(manager, 127.0, "04:01 Bard (Bard):Qiyana Flash")
+bare = timer_of(manager, "Qiyana", "Flash")
+check("a bare ping does not restart a confirmed cooldown still running",
+      bare is first and not bare.uncertain,
+      f"{first and first.started_at} -> {bare and bare.started_at}")
+
+manager = primed()
+read_at(manager, 203.0, "06:21 willtype (Kayle)：:Sylas used Teleport")
+teleport = timer_of(manager, "Sylas", "Teleport")
+read_at(manager, 225.0, "0621 wil type (Kayle): Sylas used Teleport")
+check("the same goes for Teleport",
+      timer_of(manager, "Sylas", "Teleport") is teleport,
+      str(timer_of(manager, "Sylas", "Teleport")))
+
+# A cast line with no readable clock, once the spell can genuinely be back, is
+# still a recast: the guard is about what cannot have happened yet. 80 % of the
+# cooldown is past the floor (no haste brings a summoner spell below ~72 %).
+manager = primed()
+read_at(manager, 0.0, "10:00 Bob (Ahri): Sylas used Flash")
+flash = timer_of(manager, "Sylas", "Flash")
+started = flash.started_at
+read_at(manager, flash.duration * 0.8, "Bob (Ahri): Sylas used Flash")
+recast = timer_of(manager, "Sylas", "Flash")
+check("once the spell can be back, a clockless cast line is a recast",
+      recast is not None and recast.started_at > started,
+      f"{started} -> {recast and recast.started_at}")
+
+# With chat timestamps off every line is clockless, and a re-read cannot be
+# told from a recast: the guard stays out of it and the old rule applies.
+manager = primed()
+read_at(manager, 0.0, "Bob (Ahri): Sylas used Flash")
+flash = timer_of(manager, "Sylas", "Flash")
+started = flash.started_at
+read_at(manager, 28.0, "Bob (Ahri): Sylas used Flash")
+check("without chat timestamps, the guard leaves the old rule in place",
+      timer_of(manager, "Sylas", "Flash").started_at > started,
+      f"{started} -> {timer_of(manager, 'Sylas', 'Flash').started_at}")
+clock.use(None)
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

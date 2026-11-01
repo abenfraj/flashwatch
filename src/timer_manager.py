@@ -59,6 +59,13 @@ BLIND_DEDUPE_WINDOW = 12.0
 # one closest to the actual cast, so it is the one worth keeping.
 RECAST_MARGIN = 15.0
 
+# The soonest a confirmed cooldown can really end, as a share of the one worked
+# out for it. Summoner spell haste tops out around 38 (Cosmic Insight 18 plus
+# Crimson Lucidity 20), which leaves 100/138 = 72 % of the unhasted cooldown:
+# before this share has elapsed the spell cannot have been cast again, whatever
+# runes and boots we did not know about.
+EARLIEST_RECAST = 0.7
+
 # New-game detection from the clock alone is a *last resort*, because chat
 # history legitimately contains old timestamps: if the user scrolls up to reveal
 # lines we have never read, a naive "clock went backwards" rule would wipe every
@@ -217,6 +224,10 @@ class TimerManager:
         # (value, clock.now()) of the last clock read off the screen, awaiting a
         # second reading to confirm it.
         self._clock_candidate: tuple[float, float] | None = None
+        # Whether this game's chat lines carry their clock. Chat timestamps are
+        # a client option: when they are on, a cast line without a readable
+        # clock is one whose clock the OCR mangled, and can be judged as such.
+        self._chat_has_clock = False
         self.history: list[tuple[float, SpellEvent]] = []
         # The latest reading of the game's data feed, and its enemies by
         # champion. Empty when the feed is not answering, which puts every rule
@@ -248,6 +259,7 @@ class TimerManager:
         self._clock_ref = None
         self._new_game_hints.clear()
         self._clock_candidate = None
+        self._chat_has_clock = False
         self.history.clear()
         # The feed's roster is re-applied on the next reading; forgetting the key
         # is what makes that happen, since the roles it set were cleared above.
@@ -455,6 +467,7 @@ class TimerManager:
             if self._update_clock(event.game_time):
                 # reset() wiped _seen, so this event is legitimately new again.
                 pass
+            self._chat_has_clock = True
             if event.signature in self._seen:
                 return None
             self._seen.add(event.signature)
@@ -514,6 +527,33 @@ class TimerManager:
                 self.history.append((time.time(), event))
                 del self.history[:-100]
                 return previous
+            if (self._chat_has_clock and previous.kind == "summoner"
+                    and not previous.uncertain and not previous.is_ready()):
+                # A confirmed summoner cooldown still running, in a chat whose
+                # lines carry their clock, and a line that cannot move it. A
+                # bare "Qiyana Flash" names the spell without claiming a cast
+                # -- teammates ping a spell to say it is down, which the timer
+                # already says. A cast line without a readable clock here is
+                # one the OCR mangled ("0303Bard..."): read as age 0 it looks
+                # like a cast happening now, but the spell cannot have been
+                # cast again this soon, so it is the one already timed, read
+                # again. Both used to restart the timer. With timestamps off,
+                # every line is clockless and a re-read cannot be told from a
+                # recast, so the rules below that are left as they were; and
+                # ultimates' cooldowns are estimates the floor does not hold for.
+                if not event.certain:
+                    log.info("%s %s: %r only names the spell; the running "
+                             "timer stands", event.champion_name,
+                             event.spell_name, event.raw_line)
+                    return None
+                if (event.game_time is None
+                        and clock.now() - previous.started_at
+                        < previous.duration * EARLIEST_RECAST):
+                    log.info("%s %s: %r has no readable clock and the spell "
+                             "cannot be back yet; read as the same cast",
+                             event.champion_name, event.spell_name,
+                             event.raw_line)
+                    return None
             if previous.stated and not previous.is_ready():
                 # A ping stated this cooldown outright; this line only implies one
                 # from a base cooldown plus assumptions about runes and boots.
