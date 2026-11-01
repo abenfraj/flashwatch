@@ -190,7 +190,7 @@ class LiveGame:
     map_number: int
     category: str
     game_time: float
-    # monotonic time the reading was taken, so the clock can be extrapolated
+    # clock.now() time the reading was taken, so the clock can be extrapolated
     # between two of them instead of standing still for a second.
     fetched_at: float
     players: tuple[LivePlayer, ...] = ()
