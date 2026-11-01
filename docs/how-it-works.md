@@ -1087,20 +1087,33 @@ the video's seconds rather than the machine's.
 
 What it writes:
 
-- `events.json`: every line read and every timer started, in video seconds,
-  plus the chat area it found. A line read in the same pass that first found
-  the chat is marked `first_read`: the screen cannot say whether it was posted
-  before the recording started.
+- `events.json`: the lines the timer manager acted on (once each, with their
+  signature -- OCR variants and untracked ultimates are left out, as in the
+  app's own log) and the timers as the overlay counts them (one per timer; a
+  confirmed "?" updates its record), in video seconds, plus the chat area it
+  found. Times come from each frame's own timestamp, so variable-frame-rate
+  recordings stay in step. A line read within two seconds of the first time
+  the chat was found is marked `first_read`: the screen cannot say whether it
+  was posted before the recording started.
 - `overlay/`: the real overlay, painted offscreen for every sampled frame as a
-  transparent PNG of one fixed size, with `overlay.json` giving the rate, the
-  size and the corner it is anchored to. `--no-render` skips it.
+  transparent PNG of one fixed size, at four times the screen's pixels by
+  default (`--pixel-ratio`) so it stays sharp when enlarged, with
+  `overlay.json` giving the rate, the size, the ratio and the corner it is
+  anchored to. The bar, cards and list are sized for a screen the size of the
+  video, as on the player's. `--no-render` skips it.
+
+Without a feed, the game clock is read where the app reads it, in the
+top-right corner of the video, and chat lines are back-dated by it.
 
 A recording has no data feed. A sidecar (`--sidecar file.json`) supplies what
 the feed would have, read off the footage by a person: `locale`, `chat_region`
-(x, y, width, height in video pixels), and `enemies` (champion, spells, level,
-items, rune trees, lane) with `game_clock_offset`, the game time at video second
-zero. With a chat area given, the chat is read from the first frame, so the
-priming pass treats what is already on screen as history.
+(x, y, width, height in video pixels, widened like a hand-placed area), and
+`enemies` with `game_clock_offset`, the game time at video second zero. The
+roster lists all five enemies, each with champion, spells, level, items (`[]`
+for none) and both rune trees, lane optional: the feed always gives them, and a
+partial roster would make the parser refuse pings on whoever was left out.
+With a chat area given, the chat is read from the first frame, so the priming
+pass treats what is already on screen as history.
 
 Exit codes: 0 done (a video without any chat included), 2 an input or output
 problem a person can fix (missing video, malformed sidecar, an existing replay

@@ -3,7 +3,7 @@
     .venv\\Scripts\\python.exe tools\\replay.py VIDEO --out DIR
         [--sidecar FILE] [--fps 5] [--start SECONDS] [--end SECONDS]
         [--layout team|bar|cards|list] [--theme clean|light|dark|neon]
-        [--locale en_US|fr_FR] [--no-render] [--force]
+        [--locale en_US|fr_FR] [--pixel-ratio 4] [--no-render] [--force]
 
 Writes DIR/events.json (what was read and timed, in video seconds) and, unless
 --no-render, DIR/overlay/ (the overlay drawn for every sampled frame, as
@@ -51,6 +51,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--theme", choices=("clean", "light", "dark", "neon"),
                         default="clean")
     parser.add_argument("--locale", choices=("en_US", "fr_FR"), default="en_US")
+    parser.add_argument("--pixel-ratio", type=int, default=4,
+                        help="overlay pixels per screen pixel (sharp insets)")
     parser.add_argument("--no-render", action="store_true")
     parser.add_argument("--force", action="store_true")
     return parser.parse_args(argv)
@@ -66,6 +68,9 @@ def main(argv: list[str] | None = None) -> int:
             raise ReplayInputError(f"video not found: {args.video}")
         if args.fps <= 0:
             raise ReplayInputError(f"--fps must be above 0, not {args.fps}")
+        if args.pixel_ratio < 1:
+            raise ReplayInputError(f"--pixel-ratio must be 1 or more, not "
+                                   f"{args.pixel_ratio}")
         if args.end is not None and args.end <= args.start:
             raise ReplayInputError(f"--end ({args.end}) must come after "
                                    f"--start ({args.start})")
@@ -85,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         summary = run_replay(args.video, args.out, fps=args.fps, start=args.start,
                              end=args.end, locale=args.locale, layout=args.layout,
                              theme=args.theme, render=not args.no_render,
-                             sidecar=sidecar)
+                             sidecar=sidecar, pixel_ratio=args.pixel_ratio)
     except ReplayInputError as exc:
         print(f"replay: {exc}", file=sys.stderr)
         return 2

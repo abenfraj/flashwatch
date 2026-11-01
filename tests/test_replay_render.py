@@ -70,5 +70,32 @@ check("once the pings are read, the timers are on the frame", drawn > 200,
       f"{drawn} opaque pixels")
 check("events.json is written beside the frames", (out / "events.json").is_file())
 
+# Drawn at a multiple of the screen's pixels: the generator enlarges the overlay
+# into an inset many times its on-screen size, and 1x frames would blur.
+ratio = manifest.get("pixel_ratio")
+check("frames are drawn at the manifest's pixel ratio, 4 by default",
+      ratio == 4 and manifest.get("width") == 4 * manifest.get("logical_width")
+      and manifest.get("height") == 4 * manifest.get("logical_height"),
+      str(manifest))
+
+# The other displays are sized for the video's screen, as place_default sizes
+# them for the player's, and the same on every run.
+from overlay import LAYOUT_DEFAULTS, LAYOUT_BAR, MIN_WIDTH
+bar_out = scratch / "bar"
+run_replay(video, bar_out, fps=5.0, end=1.0, layout="bar")
+bar = json.loads((bar_out / "overlay" / "overlay.json").read_text("utf-8"))
+expected_width = max(MIN_WIDTH, int(1918 * LAYOUT_DEFAULTS[LAYOUT_BAR]["fraction"]))
+check("the bar is as wide as it would be on a screen the video's size",
+      bar.get("logical_width") == expected_width,
+      f"{bar.get('logical_width')} vs {expected_width}")
+for stale in (bar_out / "overlay").glob("*"):
+    stale.unlink()
+(bar_out / "events.json").unlink()
+run_replay(video, bar_out, fps=5.0, end=1.0, layout="bar")
+again = json.loads((bar_out / "overlay" / "overlay.json").read_text("utf-8"))
+check("and the same size when replayed again into the same folder",
+      (again.get("width"), again.get("height")) == (bar.get("width"), bar.get("height")),
+      f"{again} vs {bar}")
+
 print(f"\n{sum(results)}/{len(results)} checks passed")
 sys.exit(0 if all(results) else 1)

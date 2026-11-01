@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import queue
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -28,13 +29,15 @@ from typing import Iterator
 import cv2
 import numpy as np
 
+import chat_detector
 import clock
 from chat_detector import ChatRegion
 from cooldowns import DDRAGON_SPELL_IDS
 from game_detector import GameState
 from live_client import parse_game
+import settings as settings_module
 from message_parser import MessageParser
-from ocr import CaptureWorker
+from ocr import PROBE_CLOCK, CaptureWorker
 from riot_assets import RiotAssets
 from settings import Settings
 from timer_manager import TimerManager
@@ -56,6 +59,12 @@ RUNE_TREES = {"precision": 8000, "domination": 8100, "sorcery": 8200,
               "inspiration": 8300, "resolve": 8400}
 POSITIONS = ("", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")
 SIDECAR_FIELDS = ("locale", "chat_region", "game_clock_offset", "enemies")
+# Everything the feed reports for an enemy. All but the lane are required: the
+# feed never leaves them out, so a missing one would read as "known to be none"
+# -- no boots, no Inspiration -- and change the cooldowns behind a claim that
+# the roster came from the game.
+ENEMY_FIELDS = ("champion", "spells", "level", "items", "rune_trees", "position")
+ENEMY_REQUIRED = ("champion", "spells", "level", "items", "rune_trees")
 
 # The player a replay "is": on the other team from every enemy in the sidecar.
 REPLAY_RIOT_ID = "Replay#0"
@@ -65,9 +74,17 @@ class ReplayInputError(Exception):
     """A video, sidecar or output folder replay cannot work with."""
 
 
+# How long after the chat is first found a line still counts as possibly older
+# than the recording. The pass that finds the chat reads a wide band with caps,
+# so a line already on screen can be parsed a pass or two later; ten passes
+# covers that, and a ping that truly arrives in those two seconds only loses
+# its "fresh" label, never its timer.
+FIRST_READ_GRACE = 2.0
+
+
 @dataclass
 class ReplayRecord:
-    """One line the chain recognised, and when in the video it did."""
+    """A line the app acted on -- started or confirmed a timer -- and when."""
     t: float
     champion_id: str
     champion_name: str
@@ -78,15 +95,24 @@ class ReplayRecord:
     source: str
     game_time: int | None
     remaining_seconds: int | None
-    # Read in the pass that first found the chat. The line may predate the
-    # recording -- the screen cannot say -- so the generator does not present it
-    # as a fresh ping. With a chat area given in a sidecar, nothing is first_read.
+    # The line's identity to the timer manager: OCR variants of one chat line
+    # share it, which is why each appears here once.
+    signature: str = ""
+    # Read within FIRST_READ_GRACE of the first time the chat was found by
+    # searching. The line may predate the recording -- the screen cannot say --
+    # so the generator does not present it as a fresh ping. A chat area given in
+    # a sidecar is known from the first frame, and then nothing is first_read.
     first_read: bool = False
 
 
 @dataclass
 class TimerRecord:
-    """A timer the manager started, in video seconds."""
+    """A timer as the overlay counts it, in video seconds.
+
+    One per timer: when a later line re-anchors it (an inferred "?" confirmed),
+    the record is updated in place, so ``ready_t`` is always the moment the
+    overlay shows it coming back. ``t`` stays the first time it appeared.
+    """
     t: float
     champion_id: str
     spell_key: str
@@ -106,8 +132,13 @@ def _open(path: Path) -> cv2.VideoCapture:
     return capture
 
 
-def video_info(path: Path) -> tuple[int, int, float, float]:
-    """``(width, height, fps, duration_seconds)`` of a video, or ReplayInputError."""
+def video_info(path: Path) -> tuple[int, int, float, float | None]:
+    """``(width, height, fps, duration_seconds)`` of a video, or ReplayInputError.
+
+    The duration is the container's estimate (frames / average rate), which is
+    approximate on variable-rate footage and missing (None) when the container
+    does not know its own length; the replay measures what it actually covered.
+    """
     capture = _open(Path(path))
     try:
         fps = capture.get(cv2.CAP_PROP_FPS)
@@ -118,39 +149,55 @@ def video_info(path: Path) -> tuple[int, int, float, float]:
         capture.release()
     if width <= 0 or height <= 0:
         raise ReplayInputError(f"cannot read video: {path}")
-    return width, height, fps, frames / fps
+    duration = frames / fps if frames > 0 and math.isfinite(frames) else None
+    return width, height, fps, duration
 
 
 def iter_video_frames(path: Path, fps: float = DEFAULT_FPS, start: float = 0.0,
                       end: float | None = None) -> Iterator[tuple[float, np.ndarray]]:
     """Yield ``(video_seconds, frame_bgr)`` every ``1/fps`` seconds.
 
-    Frames are decoded in order and each sample time gets the frame nearest to
-    it, so only one frame is ever held: a thirty-minute VOD costs no more memory
-    than a ten-second clip.
+    Each sample gets the frame whose own timestamp is nearest to it. The
+    timestamp is the frame's, not its index over the average rate: on
+    variable-rate footage (screen recorders often are) counting frames drifts
+    by seconds. At most two frames are held at once, so a thirty-minute VOD
+    costs no more memory than a ten-second clip.
     """
     capture = _open(Path(path))
     try:
-        source_fps = capture.get(cv2.CAP_PROP_FPS)
-        index = int(start * source_fps)
-        if index > 0:
-            capture.set(cv2.CAP_PROP_POS_FRAMES, index)
-        half = 0.5 / source_fps
+        interval = 1.0 / capture.get(cv2.CAP_PROP_FPS)
+        if start > 0:
+            capture.set(cv2.CAP_PROP_POS_MSEC, start * 1000.0)
         step = 0
+        previous: tuple[float, np.ndarray] | None = None
+
+        def due() -> float:
+            return round(start + step / fps, 6)
+
         while True:
             ok, frame = capture.read()
             if not ok:
-                return
-            at = index / source_fps
-            index += 1
-            while True:
-                t = start + step / fps
-                if end is not None and t >= end - 1e-9:
+                break
+            at = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+            if previous is not None and not at > previous[0]:
+                # A backend that reports no usable timestamp: fall back to
+                # the average rate from the last good one.
+                at = previous[0] + interval
+            if previous is not None:
+                # Every sample closer to the previous frame than to this one.
+                boundary = (previous[0] + at) / 2.0
+                while due() < boundary:
+                    if end is not None and due() >= end - 1e-9:
+                        return
+                    yield due(), previous[1]
+                    step += 1
+            previous = (at, frame)
+        if previous is not None:
+            # The last frame stands for half an average interval past itself.
+            while due() <= previous[0] + interval / 2.0:
+                if end is not None and due() >= end - 1e-9:
                     return
-                if t > at + half:
-                    break
-                if t >= at - half:
-                    yield round(t, 6), frame
+                yield due(), previous[1]
                 step += 1
     finally:
         capture.release()
@@ -210,8 +257,11 @@ def load_sidecar(path: Path, assets: RiotAssets | None = None) -> dict:
             raise bad("game_clock_offset", "required with enemies: the game "
                                            "clock is video seconds + offset")
         enemies = data["enemies"]
-        if not isinstance(enemies, list) or not 1 <= len(enemies) <= 5:
-            raise bad("enemies", "a list of one to five enemies")
+        if not isinstance(enemies, list) or len(enemies) != 5:
+            # The feed always lists all five, and the parser refuses a ping on
+            # anybody it does not list: a partial roster would silently drop
+            # every ping on the enemies left out.
+            raise bad("enemies", "all five enemies, as the game's feed lists them")
         if assets is None:
             assets = RiotAssets(locale)
             assets.bootstrap()
@@ -221,6 +271,14 @@ def load_sidecar(path: Path, assets: RiotAssets | None = None) -> dict:
             where = f"enemies[{index}]"
             if not isinstance(enemy, dict):
                 raise bad(where, "expected an object")
+            for key in enemy:
+                if key not in ENEMY_FIELDS:
+                    raise bad(f"{where}.{key}", "unknown field (known: "
+                              + ", ".join(ENEMY_FIELDS) + ")")
+            for key in ENEMY_REQUIRED:
+                if key not in enemy:
+                    raise bad(f"{where}.{key}", "required: the feed always "
+                                                "gives it ([] for none)")
             info = assets.champion_by_name(str(enemy.get("champion", "")))
             if info is None:
                 raise bad(f"{where}.champion",
@@ -231,18 +289,19 @@ def load_sidecar(path: Path, assets: RiotAssets | None = None) -> dict:
                                for s in spells)):
                 raise bad(f"{where}.spells", "one or two of "
                           + ", ".join(DDRAGON_SPELL_IDS))
-            level = enemy.get("level", 1)
+            level = enemy["level"]
             if not isinstance(level, int) or isinstance(level, bool) \
                     or not 1 <= level <= 18:
                 raise bad(f"{where}.level", "a whole number from 1 to 18")
-            items = enemy.get("items", [])
+            items = enemy["items"]
             if not isinstance(items, list) or not all(
                     isinstance(i, int) and not isinstance(i, bool) for i in items):
                 raise bad(f"{where}.items", "a list of item ids")
-            trees = enemy.get("rune_trees", [])
-            if not isinstance(trees, list) or not all(
+            trees = enemy["rune_trees"]
+            if not isinstance(trees, list) or len(trees) != 2 or not all(
                     isinstance(t, str) and t.lower() in RUNE_TREES for t in trees):
-                raise bad(f"{where}.rune_trees", "names among "
+                raise bad(f"{where}.rune_trees", "the primary and secondary "
+                          "trees, two names among "
                           + ", ".join(name.title() for name in RUNE_TREES))
             position = enemy.get("position", "")
             if position not in POSITIONS:
@@ -315,6 +374,9 @@ class ReplaySession:
         # construction, and those stamps must be on the video's clock.
         clock.use(lambda: self._now)
 
+        # Fresh every run: a replay is the app as installed, not as the last
+        # replay into this folder left it (saved positions, a framed area).
+        (self.out_dir / "settings.json").unlink(missing_ok=True)
         self.settings = Settings(self.out_dir / "settings.json")
         # The videos never show ultimates; see the generator's content rules.
         self.settings.update({"track_ultimates": False, "locale": locale})
@@ -335,19 +397,39 @@ class ReplaySession:
         self._frame: np.ndarray | None = None
 
         if region is not None:
-            # As the app does with a chat area the user framed and locked: kept
+            # As the app does with a chat area the user framed and locked:
+            # widened to hold a whole line (main._fitted_chat_region), kept
             # across the session start, and read from the very first frame.
-            self.settings.update({"chat_region": list(region),
+            fitted = chat_detector.fit_manual_region(
+                ChatRegion(*region, source="manual", confirmed=True),
+                (0, 0, width, height))
+            self.settings.update({"chat_region": fitted.as_list(),
                                   "chat_region_locked": True})
-            self.worker.set_manual_region(ChatRegion(*region, source="manual",
-                                                     confirmed=True))
+            self.worker.set_manual_region(fitted)
         self._players = _feed_players(sidecar.get("enemies") or [])
         self._clock_offset = sidecar.get("game_clock_offset")
         self.roster_from_sidecar = len(self._players) > 1
         self._roster_applied = False
 
+        if not self.roster_from_sidecar:
+            # Without the feed the app reads the game clock in the top-right
+            # corner, at the shipped default area scaled to the screen
+            # (main._seed_zones_for_screen, then a probe while no feed gives the
+            # clock -- main._sync_clock_probe). Lines are back-dated by it.
+            clock_area = settings_module.scaled_region("clock_region",
+                                                       (0, 0, width, height))
+            self.settings.set("clock_region", clock_area)
+            self.worker.set_probe(PROBE_CLOCK, ChatRegion(
+                *clock_area, source="manual", confirmed=True))
+
+        # A chat area known from the first frame was not found by searching,
+        # so nothing read through it is "first_read".
+        self._first_found_t: float | None = None if region is None else -1.0
+        self._last_region: ChatRegion | None = None
         self.records: list[ReplayRecord] = []
         self.timers: list[TimerRecord] = []
+        self._recorded: set[str] = set()
+        self._timer_index: dict[int, int] = {}
 
     # ------------------------------------------------------------------
     @property
@@ -369,9 +451,20 @@ class ReplaySession:
         self._frame = frame
         if self.roster_from_sidecar:
             self._apply_feed(t)
-        chat_known = self.region is not None
         self.worker._iterate()
-        self._drain(t, first_read=not chat_known)
+        region = self.region
+        if region is not None:
+            # Kept: the worker drops the area after a quiet minute and a half,
+            # but the chat was found, and events.json should say where.
+            self._last_region = region
+            if self._first_found_t is None:
+                self._first_found_t = t
+        # Only around the *first* find: a chat found again after a quiet
+        # stretch is found because a new line appeared, not one from before.
+        first_read = (self._first_found_t is not None
+                      and self._first_found_t >= 0
+                      and t <= self._first_found_t + FIRST_READ_GRACE + 1e-9)
+        self._drain(t, first_read=first_read)
         self.timer_manager.tick()
 
     def _apply_feed(self, t: float) -> None:
@@ -405,33 +498,58 @@ class ReplaySession:
             if payload.get("frame_counted"):
                 self.timer_manager.note_frame()
             events = payload.get("events") or []
-            for event in events:
-                self.records.append(ReplayRecord(
-                    t=t, champion_id=event.champion_id,
-                    champion_name=event.champion_name,
-                    spell_key=event.spell_key, kind=event.kind,
-                    raw_line=event.raw_line, certain=event.certain,
-                    source=event.source, game_time=event.game_time,
-                    remaining_seconds=event.remaining_seconds,
-                    first_read=first_read))
             if events:
-                for timer in self.timer_manager.handle_events(events):
-                    self.timers.append(TimerRecord(
-                        t=t, champion_id=timer.champion_id,
-                        spell_key=timer.spell_key, duration=timer.duration,
-                        ready_t=round(timer.started_at + timer.duration
-                                      - CLOCK_BASE, 3),
-                        uncertain=timer.uncertain, first_read=first_read))
+                acted = self.timer_manager.handle_events(events)
+                self._record(t, events, acted, first_read)
             status = payload.get("status")
             if (status is not None and status.game_clock is not None
                     and self.timer_manager.live is None):
                 self.timer_manager.note_clock(status.game_clock)
 
+    def _record(self, t: float, events: list, acted: list,
+                first_read: bool) -> None:
+        """Write down what the manager acted on, as the app's own log does.
+
+        ``main._drain_results`` lists the timers ``handle_events`` returned and
+        nothing else: an OCR variant of a line already timed, an ultimate with
+        ultimates off, a line the roster refused -- none of them reach the
+        overlay, so none of them are recorded. A timer returned again (an
+        inferred one confirmed by a later line) is the same timer, updated.
+        """
+        acted_keys = {(timer.champion_id, timer.spell_key) for timer in acted}
+        for event in events:
+            if ((event.champion_id, event.spell_key) not in acted_keys
+                    or event.signature in self._recorded):
+                continue
+            self._recorded.add(event.signature)
+            self.records.append(ReplayRecord(
+                t=t, champion_id=event.champion_id,
+                champion_name=event.champion_name, spell_key=event.spell_key,
+                kind=event.kind, raw_line=event.raw_line, certain=event.certain,
+                source=event.source, game_time=event.game_time,
+                remaining_seconds=event.remaining_seconds,
+                signature=event.signature, first_read=first_read))
+        for timer in acted:
+            ready_t = round(timer.started_at + timer.duration - CLOCK_BASE, 3)
+            index = self._timer_index.get(id(timer))
+            if index is not None and self.timers[index].champion_id \
+                    == timer.champion_id:
+                record = self.timers[index]
+                record.duration = timer.duration
+                record.ready_t = ready_t
+                record.uncertain = timer.uncertain
+                continue
+            self._timer_index[id(timer)] = len(self.timers)
+            self.timers.append(TimerRecord(
+                t=t, champion_id=timer.champion_id, spell_key=timer.spell_key,
+                duration=timer.duration, ready_t=ready_t,
+                uncertain=timer.uncertain, first_read=first_read))
+
     # ------------------------------------------------------------------
     def write(self, path: Path, *, video: Path, duration: float,
               fps: float) -> None:
         """Write ``events.json``: what was read, what was timed, and where."""
-        region = self.region
+        region = self.region or self._last_region
         data = {
             "video": str(video),
             "width": int(self.worker.detector.state.window_rect[2]),
