@@ -1134,9 +1134,9 @@ class CaptureWorker(threading.Thread):
                  text, False)
                 for text, box in rows]
             if zone == PROBE_CLOCK:
-                clock = parse_clock(" ".join(text for text, _box in rows))
-                self.status.game_clock = clock
-                if clock is None and rows:
+                read_clock = parse_clock(" ".join(text for text, _box in rows))
+                self.status.game_clock = read_clock
+                if read_clock is None and rows:
                     log.debug("clock zone read %r, no clock in it",
                               [text for text, _b in rows])
 
