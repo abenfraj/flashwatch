@@ -1147,6 +1147,7 @@ Each file is a standalone script that exits non-zero on failure:
 .venv\Scripts\python tests\test_zone_seeds.py         # the seeded areas follow the screen
 .venv\Scripts\python tests\test_live_game.py          # the data feed, modes, per-enemy cooldowns
 .venv\Scripts\python tests\test_team_display.py       # the enemy-team display and the v2 migration
+.venv\Scripts\python tests\test_team_digits.py        # its countdowns drawn whole, no holes
 .venv\Scripts\python tests\test_capture_guards.py     # widening, explore back-off, pause
 .venv\Scripts\python tests\test_release_notes.py      # what the release page says
 .venv\Scripts\python tests\test_clock.py              # one replaceable clock for the timers

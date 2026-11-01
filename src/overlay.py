@@ -1692,6 +1692,11 @@ class Overlay(QWidget):
         path = QPainterPath()
         path.addText(rect.center().x() - width / 2.0, centre_y + cap / 2.0,
                      font, text)
+        # Filled by winding, not even-odd (a path's default). Bahnschrift is a
+        # variable font whose glyphs overlap their own contours -- the bar and
+        # stem of a 4, the foot of a 1 -- and even-odd leaves every overlap
+        # empty, which showed as a checker of holes along the digits.
+        path.setFillRule(Qt.WindingFill)
         stroke = QPen(QColor(*TEAM_TEXT_HALO), max(2.0, 2.6 * scale))
         stroke.setJoinStyle(Qt.RoundJoin)
         painter.save()
@@ -1718,6 +1723,7 @@ class Overlay(QWidget):
         path = QPainterPath()
         path.addText(badge.center().x() - width / 2.0,
                      badge.center().y() + cap / 2.0, font, "?")
+        path.setFillRule(Qt.WindingFill)       # see _paint_icon_number
         painter.fillPath(path, QColor(*TEAM_UNSURE_INK))
         painter.restore()
 
