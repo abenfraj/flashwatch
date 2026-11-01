@@ -184,7 +184,9 @@ def load_sidecar(path: Path, assets: RiotAssets | None = None) -> dict:
     locale = data.get("locale", "en_US")
     if locale not in LOCALES:
         raise bad("locale", f"must be en_US or fr_FR, not {locale!r}")
-    out["locale"] = locale
+    if "locale" in data:
+        # Only when the sidecar says so: otherwise the caller's choice stands.
+        out["locale"] = locale
 
     if "chat_region" in data:
         region = data["chat_region"]

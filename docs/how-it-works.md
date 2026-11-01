@@ -1066,6 +1066,46 @@ resources/test/      the frame the Test button reads, and what is in it (2.3 MB)
 assets/cache/        downloaded icons and data (created on first run)
 ```
 
+## Replay mode
+
+`tools/replay.py` runs the reading chain on a recorded game instead of the
+screen, for tools that need to show what Flashwatch would have shown over a
+piece of footage:
+
+```bash
+.venv\Scripts\python tools\replay.py game.mp4 --out replay-out
+```
+
+It does not reimplement anything. Every sampled frame (five a second, the
+app's own capture rate) goes to the same `CaptureWorker`, through a fake game
+detector and a grab that crops the frame instead of the screen, and its results
+reach the same `TimerManager` in the order `main` forwards them. Region
+finding, the enemy-colour check, deduplication and priming all apply as in a
+game. The one difference is time: `src/clock.py` is the clock the timers, the
+overlay, the worker and the feed's game clock read, and a replay drives it from
+the video's seconds rather than the machine's.
+
+What it writes:
+
+- `events.json`: every line read and every timer started, in video seconds,
+  plus the chat area it found. A line read in the same pass that first found
+  the chat is marked `first_read`: the screen cannot say whether it was posted
+  before the recording started.
+- `overlay/`: the real overlay, painted offscreen for every sampled frame as a
+  transparent PNG of one fixed size, with `overlay.json` giving the rate, the
+  size and the corner it is anchored to. `--no-render` skips it.
+
+A recording has no data feed. A sidecar (`--sidecar file.json`) supplies what
+the feed would have, read off the footage by a person: `locale`, `chat_region`
+(x, y, width, height in video pixels), and `enemies` (champion, spells, level,
+items, rune trees, lane) with `game_clock_offset`, the game time at video second
+zero. With a chat area given, the chat is read from the first frame, so the
+priming pass treats what is already on screen as history.
+
+Exit codes: 0 done (a video without any chat included), 2 an input or output
+problem a person can fix (missing video, malformed sidecar, an existing replay
+without `--force`), 1 anything else. Ultimates are never tracked in a replay.
+
 ## Tests
 
 Each file is a standalone script that exits non-zero on failure:
@@ -1096,6 +1136,11 @@ Each file is a standalone script that exits non-zero on failure:
 .venv\Scripts\python tests\test_team_display.py       # the enemy-team display and the v2 migration
 .venv\Scripts\python tests\test_capture_guards.py     # widening, explore back-off, pause
 .venv\Scripts\python tests\test_release_notes.py      # what the release page says
+.venv\Scripts\python tests\test_clock.py              # one replaceable clock for the timers
+.venv\Scripts\python tests\test_replay.py             # replay: the app's chain on a video
+.venv\Scripts\python tests\test_replay_render.py      # replay: the overlay, frame by frame
+.venv\Scripts\python tests\test_replay_sidecar.py     # replay: a roster read off the footage
+.venv\Scripts\python tests\test_replay_cli.py         # replay: the command and its exit codes
 ```
 
 `test_capture_pipeline.py` and `test_ocr_performance.py` render synthetic

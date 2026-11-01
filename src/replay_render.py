@@ -113,11 +113,12 @@ class OverlayRenderer:
 def run_replay(video: Path, out_dir: Path, *, fps: float = DEFAULT_FPS,
                start: float = 0.0, end: float | None = None,
                locale: str = "en_US", layout: str = "team", theme: str = "clean",
-               render: bool = True) -> dict:
+               render: bool = True, sidecar: dict | None = None) -> dict:
     """Replay ``video`` into ``out_dir``: events.json, and the overlay frames."""
     video, out_dir = Path(video), Path(out_dir)
     width, height, _source_fps, duration = video_info(video)
-    session = ReplaySession(out_dir, locale=locale, width=width, height=height)
+    session = ReplaySession(out_dir, locale=locale, width=width, height=height,
+                            sidecar=sidecar)
     renderer = None
     frames = 0
     try:
