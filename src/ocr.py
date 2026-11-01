@@ -43,6 +43,7 @@ import cv2
 import numpy as np
 
 import chat_detector
+import clock
 import role_reader
 import self_test
 from chat_detector import ChatRegion
@@ -716,7 +717,7 @@ class FrameDiffer:
         return mask
 
     def changed(self, image_bgr: np.ndarray) -> bool:
-        now = time.monotonic()
+        now = clock.now()
         current = self._fingerprint(image_bgr)
 
         if self._previous is None or self._previous.shape != current.shape:
@@ -776,7 +777,7 @@ class CaptureWorker(threading.Thread):
         # Cleared when the application has learnt the whole team, so a settled
         # game stops looking. Restored on every session change.
         self._roles_wanted = True
-        self._session_started = time.monotonic()
+        self._session_started = clock.now()
         # Set by the application when there is nothing to read: a mode the user
         # switched off (ARAM, Arena...), or a loading screen the game's data feed
         # has not yet named. Paused means *nothing* is captured -- not the chat,
@@ -960,7 +961,7 @@ class CaptureWorker(threading.Thread):
             # about to be on screen. Both halves of that matter: looking starts
             # again, and the window in which the loading area is worth reading
             # opens from here.
-            self._session_started = time.monotonic()
+            self._session_started = clock.now()
             self._roles_wanted = True
             self._role_candidate.clear()
             self.status.roles = {}
@@ -1029,7 +1030,7 @@ class CaptureWorker(threading.Thread):
             self._publish(session_changed=session_changed, events=[], counted=True)
             return
 
-        now = time.monotonic()
+        now = clock.now()
         if exploring and now - self._last_explore < self._explore_interval:
             self.status.skipped += 1
             self._publish(session_changed=session_changed, events=[], counted=True)
@@ -1063,7 +1064,7 @@ class CaptureWorker(threading.Thread):
 
         chat_rows = [box for text, box in rows if looks_like_chat_line(text)]
         if chat_rows:
-            self._last_chat_seen = time.monotonic()
+            self._last_chat_seen = clock.now()
             self._verified_this_session = True
         if exploring:
             self._explore_interval = (
@@ -1119,7 +1120,7 @@ class CaptureWorker(threading.Thread):
         are tiny compared with the chat band, and the clock *always* changes, so a
         differ would fire on every single frame and buy nothing.
         """
-        now = time.monotonic()
+        now = clock.now()
         for zone, region in list(self._probes.items()):
             if now - self._probe_read_at.get(zone, 0.0) < PROBE_INTERVAL:
                 continue
@@ -1155,7 +1156,7 @@ class CaptureWorker(threading.Thread):
         if not self.settings.get("auto_roles", True):
             return
 
-        now = time.monotonic()
+        now = clock.now()
         for zone, region in list(self._role_regions.items()):
             if now - self._role_read_at.get(zone, 0.0) < ROLE_INTERVAL:
                 continue
@@ -1323,7 +1324,7 @@ class CaptureWorker(threading.Thread):
             limit = (CONFIRMED_TIMEOUT if self._verified_this_session
                      else UNVERIFIED_TIMEOUT)
             stale = (self._last_chat_seen
-                     and time.monotonic() - self._last_chat_seen > limit)
+                     and clock.now() - self._last_chat_seen > limit)
             if not stale:
                 return self._region
             log.info("no chat read for %.0fs from %s, exploring again",
@@ -1372,7 +1373,7 @@ class CaptureWorker(threading.Thread):
         self._region = ChatRegion(x, y, w, h,
                                   source="manual" if manual else "auto",
                                   confirmed=True)
-        self._last_chat_seen = time.monotonic()
+        self._last_chat_seen = clock.now()
         log.info("reusing saved chat region: %s", self._region.describe())
 
     def _save_region(self, region: ChatRegion) -> None:

@@ -35,6 +35,7 @@ import logging
 import time
 from dataclasses import dataclass, field, replace
 
+import clock
 from cooldowns import (COOLDOWNS, HASTE_COSMIC_INSIGHT, HASTE_IONIAN_BOOTS,
                        UNLEASHED_TELEPORT_AT, apply_haste, format_remaining,
                        unleashed_teleport)
@@ -131,7 +132,7 @@ class ActiveTimer:
     spell_key: str
     spell_name: str
     duration: float
-    started_at: float             # monotonic, already back-dated by age
+    started_at: float             # clock.now() seconds, back-dated by age
     approximate: bool = False     # True for ultimates (rank/haste are guesses)
     # True when the game stated the remaining time. Such a timer outranks
     # anything derived from a base cooldown, so nothing recomputed may overwrite
@@ -152,7 +153,7 @@ class ActiveTimer:
     ready_at_game: float | None = None
 
     def remaining(self, now: float | None = None) -> float:
-        now = time.monotonic() if now is None else now
+        now = clock.now() if now is None else now
         return max(0.0, self.duration - (now - self.started_at))
 
     def is_ready(self, now: float | None = None) -> bool:
@@ -209,11 +210,11 @@ class TimerManager:
         # has corrected a lane has better information than the screen did.
         self._manual_roles: set[str] = set()
         self._frames_seen = 0
-        # (game_time, monotonic when observed) -- our estimate of the game clock.
+        # (game_time, clock.now() when observed) -- our estimate of the game clock.
         self._clock_ref: tuple[float, float] | None = None
         # When each unconfirmed "the clock looks like a new game" hint was seen.
         self._new_game_hints: list[float] = []
-        # (value, monotonic) of the last clock read off the screen, awaiting a
+        # (value, clock.now()) of the last clock read off the screen, awaiting a
         # second reading to confirm it.
         self._clock_candidate: tuple[float, float] | None = None
         self.history: list[tuple[float, SpellEvent]] = []
@@ -306,7 +307,7 @@ class TimerManager:
         if self._clock_ref is None:
             return None
         seen_at_game, seen_at_wall = self._clock_ref
-        return seen_at_game + (time.monotonic() - seen_at_wall)
+        return seen_at_game + (clock.now() - seen_at_wall)
 
     def note_clock(self, seconds: float, *, trusted: bool = False) -> bool:
         """Adopt a game clock read off the screen. Returns True if it was taken.
@@ -324,7 +325,7 @@ class TimerManager:
         restart -- the Practice Tool's reset, or a new game seen before its
         process -- and is handled like one.
         """
-        now = time.monotonic()
+        now = clock.now()
         if trusted:
             seconds = float(seconds)
             estimate = self.estimated_game_time()
@@ -385,7 +386,7 @@ class TimerManager:
             # The game's own clock is in charge. A chat timestamp can only be
             # worse -- an OCR'd "72:34" for "12:34" would otherwise jump it.
             return False
-        now = time.monotonic()
+        now = clock.now()
         estimate = self.estimated_game_time()
 
         if (estimate is not None
@@ -466,7 +467,7 @@ class TimerManager:
             self._seen.add(event.signature)
         else:
             # Neither a timestamp nor a stated cooldown: fall back to a window.
-            now = time.monotonic()
+            now = clock.now()
             blind_key = (event.champion_id, event.spell_key, event.certain)
             last = self._last_blind.get(blind_key)
             if last is not None and now - last < BLIND_DEDUPE_WINDOW:
@@ -538,7 +539,7 @@ class TimerManager:
             spell_key=event.spell_key,
             spell_name=event.spell_name,
             duration=duration,
-            started_at=time.monotonic() - age,
+            started_at=clock.now() - age,
             approximate=approximate,
             uncertain=not event.certain,
             role=self._role_for(event),
@@ -652,7 +653,7 @@ class TimerManager:
                      event.champion_name, event.spell_name, event.raw_line)
             return None
 
-        now = time.monotonic()
+        now = clock.now()
         timer = ActiveTimer(
             champion_id=event.champion_id,
             champion_name=event.champion_name,
@@ -690,7 +691,7 @@ class TimerManager:
         """
         before = timer.remaining()
         timer.duration = duration
-        timer.started_at = time.monotonic() - age
+        timer.started_at = clock.now() - age
         timer.approximate = approximate
         timer.uncertain = False
         timer.role = timer.role or self._role_for(event)
@@ -771,7 +772,7 @@ class TimerManager:
         if full < remaining:
             full = remaining
 
-        now = time.monotonic()
+        now = clock.now()
         timer = ActiveTimer(
             champion_id=event.champion_id,
             champion_name=event.champion_name,
@@ -1063,7 +1064,7 @@ class TimerManager:
         up before we ever read the line is dropped instead of announcing itself as
         fresh news.
         """
-        now = time.monotonic() if now is None else now
+        now = clock.now() if now is None else now
         linger = self._ready_linger()
         stale = [key for key, timer in self._timers.items()
                  if self._overdue(timer, now) >= linger]
@@ -1073,7 +1074,7 @@ class TimerManager:
 
     def tick(self) -> list[Notification]:
         """Advance state and return anything worth announcing."""
-        now = time.monotonic()
+        now = clock.now()
         warn_at = float(self.settings.get("audio_warn_seconds") or 0)
         notifications: list[Notification] = []
 
@@ -1096,7 +1097,7 @@ class TimerManager:
 
     def snapshot(self) -> list[ActiveTimer]:
         """Timers for display, ordered for the overlay."""
-        now = time.monotonic()
+        now = clock.now()
         timers = list(self._timers.values())
         # Filtered as well as purged in tick(): a snapshot can be taken between
         # ticks, right after an event, and must not show a stale READY.
@@ -1157,7 +1158,7 @@ class TimerManager:
         from a parsed line, and the trial is ended -- and everything cleared --
         the moment a real game appears on screen.
         """
-        now = time.monotonic()
+        now = clock.now()
         added = 0
         self._demo_spells = dict(self.DEMO_SPELLS)
         for (champion_id, spell_key, kind, duration, remaining, role,
@@ -1231,5 +1232,5 @@ class TimerManager:
         return removed
 
     def active_count(self) -> int:
-        now = time.monotonic()
+        now = clock.now()
         return sum(1 for t in self._timers.values() if not t.is_ready(now))

@@ -20,7 +20,6 @@ from __future__ import annotations
 import logging
 from math import exp
 from pathlib import Path
-from time import monotonic
 from typing import NamedTuple
 
 from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
@@ -28,6 +27,7 @@ from PySide6.QtGui import (QColor, QCursor, QFont, QFontMetrics, QPainter,
                            QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import QWidget
 
+import clock
 from cooldowns import format_short
 from i18n import tr
 from timer_manager import ActiveTimer
@@ -669,7 +669,7 @@ class Overlay(QWidget):
         # Where each marker currently *is*, as opposed to where the layout says
         # it belongs; see :meth:`_glide`.
         self._glide_from: dict[tuple[str, str], float] = {}
-        self._glide_at = monotonic()
+        self._glide_at = clock.now()
         # Whether anything is still travelling, decided by the last layout pass
         # and read by the frame timer.
         self._gliding = False
@@ -1019,7 +1019,7 @@ class Overlay(QWidget):
         self._team = list(members or ())
         if self.current_layout() != LAYOUT_TEAM:
             return
-        now = monotonic()
+        now = clock.now()
         signature = tuple(
             (member.champion_id, tuple(
                 (slot.spell_key,
@@ -1069,7 +1069,7 @@ class Overlay(QWidget):
             # From now, not from whenever the track was last on screen: an
             # elapsed time measured across a hidden window would land every
             # marker on its target in a single frame.
-            self._glide_at = monotonic()
+            self._glide_at = clock.now()
             self._glide_timer.start()
         else:
             self._glide_timer.stop()
@@ -2046,7 +2046,7 @@ class Overlay(QWidget):
         frame (the painter and a test asking for the same layout) advances it by
         the zero seconds that have actually passed.
         """
-        now = monotonic()
+        now = clock.now()
         elapsed = min(0.5, max(0.0, now - self._glide_at))
         self._glide_at = now
         share = 1.0 - exp(-elapsed / GLIDE_TAU) if elapsed > 0.0 else 0.0
