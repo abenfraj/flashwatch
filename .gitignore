@@ -19,3 +19,6 @@ dist/
 
 # Local tooling state.
 .claude/
+
+# Netlify CLI link to the site (flashwatch.app); local state, not source.
+.netlify/

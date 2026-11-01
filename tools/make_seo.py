@@ -25,7 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGE = ROOT / "site" / "index.html"
-SITE = "https://flashwatch.vercel.app"
+SITE = "https://flashwatch.app"
 
 BEGIN = "<!-- structured-data:begin -->"
 END = "<!-- structured-data:end -->"

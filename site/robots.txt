@@ -2,4 +2,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://flashwatch.vercel.app/sitemap.xml
+Sitemap: https://flashwatch.app/sitemap.xml

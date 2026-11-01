@@ -7,7 +7,7 @@ A small overlay shows the five enemies and every spell they took; when one is
 used, it greys out and counts down, the way your own abilities do.
 
 [**Download for Windows**](https://github.com/abenfraj/flashwatch/releases/latest/download/Flashwatch.exe)
-· [Website](https://flashwatch.vercel.app)
+· [Website](https://flashwatch.app)
 · [All versions](https://github.com/abenfraj/flashwatch/releases)
 
 <br clear="left">
