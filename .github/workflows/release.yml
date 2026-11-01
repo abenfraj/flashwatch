@@ -100,7 +100,10 @@ jobs:
 
       - name: Work out the version and the notes
         id: meta
-        run: python tools/release_meta.py --write --bump ${{ inputs.bump || 'patch' }}
+        # --bump only for a manual run. On a push it would override the [minor]
+        # and [major] markers in the commits, which is how v2.0.0 first shipped
+        # as v1.0.4; without it, the script reads the markers and defaults to patch.
+        run: python tools/release_meta.py --write ${{ inputs.bump && format('--bump {0}', inputs.bump) || '' }}
 
       - name: Build the executable
         run: python build.py
