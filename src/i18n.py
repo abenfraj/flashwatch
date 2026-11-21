@@ -441,6 +441,13 @@ STRINGS: dict[str, tuple[str, str]] = {
         "l'écran.",
         "Enemies side by side instead of a column, for the top or bottom of the "
         "screen."),
+    "ui.team_timer_below": ("Chrono sur le bas des icônes",
+                            "Timer on the bottom of the icons"),
+    "ui.team_timer_below_hint": (
+        "Le temps restant se place sur le bord bas de chaque sort au lieu de "
+        "recouvrir le milieu de son icône.",
+        "The time left sits on each spell's bottom edge instead of covering the "
+        "middle of its icon."),
     "ui.team_hide_rested": ("Masquer les ennemis sans sort en recharge",
                             "Hide enemies with nothing on cooldown"),
     "ui.team_hide_rested_hint": (
@@ -604,6 +611,14 @@ STRINGS: dict[str, tuple[str, str]] = {
         "no time nothing starts -- \"top no flash\" is not a timer. These timers "
         "carry the \"?\", because they come from somebody rather than from the "
         "game."),
+    "ui.death_recap": ("Lire l'écran de mort", "Read the death recap"),
+    "ui.death_recap_tip": (
+        "À ta mort, le panneau en haut à gauche montre ce qui t'a fait mal. Un "
+        "Embrasement ou un Châtiment ennemi y lance son chrono, compté depuis le "
+        "début du fight et marqué « ? », s'il ne tournait pas déjà.",
+        "When you die, the panel at the top left shows what hurt you. An enemy's "
+        "Ignite or Smite there starts its timer, counted from the start of the "
+        "fight and marked \"?\", unless one is already running."),
     "ui.auto_roles": ("Lire les roles ennemis a l'ecran",
                       "Read the enemy roles from the screen"),
     "ui.auto_roles_tip": (

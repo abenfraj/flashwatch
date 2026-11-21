@@ -28,7 +28,7 @@ settings_module.CONFIG_PATH = tmp / "settings.json"
 from PySide6.QtWidgets import QApplication
 
 from chat_detector import ChatRegion
-from message_parser import parse_clock
+from message_parser import MessageParser, parse_clock, parse_game_clock
 from riot_assets import RiotAssets
 from settings import DEFAULTS, Settings
 from timer_manager import (CLOCK_CONFIRM_TOLERANCE, PRIME_FRAMES, TimerManager)
@@ -55,6 +55,14 @@ for text, expected in (("12:34", 754), ("(3:07)", 187), ("0:00", 0),
 check("a clock is read out of a noisy line",
       parse_clock("KDA 3/1/7   12:34   350") == 754,
       str(parse_clock("KDA 3/1/7   12:34   350")))
+
+# The clock at the top of the screen always prints two minute digits. A reading
+# with one is a dropped digit -- "10:45" as "0:45" -- and two of those in a row
+# would otherwise read as a new game and wipe every timer.
+for text, expected in (("09:29", 569), ("10:45", 645), ("00:31", 31),
+                       ("0:45", None), ("(3:07)", None), ("l0:45", 645)):
+    got = parse_game_clock(text)
+    check(f"parse_game_clock({text!r}) -> {expected}", got == expected, str(got))
 
 
 # ------------------------------------------------- the frame knows its zone
@@ -167,6 +175,28 @@ manager.note_clock(100.2)
 back = manager.estimated_game_time()
 check("the clock never walks backwards",
       back is not None and back > 700, str(back))
+
+# ...except into the first minute and a half of a game, read twice: that is a
+# new game. In a real game the process changing says so first, but a stream or
+# a recording has no process of its own, and without this the last game's
+# timers stayed up through the whole of the next one.
+restart = TimerManager(assets, settings)
+for _ in range(PRIME_FRAMES):
+    restart.note_frame()
+restart.note_clock(1500)
+restart.note_clock(1500.2)
+restart.handle_events(MessageParser(assets).parse_lines(
+    ["(24:58) Kevin (Jinx): Darius a utilise Saut eclair"]))
+check("a timer from the old game is running", len(restart.snapshot()) == 1,
+      str(restart.snapshot()))
+restart.note_clock(31)
+check("one early reading is not a new game", len(restart.snapshot()) == 1)
+restart.note_clock(31.2)
+check("two agreeing early readings are a new game: the timers go",
+      restart.snapshot() == [], str(restart.snapshot()))
+fresh_clock = restart.estimated_game_time()
+check("and the clock starts again from what was read",
+      fresh_clock is not None and abs(fresh_clock - 31.2) < 1.0, str(fresh_clock))
 
 # What it is all for: a ping is aged against the clock, so the clock being right
 # is what makes a late read cost nothing.

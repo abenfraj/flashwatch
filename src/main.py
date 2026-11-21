@@ -50,7 +50,8 @@ from chat_detector import ChatRegion
 from i18n import tr
 from live_client import LiveWatcher, mode_enabled
 from message_parser import MessageParser
-from ocr import CaptureWorker
+from game_detector import WATCH_TITLE
+from ocr import CaptureWorker, describe_event
 from onboarding import Onboarding
 from overlay import LAYOUT_TEAM, Overlay
 from riot_assets import RiotAssets, fold
@@ -63,10 +64,15 @@ from zone_overlay import (ZONE_CHAT, ZONE_CLOCK, ZONE_LOADING,
                           ZONE_SCOREBOARD, ZONES, ZoneFrame)
 
 log = logging.getLogger(__name__)
+trace = logging.getLogger("trace")
 
 UI_REFRESH_MS = 100          # overlay countdown smoothness
 DRAIN_MS = 50                # how often the queue is emptied
 LOG_PATH = settings_module.ASSETS_DIR / "flashwatch.log"
+# Every line the OCR read and what became of it. Kept out of the main log, which
+# it would drown, and capped, since a long session reads a lot of chat.
+TRACE_PATH = settings_module.ASSETS_DIR / "trace.log"
+TRACE_MAX_BYTES = 4_000_000
 
 # How long after start-up the update check runs. Late enough that it never
 # competes with loading Riot's data, early enough that the answer is there before
@@ -129,6 +135,16 @@ def configure_logging() -> None:
         format="%(asctime)s %(levelname)-7s %(name)-16s %(message)s",
         handlers=handlers,
     )
+    trace = logging.getLogger("trace")
+    trace.propagate = False
+    try:
+        from logging.handlers import RotatingFileHandler
+        handler = RotatingFileHandler(TRACE_PATH, maxBytes=TRACE_MAX_BYTES,
+                                      backupCount=2, encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        trace.addHandler(handler)
+    except OSError:
+        trace.disabled = True
 
 
 # The mark itself is drawn in theme.py, next to the geometry it is drawn from.
@@ -217,7 +233,10 @@ class Application:
         # Flashwatch is portable and people are told they can move the folder,
         # which would leave a startup entry booting a path that no longer
         # exists. Only rewrites an entry that is already there.
-        autostart.refresh_if_moved()
+        if not WATCH_TITLE:
+            # A watching copy is a development tool; it must never repoint the
+            # startup entry at itself.
+            autostart.refresh_if_moved()
 
         # The version this replaced, if an update ran last time. Now is the first
         # moment it is no longer the running image and can therefore go.
@@ -666,6 +685,8 @@ class Application:
             self.worker.set_probe(ZONE_CLOCK, clock_region)
 
         self._sync_role_zones()
+        self.worker.set_recap_enabled(
+            bool(self.settings.get("read_death_recap", True)))
 
         if self.zone_frames:
             # A frame was opened while the assets were still loading. Reading it
@@ -715,6 +736,11 @@ class Application:
             events = payload.get("events") or []
             if events:
                 started = self.timers.handle_events(events)
+                timed = {(t.champion_id, t.spell_key) for t in started}
+                for event in events:
+                    trace.info("event %s -> %s", describe_event(event),
+                               "timer" if (event.champion_id, event.spell_key)
+                               in timed else "no timer")
                 for timer in started:
                     # The "?" is spelled out here. The overlay draws it as a chip
                     # on the spell icon, which this list has no room for, and a
@@ -725,6 +751,15 @@ class Application:
                         f"{timer.champion_name} - {timer.spell_name} "
                         f"({mark}{timer.display()})")
                 self._sync_team()
+            for champion_id, spell_key, cast in payload.get("recap") or []:
+                timer = self.timers.note_recap(champion_id, spell_key, cast)
+                trace.info("recap event %s %s -> %s", champion_id, spell_key,
+                           "timer" if timer is not None else "no timer")
+                if timer is not None:
+                    self.control.add_event(
+                        f"{timer.champion_name} - {timer.spell_name} "
+                        f"(?{timer.display()})")
+                    self._sync_team()
             latest_status = payload.get("status") or latest_status
 
         if latest_status is not None:
@@ -902,9 +937,15 @@ class Application:
         self._parser_roster_key = key
         if key is None:
             self.parser.set_roster(None)
+            if self.worker is not None:
+                self.worker.set_recap_roster(None)
             return
-        self.parser.set_roster({p.champion_id: p.spells for p in game.enemies},
-                               [p.champion_id for p in game.allies])
+        enemies = {p.champion_id: p.spells for p in game.enemies}
+        self.parser.set_roster(enemies, [p.champion_id for p in game.allies])
+        if self.worker is not None:
+            # The death recap lists the enemies who did damage: the same five,
+            # and only their own two spells are worth looking for.
+            self.worker.set_recap_roster(enemies)
 
     def _sync_clock_probe(self, *, feed_clock: bool) -> None:
         """Read the clock area only when the feed is not giving the real one.
@@ -1672,6 +1713,9 @@ class Application:
         # Turning the role readers off has to actually stop them, not merely stop
         # the result being used: the point of the switch is the work it saves.
         self._sync_role_zones()
+        if self.worker is not None:
+            self.worker.set_recap_enabled(
+                bool(self.settings.get("read_death_recap", True)))
         # Before the repaint below, since it decides how tall a row is.
         self.overlay.sync_countdown_style()
         self.notifier.refresh()

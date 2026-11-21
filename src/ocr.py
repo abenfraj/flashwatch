@@ -44,14 +44,20 @@ import numpy as np
 
 import chat_detector
 import clock
+import death_recap
 import role_reader
 import self_test
 from chat_detector import ChatRegion
 from game_detector import GameDetector
 from message_parser import (MessageParser, SpellEvent, looks_like_chat_line,
-                            parse_clock)
+                            parse_game_clock)
 
 log = logging.getLogger(__name__)
+
+# Every line read and what became of it, in a file of its own (see
+# main.configure_logging). "Why did it miss that Flash?" is answerable only if
+# the text the OCR produced for that row was written down somewhere.
+trace = logging.getLogger("trace")
 
 # Keep the OCR backend single-threaded. Left to its own devices onnxruntime
 # spawns a thread per core and blows the CPU budget for no latency gain on
@@ -85,6 +91,26 @@ GLYPH_BRIGHTNESS = 0.60
 ROW_TARGET_HEIGHT = 32
 MAX_ROW_WIDTH = 1600
 
+# What recognition is given: the row *in colour*, at the recognition model's own
+# input height (PP-OCRv4 reads 3x48xW). It used to get the CLAHE-equalised grey
+# row at 32 px, which the model then stretched back up to 48 -- and in grey a
+# red champion name loses most of what sets it off the art behind. Measured on a
+# 1080p stream: grey read "Sarer used Fash" and "(Thresh)y Garen Ignite" where
+# colour read "Garen used Flash" and "(Thresh): Garen Ignite", and colour was
+# twice as fast, having no equalisation to run and no second resize inside the
+# model.
+REC_HEIGHT = 48
+MAX_REC_WIDTH = 2400
+# Below this confidence the colour read is not trusted alone: the row is read
+# again the old way, equalised grey, and the surer answer wins. Clean chat reads
+# at 0.95 and up in colour, so this costs a second read only on faint or noisy
+# rows -- which is where the grey read still does better.
+REC_RETRY_CONFIDENCE = 0.93
+# ...but only for a read that is text-shaped. Scenery fragments come back as one
+# to three characters at low confidence on nearly every frame of a moving game,
+# and reading each of them twice nearly doubled the cost of a pass for nothing.
+REC_RETRY_MIN_CHARS = 8
+
 # Row segmentation bounds in native pixels, covering 1080p through 4K.
 MIN_SEGMENT_HEIGHT = 7
 MAX_SEGMENT_HEIGHT = 120
@@ -108,6 +134,13 @@ BRIDGE_PER_HEIGHT = 2.6
 # dropping them.
 STROKE_SEGMENT_KERNEL = 3
 STROKE_SEGMENT_LEVEL = 18
+# A box this many times the usual line height, and wide like text, is two chat
+# lines welded together and is cut in two (see OcrEngine._split_stacked).
+STACK_MIN = 1.7
+STACK_MAX = 2.6
+# ...and only where some pixel row across its middle is nearly empty: at most
+# this share of the box's typical ink per row.
+STACK_VALLEY = 0.2
 # When the two detectors have found the same row twice: how much of the shorter
 # box's height must overlap, and how far apart their left edges may sit.
 ROW_OVERLAP_SHARE = 0.6
@@ -156,6 +189,16 @@ ROLE_INTERVAL = 2.5
 # matched against icons rather than read, which costs almost nothing, and Tab can
 # be pressed at any point in a game.
 LOADING_WINDOW = 150.0
+
+# The death recap (see death_recap.py). Looked for once a second in a game: the
+# panel stays up for the whole death, so a second is never late, and a look that
+# finds no red frame costs a colour mask over a small corner of the screen.
+RECAP_INTERVAL = 1.0
+# How long it may go unseen before its next sighting counts as another death.
+RECAP_GONE = 3.0
+# The fight's length when the panel's own number could not be read: long, so a
+# timer placed from it can end early but never late.
+RECAP_DEFAULT_FIGHT = 25.0
 
 # A region restored from a previous session, or one that has not produced a single
 # chat line yet this session, gets far less patience: the HUD may have been moved
@@ -220,6 +263,21 @@ EXPLORE_BACKOFF = 1.5
 # widened by this share and read again.
 TRUNCATION_MARGIN = 4
 WIDEN_STEP = 0.35
+
+
+def describe_event(event: SpellEvent) -> str:
+    """One line for the trace: what the parser made of a row."""
+    parts = [event.source, event.champion_id or event.target_role,
+             event.spell_key]
+    if event.game_time is not None:
+        parts.append(f"at {event.game_time // 60}:{event.game_time % 60:02d}")
+    if event.remaining_seconds is not None:
+        parts.append(f"{event.remaining_seconds}s left")
+    if event.ready_at_game is not None:
+        parts.append(f"up at {event.ready_at_game}")
+    if not event.certain:
+        parts.append("uncertain")
+    return " ".join(parts)
 
 
 def row_crop(frame_bgr: np.ndarray, box: tuple[int, int, int, int],
@@ -412,6 +470,18 @@ class OcrEngine:
                           interpolation=interpolation)
 
     @staticmethod
+    def recognition_row(row_bgr: np.ndarray) -> np.ndarray:
+        """One colour text row at the recognition model's input height."""
+        height, width = row_bgr.shape[:2]
+        if height <= 0 or width <= 0:
+            return row_bgr
+        scale = REC_HEIGHT / float(height)
+        target_w = max(8, min(MAX_REC_WIDTH, int(round(width * scale))))
+        interpolation = cv2.INTER_CUBIC if scale > 1 else cv2.INTER_AREA
+        return cv2.resize(row_bgr, (target_w, REC_HEIGHT),
+                          interpolation=interpolation)
+
+    @staticmethod
     def _rows_from_mask(binary: np.ndarray,
                         bridge_width: int) -> list[tuple[int, int, int, int]]:
         """Bounding boxes of the text rows in a binary glyph mask."""
@@ -547,8 +617,54 @@ class OcrEngine:
         strokes = cls._rebridge(mask, cls._rows_from_mask(mask, INITIAL_BRIDGE))
         rows.extend(candidate for candidate in strokes
                     if not any(cls._covers(candidate, known) for known in rows))
+        rows = cls._split_stacked(rows, mask)
         rows.sort(key=lambda box: box[1])       # top to bottom == chat order
         return rows
+
+    @staticmethod
+    def _split_stacked(rows: list[tuple[int, int, int, int]], mask: np.ndarray
+                       ) -> list[tuple[int, int, int, int]]:
+        """Cut a box holding two chat lines into the two lines.
+
+        Small chat on a compressed stream sits 1-2 px apart, and a descender of
+        one line touching a capital of the next welds both into one contour.
+        Recognition then reads a 27 px box of two lines squashed into one and
+        returns mush -- "2604Tireshrh sy" for two "is on the way" lines -- so a
+        spell announced on either line was lost. A box about twice the usual
+        line height, and wide like text, is cut at the emptiest pixel row of its
+        middle band, and each half is trimmed to its own ink.
+        """
+        heights = sorted(h for _x, _y, _w, h in rows)
+        if len(heights) < 3:
+            return rows
+        line = heights[len(heights) // 2]
+        out: list[tuple[int, int, int, int]] = []
+        for x, y, w, h in rows:
+            if not (STACK_MIN * line <= h <= STACK_MAX * line) or w < h * 4:
+                out.append((x, y, w, h))
+                continue
+            ink = mask[y:y + h, x:x + w] > 0
+            profile = ink.sum(axis=1)
+            low, high = int(h * 0.3), int(h * 0.7)
+            cut = low + int(np.argmin(profile[low:high + 1]))
+            if profile[cut] > STACK_VALLEY * float(np.median(profile)):
+                # Ink right through the middle: one tall line, not two. A single
+                # line always has its x-height band inked, so this is the test
+                # that cannot be fooled by a wrong guess at the line height.
+                out.append((x, y, w, h))
+                continue
+            for top, bottom in ((0, cut), (cut, h)):
+                part = ink[top:bottom]
+                columns = np.flatnonzero(part.any(axis=0))
+                lines = np.flatnonzero(part.any(axis=1))
+                if columns.size == 0 or lines.size == 0:
+                    continue
+                part_h = int(lines[-1] - lines[0] + 1)
+                if part_h < MIN_SEGMENT_HEIGHT:
+                    continue
+                out.append((x + int(columns[0]), y + top + int(lines[0]),
+                            int(columns[-1] - columns[0] + 1), part_h))
+        return out
 
     @staticmethod
     def row_key(row_gray: np.ndarray) -> bytes:
@@ -647,11 +763,11 @@ class OcrEngine:
         for x, y, w, h in rows:
             y1, y2 = max(0, y - pad), min(height, y + h + pad)
             x1, x2 = max(0, x - pad), min(width, x + w + pad)
-            row_gray = gray[y1:y2, x1:x2]
-            if row_gray.size == 0:
+            row_bgr = image_bgr[y1:y2, x1:x2]
+            if row_bgr.size == 0:
                 continue
 
-            row = self.normalise_row(row_gray)
+            row = self.recognition_row(row_bgr)
             key = self.row_key(row)
 
             cached = self._cache_lookup(key)
@@ -661,7 +777,17 @@ class OcrEngine:
                     results.append((cached, (x, y, w, h)))
                 continue
 
-            recognised = self._recognise(cv2.cvtColor(row, cv2.COLOR_GRAY2BGR))
+            recognised = self._recognise(row)
+            if (recognised is not None and recognised[1] < REC_RETRY_CONFIDENCE
+                    and len(recognised[0].strip()) >= REC_RETRY_MIN_CHARS):
+                # Faint text the colour read is unsure of: the equalised grey
+                # row is the better read there (a faded "100" came back "10"
+                # in colour), so read that too and keep the surer of the two.
+                fallback = self._recognise(cv2.cvtColor(
+                    self.normalise_row(gray[y1:y2, x1:x2]), cv2.COLOR_GRAY2BGR))
+                if fallback is not None and (recognised is None
+                                             or fallback[1] > recognised[1]):
+                    recognised = fallback
             self.cache_misses += 1
             text = ""
             if recognised is not None:
@@ -675,6 +801,20 @@ class OcrEngine:
                 results.append((text, (x, y, w, h)))
 
         return results, (time.perf_counter() - started) * 1000.0
+
+    def read_line(self, image_bgr: np.ndarray) -> str:
+        """Recognise an image already cropped to one line of text.
+
+        No segmentation: for a caller that knows where the line is, such as the
+        death recap's fight duration, which sits beside an icon and a ring that
+        the row finder would weld it to.
+        """
+        if self._engine is None or image_bgr is None or image_bgr.size == 0:
+            return ""
+        recognised = self._recognise(self.recognition_row(image_bgr))
+        if recognised is None or recognised[1] < MIN_OCR_CONFIDENCE:
+            return ""
+        return recognised[0].strip()
 
     def read_lines(self, image_bgr: np.ndarray) -> tuple[list[str], float]:
         """OCR an image into text lines. Returns ``(lines, elapsed_ms)``."""
@@ -787,6 +927,24 @@ class CaptureWorker(threading.Thread):
         # nothing. See EXPLORE_MAX_INTERVAL.
         self._explore_interval = EXPLORE_MIN_INTERVAL
         self.icons = role_reader.IconMatcher(parser.assets)
+        # The death recap: summoner icons to look for, the game's roster when it
+        # has named one, and the state of the panel now on screen, if any.
+        self.spell_icons = death_recap.SpellIconMatcher(parser.assets)
+        self._recap_enabled = True
+        self._recap_roster: dict[str, frozenset[str]] | None = None
+        self._recap_read_at = 0.0
+        self._recap_since: float | None = None
+        # When the panel can first have been up: the last look that found it
+        # absent, or the first sighting when no look did. See _read_recap.
+        self._recap_start: float | None = None
+        self._recap_absent_at: float | None = None
+        self._recap_failed = False
+        self._recap_last_seen = 0.0
+        self._recap_fight: float | None = None
+        self._recap_candidate: frozenset[tuple[str, str]] = frozenset()
+        self._recap_published: set[tuple[str, str]] = set()
+        # (champion id, spell, clock time of the cast) waiting for _publish.
+        self._recap_pending: list[tuple[str, str, float]] = []
         # Self-test runs waiting to be served, with the callback to answer on.
         self._self_tests: list = []
         self._self_test_lock = threading.Lock()
@@ -887,6 +1045,28 @@ class CaptureWorker(threading.Thread):
             self.status.roles_source = ""
         self._roles_wanted = wanted
 
+    def set_recap_enabled(self, enabled: bool) -> None:
+        """Read the death recap or not. Off means it is not even looked for.
+
+        Only the flag is set here, on the caller's thread; the capture thread
+        forgets the panel itself on its next pass, so its state is never
+        changed under it mid-reading.
+        """
+        self._recap_enabled = bool(enabled)
+
+    def set_recap_roster(self, enemies: dict[str, frozenset[str]] | None) -> None:
+        """The five enemies and their two spells each, from the game's feed."""
+        self._recap_roster = (None if not enemies
+                              else {cid: frozenset(spells)
+                                    for cid, spells in enemies.items()})
+
+    def _forget_recap(self) -> None:
+        self._recap_since = None
+        self._recap_start = None
+        self._recap_fight = None
+        self._recap_candidate = frozenset()
+        self._recap_published = set()
+
     def set_manual_region(self, region: ChatRegion | None) -> None:
         self._region = region
         self.differ.reset()
@@ -968,6 +1148,11 @@ class CaptureWorker(threading.Thread):
             self.status.roles_source = ""
             self.status.role_notes.clear()
             self._explore_interval = EXPLORE_MIN_INTERVAL
+            # A reading still waiting for room in the queue belongs to the game
+            # that just ended; delivered now it would time the next one.
+            self._forget_recap()
+            self._recap_pending.clear()
+            self._recap_absent_at = None
 
         self.status.window_rect = state.window_rect
 
@@ -993,6 +1178,7 @@ class CaptureWorker(threading.Thread):
             # *your* team, and reading them filled the log with rosters that
             # were never the enemy's.
             self._read_roles()
+            self._read_recap(state.window_rect)
 
         # A hand-placed region needs no window: in test mode the user is aiming
         # the frame at whatever is on screen (a replay, a screenshot, the client)
@@ -1093,6 +1279,7 @@ class CaptureWorker(threading.Thread):
         # an enemy's cooldown from a teammate announcing their own.
         events: list[SpellEvent] = []
         undecided: set[str] = set()
+        misses_before = set(self.parser.near_misses)
         for text, box in rows:
             if text not in fresh:
                 continue
@@ -1101,6 +1288,12 @@ class CaptureWorker(threading.Thread):
                 events.append(event)
             elif not decided:
                 undecided.add(text)
+            trace.info("%s %s %r -> %s", "explore" if exploring else "read",
+                       f"{region.x + box[0]},{region.y + box[1]}", text,
+                       describe_event(event) if event is not None
+                       else "-" if decided else "colour undecided")
+        for miss in [m for m in self.parser.near_misses if m not in misses_before]:
+            trace.info("near miss %r", miss)
 
         # A line whose colour could not be judged is deliberately *not* recorded,
         # so the next frame reads it again.
@@ -1134,7 +1327,7 @@ class CaptureWorker(threading.Thread):
                  text, False)
                 for text, box in rows]
             if zone == PROBE_CLOCK:
-                read_clock = parse_clock(" ".join(text for text, _box in rows))
+                read_clock = parse_game_clock(" ".join(text for text, _box in rows))
                 self.status.game_clock = read_clock
                 if read_clock is None and rows:
                     log.debug("clock zone read %r, no clock in it",
@@ -1196,6 +1389,90 @@ class CaptureWorker(threading.Thread):
                 log.info("enemy team from the %s: %s", zone, slots)
             self.status.roles = dict(slots)
             self.status.roles_source = zone
+
+    def _read_recap(self, window_rect: tuple[int, int, int, int] | None) -> None:
+        """Look for the death recap; never let a failure reach the chat read."""
+        try:
+            self._look_for_recap(window_rect)
+        except Exception:                             # noqa: BLE001
+            if not self._recap_failed:
+                log.exception("reading the death recap failed")
+                self._recap_failed = True
+
+    def _look_for_recap(self, window_rect: tuple[int, int, int, int] | None
+                        ) -> None:
+        """Look for the death recap and publish the enemy spells it shows.
+
+        Each spell once per appearance of the panel, and only once two looks in
+        a row have shown it -- the scoreboard's rule. The cast is placed at the
+        start of the fight the panel reports, counted back from the earliest
+        moment the panel can have appeared: the last look that found it absent.
+        Counting from the first sighting instead made a timer late by however
+        long the player had been alt-tabbed while dead.
+        """
+        if not self._recap_enabled:
+            if self._recap_since is not None or self._recap_pending:
+                self._forget_recap()
+                self._recap_pending.clear()
+            return
+        if window_rect is None:
+            return
+        now = clock.now()
+        if now - self._recap_read_at < RECAP_INTERVAL:
+            return
+        self._recap_read_at = now
+        if not self.icons.ready or not self.spell_icons.ready:
+            # Not from a half-downloaded set: an index built mid-download would
+            # be missing champions for the rest of the session.
+            if not getattr(self.parser.assets, "icons_ready", True):
+                return
+            self.icons.build()
+            self.spell_icons.build()
+        if not self.icons.ready or not self.spell_icons.ready:
+            return
+        x, y, width, height = death_recap.search_area(window_rect)
+        frame = self._grab({"left": x, "top": y, "width": width,
+                            "height": height})
+        if frame is None:
+            return
+
+        reading = death_recap.read(frame, self.icons, self.spell_icons,
+                                   self._recap_roster, self.engine.read_line)
+        if reading is None:
+            self._recap_candidate = frozenset()
+            self._recap_absent_at = now
+            if (self._recap_since is not None
+                    and now - self._recap_last_seen > RECAP_GONE):
+                trace.info("recap gone")
+                self._forget_recap()
+            return
+
+        if self._recap_since is None or now - self._recap_last_seen > RECAP_GONE:
+            self._forget_recap()
+            self._recap_since = now
+            absent = self._recap_absent_at
+            self._recap_start = (absent if absent is not None and absent < now
+                                 else now)
+        self._recap_last_seen = now
+        if reading.fight_seconds is not None:
+            # The longest length read in this appearance: an OCR slip that
+            # drops a digit ("3.7s" for "13.7s") would otherwise make the timer
+            # late, and a longer fight can only make it end early.
+            self._recap_fight = max(self._recap_fight or 0.0,
+                                    reading.fight_seconds)
+        trace.info("recap %s", reading.describe())
+
+        spells = reading.enemy_spells
+        agreed = spells & self._recap_candidate
+        self._recap_candidate = spells
+        fight = (self._recap_fight if self._recap_fight is not None
+                 else RECAP_DEFAULT_FIGHT)
+        for champion_id, spell in sorted(agreed - self._recap_published):
+            self._recap_published.add((champion_id, spell))
+            self._recap_pending.append((champion_id, spell,
+                                        self._recap_start - fight))
+            log.info("death recap: %s used %s, in a fight of %.1fs",
+                     champion_id, spell, fight)
 
     def _widen_if_cut(self, region: ChatRegion,
                       chat_rows: list[tuple[int, int, int, int]],
@@ -1388,13 +1665,17 @@ class CaptureWorker(threading.Thread):
 
     def _publish(self, *, session_changed: bool, events: list[SpellEvent],
                  counted: bool = False) -> None:
+        recap, self._recap_pending = self._recap_pending, []
         payload = {
             "session_changed": session_changed,
             "events": events,
+            "recap": recap,
             "status": self.status,
             "frame_counted": counted,
         }
         try:
             self.results.put_nowait(payload)
         except queue.Full:
-            pass
+            # A recap reading is published once per death; dropping it here
+            # would lose it for good, so it waits for the next payload.
+            self._recap_pending = recap + self._recap_pending

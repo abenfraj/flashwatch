@@ -150,8 +150,8 @@ class IconMatcher:
     """Champion portraits, as vectors, ready to be compared against a crop.
 
     Built once from the icons already on disk for the overlay, so this costs a
-    directory of small PNGs read at startup and nothing thereafter. Kept lazy: a
-    user who has switched the role readers off never pays for it.
+    directory of small PNGs read once and nothing thereafter. Built on first use,
+    by the role readers or the death recap, once every icon is on disk.
     """
 
     def __init__(self, assets) -> None:
@@ -210,6 +210,28 @@ class IconMatcher:
         if vector is None:
             return None, 0.0
         return self.match_batch(np.stack([vector]))[0]
+
+    def match_among(self, crop: np.ndarray, allowed,
+                    min_score: float = MIN_SCORE) -> tuple[str | None, float]:
+        """:meth:`match`, against only the champions in ``allowed``.
+
+        For a surface that can only show one team -- the death recap lists the
+        enemies who did damage -- so the five the game named are the whole field,
+        and the margin is taken over them rather than over every champion.
+        """
+        vector = _descriptor(crop)
+        if vector is None or self._matrix is None:
+            return None, 0.0
+        indices = [i for i, cid in enumerate(self._ids) if cid in allowed]
+        if not indices:
+            return None, 0.0
+        scores = self._matrix[indices] @ vector
+        order = np.argsort(scores)[::-1]
+        top = float(scores[order[0]])
+        second = float(scores[order[1]]) if len(order) > 1 else -1.0
+        if top < min_score or top - second < MIN_MARGIN:
+            return None, top
+        return self._ids[indices[order[0]]], top
 
     def match_batch(self, vectors: np.ndarray
                     ) -> list[tuple[str | None, float]]:

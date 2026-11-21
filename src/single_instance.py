@@ -50,7 +50,8 @@ except ImportError:                                   # pragma: no cover
 
 # The default token name. Anything else is a test wanting its own, so that a
 # suite can exercise this while the real application is running on the machine.
-NAME = "Flashwatch.instance"
+# tools/watch.py runs beside the everyday copy, so it claims a token of its own.
+NAME = os.environ.get("FLASHWATCH_INSTANCE", "Flashwatch.instance")
 
 # Beside the breadcrumb in ``settings.py`` rather than in the data root, and for
 # the same reason the mutex is not per-folder: two installs in two directories are

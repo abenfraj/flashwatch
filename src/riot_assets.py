@@ -9,6 +9,11 @@ later match against OCR output are exactly the strings the game prints. A
 French client says "Saut eclair", not "Flash", and hardcoding either would be
 wrong -- we ask Riot instead.
 
+The spell names are also fetched in every other client language the program
+speaks, because the setting is not the client. A French client with the program
+set to English printed "Saut eclair" into a parser that only knew "Flash", and
+every Flash of every game went unread for weeks.
+
 Cached on disk under assets/cache/, keyed by patch version, so a restart is
 offline and instant. Files left by earlier patches are removed once the current
 one has loaded: at two to three megabytes a patch and a patch a fortnight, the
@@ -36,7 +41,7 @@ import requests
 
 from cooldowns import (COOLDOWNS, DDRAGON_SPELL_IDS,
                        FALLBACK_ITEM_SUMMONER_HASTE, FIXED_COOLDOWNS)
-from i18n import tr
+from i18n import LOCALES as CLIENT_LOCALES, tr
 from settings import CACHE_DIR, CHAMPION_ICON_DIR, SPELL_ICON_DIR, ensure_dirs
 
 log = logging.getLogger(__name__)
@@ -141,6 +146,8 @@ class RiotAssets:
         self.version: str | None = None
         self.champions: dict[str, ChampionInfo] = {}     # champion_id -> info
         self.spells: dict[str, SpellInfo] = {}           # canonical -> info
+        # canonical -> the spell's name in every client language we read.
+        self.spell_names: dict[str, set[str]] = {}
         # Haste each item grants, by item id, on Summoner's Rift.
         self.item_summoner_haste: dict[int, float] = dict(FALLBACK_ITEM_SUMMONER_HASTE)
         self.item_ability_haste: dict[int, float] = {}
@@ -199,6 +206,7 @@ class RiotAssets:
         report(tr("assets.patch", version=self.version, locale=self.locale))
 
         self._load_summoner_spells()
+        self._load_spell_names()
         report(tr("assets.spells", count=len(self.spells)))
 
         self._load_champions()
@@ -230,14 +238,37 @@ class RiotAssets:
                 return cached
         raise RuntimeError(tr("assets.offline"))
 
-    def _load_summoner_spells(self) -> None:
-        url = f"{DDRAGON}/cdn/{self.version}/data/{self.locale}/summoner.json"
-        data = self._cached_json(f"summoner-{self.version}-{self.locale}.json", url)
-        by_id = {
+    def _summoner_entries(self, locale: str) -> dict[str, dict[str, Any]]:
+        url = f"{DDRAGON}/cdn/{self.version}/data/{locale}/summoner.json"
+        data = self._cached_json(f"summoner-{self.version}-{locale}.json", url)
+        return {
             entry["id"]: entry
             for entry in data.get("data", {}).values()
             if isinstance(entry, dict) and "id" in entry
         }
+
+    def _load_spell_names(self) -> None:
+        """Every client language's name for each spell, for the parser.
+
+        Never fatal: a language that cannot be fetched only means its wording is
+        not recognised, which is exactly the state before this existed.
+        """
+        names: dict[str, set[str]] = {canonical: {spell.name}
+                                      for canonical, spell in self.spells.items()}
+        for locale in sorted(set(CLIENT_LOCALES.values()) - {self.locale}):
+            try:
+                by_id = self._summoner_entries(locale)
+            except (requests.RequestException, ValueError, OSError) as exc:
+                log.warning("spell names in %s unavailable (%s)", locale, exc)
+                continue
+            for canonical, ddragon_id in DDRAGON_SPELL_IDS.items():
+                entry = by_id.get(ddragon_id)
+                if entry and entry.get("name") and canonical in names:
+                    names[canonical].add(str(entry["name"]))
+        self.spell_names = names
+
+    def _load_summoner_spells(self) -> None:
+        by_id = self._summoner_entries(self.locale)
 
         for canonical, ddragon_id in DDRAGON_SPELL_IDS.items():
             entry = by_id.get(ddragon_id)

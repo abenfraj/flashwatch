@@ -140,6 +140,11 @@ TIMESTAMP_RE = re.compile(
 # the game's own ping messages carry the pinging player's name. Only meaningful
 # once the timestamp has been removed, since timestamps contain a colon too.
 AUTHOR_PREFIX_RE = re.compile(r"^\s*[^:]{1,40}:\s*")
+# The same prefix with its colon lost or misread: "Thresh (Thresh)y Garen
+# Ignite", "Thresh (Thresh) Garen Ignite". On a stream the OCR dropped or bent
+# that one glyph on a good share of the reads, and every such read was thrown
+# away. The champion in brackets is what makes it an author without the colon.
+AUTHOR_PAREN_RE = re.compile(r"^\s*[^():]{1,40}\([^()]{2,25}\)[^\s]{0,2}\s+")
 
 # "Attendez <champion> <sort> - 245 sec." and its English equivalent. Matched on
 # the accent-stripped text, and the digits accept OCR's usual lookalikes.
@@ -230,6 +235,31 @@ def parse_clock(text: str) -> int | None:
     lookalikes and the same sanity limits.
     """
     match = TIMESTAMP_RE.search(text or "")
+    if match is None:
+        return None
+    try:
+        minutes = int(match.group(1).translate(DIGIT_FIXES))
+        seconds = int(match.group(2).translate(DIGIT_FIXES))
+    except ValueError:
+        return None
+    if seconds > 59 or minutes > 120:
+        return None
+    return minutes * 60 + seconds
+
+
+# The clock at the top of the game screen: always two minute digits ("09:29").
+GAME_CLOCK_RE = re.compile(
+    rf"(?<![0-9A-Za-z])({_DIGIT}{{2}})\s*[:;.]\s*({_DIGIT}{{2}})(?![0-9])")
+
+
+def parse_game_clock(text: str) -> int | None:
+    """Read the on-screen game clock, which always prints two minute digits.
+
+    Stricter than :func:`parse_clock` on purpose. A reading with one minute
+    digit is a dropped digit -- "10:45" as "0:45" -- and two such readings in a
+    row look exactly like a new game, which clears every timer.
+    """
+    match = GAME_CLOCK_RE.search(text or "")
     if match is None:
         return None
     try:
@@ -586,9 +616,8 @@ class MessageParser:
     def _spell_options(self, spells, *, localised_only: bool) -> dict[str, str]:
         options: dict[str, str] = {}
         for canonical in spells:
-            spell = self.assets.spells.get(canonical)
-            if spell is not None:
-                options[fold(spell.name)] = canonical
+            for name in self._game_names(canonical):
+                options[fold(name)] = canonical
             if not localised_only:
                 options[fold(canonical)] = canonical
         return options
@@ -650,11 +679,23 @@ class MessageParser:
                 self._ult_index[fold(ult.name)] = champion.champion_id
 
         for spell in self.assets.spells.values():
-            self._summoner_index[fold(spell.name)] = spell.canonical
-            self._summoner_localised[fold(spell.name)] = spell.canonical
+            # Every client language's name counts as the game's own wording:
+            # the language setting is not the client's, and trusting it lost
+            # every Flash of a French client set to English.
+            for name in self._game_names(spell.canonical):
+                self._summoner_index[fold(name)] = spell.canonical
+                self._summoner_localised[fold(name)] = spell.canonical
             # Accept the English name too; some players run an EN client while
             # the rest of the UI is localised.
             self._summoner_index[fold(spell.canonical)] = spell.canonical
+
+    def _game_names(self, canonical: str) -> set[str]:
+        """What the game calls a spell, in every client language we read."""
+        names = set(getattr(self.assets, "spell_names", {}).get(canonical, ()))
+        spell = self.assets.spells.get(canonical)
+        if spell is not None:
+            names.add(spell.name)
+        return names
 
     def add_localised_spells(self, names: dict[str, str]) -> None:
         """Teach this parser spell names from another language.
@@ -683,8 +724,17 @@ class MessageParser:
         game_time, without_time = self._extract_timestamp(text)
 
         stripped = without_time.strip()
-        had_author = bool(AUTHOR_PREFIX_RE.match(stripped))
-        body = AUTHOR_PREFIX_RE.sub("", stripped, count=1)
+        body = stripped
+        had_author = False
+        for prefix in (AUTHOR_PREFIX_RE, AUTHOR_PAREN_RE):
+            match = prefix.match(stripped)
+            # Only an author if something follows it. A stray colon at the end
+            # of a line ("Lux a utilise Fatigue:") otherwise made the whole line
+            # its own author and left nothing to parse.
+            if match is not None and _letter_count(stripped[match.end():]) >= 4:
+                had_author = True
+                body = stripped[match.end():]
+                break
 
         # Form 1: the game states the remaining cooldown. Accepted with or
         # without an author prefix, because "Attendez <champion> <sort> - <n>

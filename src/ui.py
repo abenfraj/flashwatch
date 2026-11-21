@@ -2064,6 +2064,12 @@ class ControlWindow(QWidget):
         self.check_team_horizontal.setChecked(
             bool(self.settings.get("team_horizontal")))
         self.check_team_horizontal.toggled.connect(self._on_settings_changed)
+        self.check_team_timer_below = self._switch(tr("ui.team_timer_below"),
+                                                   small=True)
+        self.check_team_timer_below.setToolTip(tr("ui.team_timer_below_hint"))
+        self.check_team_timer_below.setChecked(
+            bool(self.settings.get("team_timer_below", True)))
+        self.check_team_timer_below.toggled.connect(self._on_settings_changed)
         self.check_team_hide_rested = self._switch(tr("ui.team_hide_rested"),
                                                    small=True)
         self.check_team_hide_rested.setToolTip(tr("ui.team_hide_rested_hint"))
@@ -2073,8 +2079,8 @@ class ControlWindow(QWidget):
         for box in (self.check_visible, self.check_hide_until_game,
                     self.check_hide_unfocused,
                     self.check_idle_bar, self.check_bar_vertical,
-                    self.check_team_horizontal, self.check_team_hide_rested,
-                    self.check_sort_role):
+                    self.check_team_horizontal, self.check_team_timer_below,
+                    self.check_team_hide_rested, self.check_sort_role):
             switches.addWidget(box)
         look_layout.addLayout(switches)
         self.space(look_layout, 10)
@@ -2168,6 +2174,7 @@ class ControlWindow(QWidget):
     def _sync_team_options(self) -> None:
         team = self._layout_key == LAYOUT_TEAM
         for widget in (getattr(self, "check_team_horizontal", None),
+                       getattr(self, "check_team_timer_below", None),
                        getattr(self, "check_team_hide_rested", None),
                        getattr(self, "row_team_rest", None)):
             if widget is not None:
@@ -2299,8 +2306,14 @@ class ControlWindow(QWidget):
         self.check_auto_roles.setChecked(bool(self.settings.get("auto_roles",
                                                                 True)))
         self.check_auto_roles.toggled.connect(self._on_settings_changed)
+        self.check_death_recap = self._switch(tr("ui.death_recap"))
+        self.check_death_recap.setToolTip(tr("ui.death_recap_tip"))
+        self.check_death_recap.setChecked(bool(self.settings.get(
+            "read_death_recap", True)))
+        self.check_death_recap.toggled.connect(self._on_settings_changed)
         for box in (self.check_summoners, self.check_ultimates,
-                    self.check_chat_calls, self.check_auto_roles):
+                    self.check_chat_calls, self.check_auto_roles,
+                    self.check_death_recap):
             switches.addWidget(box)
         tracking_column.addLayout(switches)
         self.space(tracking_column, 14)
@@ -2856,6 +2869,7 @@ class ControlWindow(QWidget):
             "bar_show_when_idle": self.check_idle_bar.isChecked(),
             "bar_vertical": self.check_bar_vertical.isChecked(),
             "team_horizontal": self.check_team_horizontal.isChecked(),
+            "team_timer_below": self.check_team_timer_below.isChecked(),
             "team_hide_rested": self.check_team_hide_rested.isChecked(),
             "team_rest_opacity": self.slider_team_rest.value() / 100.0,
             "theme": self.combo_theme.currentData(),
@@ -2870,6 +2884,7 @@ class ControlWindow(QWidget):
             "track_ultimates": self.check_ultimates.isChecked(),
             "chat_calls": self.check_chat_calls.isChecked(),
             "auto_roles": self.check_auto_roles.isChecked(),
+            "read_death_recap": self.check_death_recap.isChecked(),
             "require_enemy_colour": self.check_enemy_colour.isChecked(),
             "assume_cosmic_insight": self.check_cosmic.isChecked(),
             "assume_ionian_boots": self.check_ionian.isChecked(),
@@ -2953,6 +2968,7 @@ class ControlWindow(QWidget):
                     (self.check_idle_bar, "bar_show_when_idle"),
                     (self.check_bar_vertical, "bar_vertical"),
                     (self.check_team_horizontal, "team_horizontal"),
+                    (self.check_team_timer_below, "team_timer_below"),
                     (self.check_team_hide_rested, "team_hide_rested"),
                     (self.check_sort_role, "sort_by_role"),
                     (self.check_hide_ready, "hide_ready_entries")):

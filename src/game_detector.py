@@ -37,6 +37,12 @@ CLIENT_PROCESSES = {"leagueclient.exe", "leagueclientux.exe", "riotclientux.exe"
 
 PROCESS_POLL_INTERVAL = 5.0
 
+# Development only, set by tools/watch.py: treat the window whose title contains
+# this text -- a stream or a recorded game playing full screen -- as the game.
+# Everything downstream runs unchanged, which is what makes a stream a fair test
+# of the reading chain.
+WATCH_TITLE = os.environ.get("FLASHWATCH_WATCH", "")
+
 # How long the in-game window may go missing before we conclude the game is over.
 #
 # Window enumeration is not perfectly reliable from outside: alt-tabbing, a
@@ -121,6 +127,24 @@ def game_in_front(hwnd: int, game_pid: int = 0) -> bool:
     return pid in (game_pid, os.getpid()) and pid != 0
 
 
+def _is_game_window(hwnd: int) -> bool:
+    try:
+        if WATCH_TITLE:
+            return WATCH_TITLE.lower() in win32gui.GetWindowText(hwnd).lower()
+        return win32gui.GetClassName(hwnd) == GAME_WINDOW_CLASS
+    except win32gui.error:
+        return False
+
+
+def _window_pid(hwnd: int) -> int:
+    if win32process is None or not hwnd:
+        return 0
+    try:
+        return win32process.GetWindowThreadProcessId(hwnd)[1]
+    except Exception:                                 # noqa: BLE001
+        return 0
+
+
 def find_game_window() -> int:
     """Handle of the visible in-game window, or 0."""
     found = 0
@@ -131,10 +155,7 @@ def find_game_window() -> int:
             return False
         if not win32gui.IsWindowVisible(hwnd):
             return True
-        try:
-            if win32gui.GetClassName(hwnd) != GAME_WINDOW_CLASS:
-                return True
-        except win32gui.error:
+        if not _is_game_window(hwnd):
             return True
         # The client also briefly owns a RiotWindowClass window; require a
         # game-sized client area to tell them apart.
@@ -176,8 +197,12 @@ class GameDetector:
         rect = _client_rect_on_screen(hwnd) if hwnd else None
         in_game = bool(hwnd and rect)
 
-        client_running, game_pid = self._poll_processes(
-            force=in_game and not previous_session)
+        if WATCH_TITLE:
+            # The watched window's own process stands in for the game's.
+            client_running, game_pid = True, _window_pid(hwnd) if hwnd else 0
+        else:
+            client_running, game_pid = self._poll_processes(
+                force=in_game and not previous_session)
 
         # Prefer the pid for session identity: it is stable across window moves
         # and resolution changes, whereas hwnd can be recreated mid-game.

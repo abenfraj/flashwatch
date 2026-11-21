@@ -35,7 +35,7 @@ from PySide6.QtWidgets import QWidget
 
 from chat_detector import ChatRegion
 from i18n import tr
-from message_parser import parse_clock
+from message_parser import parse_game_clock
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +253,7 @@ class ZoneFrame(QWidget):
         self._ocr_note = note
         self._role_summary = roles
         if self.zone == ZONE_CLOCK:
-            clock = parse_clock(" ".join(text for _r, text, _c in self._rows))
+            clock = parse_game_clock(" ".join(text for _r, text, _c in self._rows))
             self._clock_text = ("" if clock is None
                                else f"{int(clock) // 60}:{int(clock) % 60:02d}")
         for _rect, text, is_chat in reversed(self._rows):

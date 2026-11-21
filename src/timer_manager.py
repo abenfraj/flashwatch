@@ -362,6 +362,18 @@ class TimerManager:
             return False
 
         estimate = self.estimated_game_time()
+        if (estimate is not None and seconds <= NEW_GAME_MAX_CLOCK
+                and estimate >= NEW_GAME_MIN_PREVIOUS):
+            # Two agreeing readings of a clock in its first minute and a half,
+            # while we believed the game well past that: a new game. In a game
+            # the process changing says so first; a stream or a recording has
+            # no process of its own, and the last game's timers stayed up
+            # through the whole of the next one. Two readings that agree is the
+            # same evidence two chat lines are held to in _update_clock.
+            self.reset(reason="the game clock on screen restarted, new game")
+            self._frames_seen = PRIME_FRAMES
+            self._clock_ref = (float(seconds), now)
+            return True
         if estimate is not None and seconds <= estimate:
             # Nothing to correct: our own extrapolation is already there or ahead.
             return False
@@ -591,6 +603,56 @@ class TimerManager:
                  timer.champion_name, timer.spell_name, duration, age,
                  ", approx" if approximate else "",
                  ", uncertain" if timer.uncertain else "", event.raw_line)
+        return timer
+
+    # ------------------------------------------------------------------
+    # The death recap
+    # ------------------------------------------------------------------
+    def note_recap(self, champion_id: str, spell_key: str,
+                   cast_clock: float) -> ActiveTimer | None:
+        """A summoner spell the death recap showed; see death_recap.py.
+
+        Only ever adds: a timer already running for that spell came from a
+        ping or an earlier death and knows better. The panel says *that* the
+        spell was used during the fight, not when, so the timer is placed at
+        the fight's start (``cast_clock``) -- it can end early but never late --
+        and marked uncertain until a chat line confirms it.
+        """
+        if not self.settings.get("track_summoners"):
+            return None
+        champion = self.assets.champions.get(champion_id)
+        spell = self.assets.spells.get(spell_key)
+        if champion is None or spell is None:
+            return None
+        key = (champion_id, spell_key)
+        previous = self._timers.get(key)
+        if previous is not None and not previous.is_ready():
+            log.info("death recap: %s %s is already running, left alone",
+                     champion.name, spell.name)
+            return None
+        event = SpellEvent(
+            champion_id=champion_id, champion_name=champion.name,
+            kind="summoner", spell_key=spell_key, spell_name=spell.name,
+            game_time=None, raw_line=f"death recap: {champion.name} {spell.name}",
+            signature=f"{champion_id}|{spell_key}|recap", certain=False,
+            source="recap")
+        if not self._fits_roster(event):
+            return None
+        duration, approximate = self._duration_for(event)
+        age = max(0.0, clock.now() - cast_clock)
+        if duration <= 0 or age >= duration:
+            return None
+        timer = ActiveTimer(
+            champion_id=champion_id, champion_name=champion.name,
+            kind="summoner", spell_key=spell_key, spell_name=spell.name,
+            duration=duration, started_at=clock.now() - age,
+            approximate=approximate, uncertain=True,
+            role=self._role_for(event))
+        self._timers[key] = timer
+        self.history.append((time.time(), event))
+        del self.history[:-100]
+        log.info("timer: %s %s for %.0fs (age %.1fs, from the death recap)",
+                 champion.name, spell.name, duration, age)
         return timer
 
     # ------------------------------------------------------------------

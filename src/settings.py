@@ -46,6 +46,12 @@ def _data_root() -> Path:
     network share, a zip opened in place), fall back to the user's own data
     directory rather than failing to save.
     """
+    # A development copy watching a stream (tools/watch.py) keeps its own
+    # settings, so the chat area it finds on a streamer's layout never replaces
+    # the one placed for real games.
+    override = os.environ.get("FLASHWATCH_DATA")
+    if override:
+        return Path(override)
     if not getattr(sys, "frozen", False):
         return Path(__file__).resolve().parent.parent
 
@@ -101,6 +107,9 @@ DEFAULTS: dict[str, Any] = {
     # Draw only the enemies with something down, so the display is invisible
     # until a spell is used.
     "team_hide_rested": False,
+    # The countdown written on each spell's bottom edge rather than over the
+    # middle of its icon, so the icon stays readable while it is down.
+    "team_timer_below": True,
     # Geometry per layout: {"bar": [x, y, w, h], ...}. Kept apart because the
     # three shapes have nothing in common -- a position and size that suit a wide
     # top strip would put the vertical rows half off screen, and switching
@@ -256,6 +265,10 @@ DEFAULTS: dict[str, Any] = {
     # what makes a call naming a lane resolvable at all. Off means the roles are
     # whatever the user picks in the Enemies list, as before.
     "auto_roles": True,
+    # Read the panel shown at the top left on death: an enemy's Ignite or Smite
+    # in it starts that timer, placed at the start of the fight and marked "?",
+    # unless one is already running. See death_recap.py.
+    "read_death_recap": True,
 
     # --- cooldown modifiers -------------------------------------------
     # Cosmic Insight is 18 summoner spell haste: a Flash of 254 s instead of 300.
