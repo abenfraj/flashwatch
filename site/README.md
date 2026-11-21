@@ -56,28 +56,45 @@ monthly transfer.
 
 ## Deploying
 
-```bash
-npx vercel deploy --prod site          # or: point a Vercel project at site/
+The site is **https://flashwatch.app**, served by Netlify and published by its
+CLI -- pushing `main` ships the application, never the page.
+`flashwatch.vercel.app` only answers with 308 redirects (`vercel.json`).
+
+Never deploy this folder itself: it holds `.env.local` and `.vercel/`. Copy the
+public files to a clean folder and deploy that:
+
+```powershell
+python tools/make_seo.py        # if the FAQ changed: rewrites the JSON-LD
+$dist = "C:/Users/ayoub/dev/flashwatch-site-dist"
+Remove-Item -Recurse -Force $dist -ErrorAction SilentlyContinue
+New-Item -ItemType Directory $dist | Out-Null
+Copy-Item site/index.html, site/favicon.ico, site/apple-touch-icon.png, site/logo.png, site/logo-96.png, site/hero-champions.jpg, site/og-image.jpg, site/robots.txt, site/sitemap.xml, site/google22ae7561f6dcbe2b.html $dist
+Copy-Item -Recurse site/img $dist/img
+netlify deploy --prod --no-build --dir $dist
 ```
 
-Any static host works the same way — Cloudflare Pages, Netlify, GitHub Pages.
+**`img/` is part of the page.** Every champion portrait and spell icon the page
+draws is a file in it; the page never asks Riot's CDN for anything. Forget the
+folder and every icon on the live site is a broken image.
 
-## Checking it
+## The icons: why they are files here
 
-Open `index.html` in a browser; there is nothing to compile. The page was checked
-at 1440 px and at 500 px wide, with a headless Chromium, in its
-`prefers-reduced-motion` state as well as the animated one.
+They used to be hotlinked from Data Dragon at load time, after asking it for its
+latest version. That made the first screen depend on somebody else's server, on
+a second request succeeding, and on nothing between the visitor and that server
+(an ad blocker, a corporate proxy, a DNS filter) taking a dislike to it -- any of
+which leaves the demo as empty circles. They are now 96 px WebP copies of the
+icons the program itself caches (`assets/cache/`), about 50 KB for all of them,
+written straight into the markup so they show even before the script runs.
 
-A note on that: Chromium headless has a minimum window width of about 492 px, so a
-`--window-size=420` screenshot renders a wider page and crops it, which looks
-exactly like a broken responsive layout. Measure `document.documentElement.scrollWidth`
-against `clientWidth` before believing a screenshot.
+To add one, convert it from the program's cache into `img/champion/` or
+`img/spell/` (champions at 96 px, spells at their native 64 px, WebP).
 
 ## Two languages, one copy of the text
 
 The page is written in English and translated to French at runtime; the switch
 sits in the top bar, next to the download button rather than inside `.topnav`,
-which is hidden below 880 px.
+which is hidden below 900 px.
 
 Only the French strings are stored, in the `FR` object at the top of the script.
 The English is read out of the markup itself at load, so there is no second copy
@@ -96,21 +113,40 @@ English rather than breaking.
 
 ## What is in the page
 
-- the hero, with a **live mock of the overlay**: the markers really do ride the
-  track as their cooldowns run down, show `READY` for five seconds and disappear,
-  using the same left-to-right placement and the same anti-overlap pass as the
-  application;
-- installation in three steps, SmartScreen included, since that is where a
-  first-time user gets stuck;
-- configuration, with the two settings that are not optional (client language,
-  borderless windowed) called out as such;
-- where the timers come from — the `a utilisé` / `used` announcement the game
-  prints for enemies only — plus the line to type by hand to test the OCR;
-- what the program never does (injection, memory, inputs, game servers);
-- a FAQ covering the antivirus warning, nothing showing up, CPU cost, where the
-  settings live.
+- the hero: a stand-in for your screen, with the **team display** -- the
+  program's default -- at its right edge, drawn after `src/overlay.py`: the
+  countdown astride each spell's bottom edge, the light dim, the clockwise
+  wedge, amber under fifteen seconds, the green ring for five seconds when a
+  spell is back, faint rows for enemies with nothing down. A thirty-second
+  script at real speed, with the chat lines that start each timer;
+- fair play: what it never does and the only things it does;
+- features, each card with a working miniature: a switcher that redraws the
+  same simulated game as the team, track, cards and rows displays; per-enemy
+  haste; the game-mode switches; click-through; sounds; CPU;
+- how it works in three steps, and the cooldown table with haste toggles
+  (`cooldown x 100 / (100 + haste)`, the values in `src/cooldowns.py`);
+- installation, the two settings that are not optional, the latest release's
+  notes and every version, read from GitHub at load time;
+- the FAQ -- its `<details>` are what `tools/make_seo.py` turns into JSON-LD, so
+  keep `<section id="faq">`, bare `<summary>` and `<div class="a">`;
+- Riot's disclaimer, in full, in the footer.
 
-Colours, hairlines and monospace readouts are taken from the overlay's own dark
-theme, so the page and the tool look like the same object. Fonts come from Google
-Fonts (Chakra Petch, Barlow, JetBrains Mono) — the only external request on the
-page.
+The old section anchors (`#securite`, `#fonctionnement`, `#displays`,
+`#config`, `#versions`, `#rules`) still exist, so links already out there land.
+`?lang=fr` opens the page in French.
+
+Motion respects `prefers-reduced-motion`: the demo then holds one moment instead
+of ticking. The clock runs only while a demo is on screen.
+
+Colours are the program's own (`src/theme.py`'s navy and violet; the overlay's
+white, amber and green inside the widgets). Fonts come from Google Fonts --
+Barlow Semi Condensed for headlines and every number, standing in for the
+overlay's Bahnschrift, and Mulish, the settings window's face, for text.
+
+## Checking it
+
+Never open it on screen: headless Edge, PNG captures. Headless Edge lays a page
+out at no less than about 500 px whatever `--window-size` says, so a phone-width
+capture goes through a wrapper page holding a 390 px iframe. Measure
+`document.documentElement.scrollWidth` against `clientWidth` before believing a
+narrow screenshot.
