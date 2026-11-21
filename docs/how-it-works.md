@@ -1156,6 +1156,7 @@ Each file is a standalone script that exits non-zero on failure:
 .venv\Scripts\python tests\test_replay_sidecar.py     # replay: a roster read off the footage
 .venv\Scripts\python tests\test_replay_cli.py         # replay: the command and its exit codes
 .venv\Scripts\python tests\test_replay_records.py     # replay: what events.json says on noisy footage
+.venv\Scripts\python tests\test_death_recap.py        # the death recap: enemy Ignite/Smite, real panels
 ```
 
 `test_capture_pipeline.py` and `test_ocr_performance.py` render synthetic
