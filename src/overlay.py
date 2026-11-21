@@ -269,6 +269,11 @@ TEAM_ROW_GAP = 5              # between two enemies, one above the other
 TEAM_COLUMN_GAP = 14          # between two enemies side by side: wider, since a
                               # row of spells would otherwise run into the next
 TEAM_PAD = 5                  # inside the window, all round
+# With the countdown on each spell's bottom edge rather than over its middle: the
+# strip it is written in, centred on that edge, so half the number hangs below
+# the icon and the art above it stays visible. Tall enough for the number at the
+# size it has on the icon, so moving it costs no legibility.
+TEAM_TIMER_STRIP = 14
 # Seconds left at which a countdown on an icon turns from white to amber: the
 # moment to start caring, whatever the spell.
 TEAM_SOON_SECONDS = 15.0
@@ -281,6 +286,10 @@ TEAM_TEXT_HALO = (0, 0, 0, 235)
 # number is what is read, the icon only says which spell it is.
 TEAM_COOLDOWN_SHADE = (4, 6, 10, 150)     # over the part of the icon still down
 TEAM_COOLDOWN_DIM = (4, 6, 10, 120)       # over the whole icon while it is down
+# Lighter with the number on the bottom edge: the art above it has nothing to
+# stand off any more, and the spell has to stay recognisable while it is down.
+TEAM_COOLDOWN_SHADE_BELOW = (4, 6, 10, 120)
+TEAM_COOLDOWN_DIM_BELOW = (4, 6, 10, 55)
 # The "?" badge on a spell that was only inferred: amber with dark ink, the one
 # combination that reads at this size over a greyed icon.
 TEAM_UNSURE_FILL = (255, 203, 87, 255)
@@ -1398,8 +1407,17 @@ class Overlay(QWidget):
     def team_is_horizontal(self) -> bool:
         return bool(self.settings.get("team_horizontal", False))
 
+    def team_timer_below(self) -> bool:
+        """Whether a countdown sits on its spell's bottom edge, not its middle."""
+        return bool(self.settings.get("team_timer_below", True))
+
     def _team_metrics(self, scale: float) -> dict:
+        below = self.team_timer_below()
         return {
+            # How far the strip hangs below the spells, or nothing at all.
+            "under": (int(round(TEAM_TIMER_STRIP * scale / 2.0))
+                      + max(1, int(round(scale)))) if below else 0,
+            "strip": int(round(TEAM_TIMER_STRIP * scale)) if below else 0,
             "portrait": int(round(TEAM_PORTRAIT * scale)),
             "spell": int(round(TEAM_SPELL * scale)),
             "gap": max(1, int(round(TEAM_GAP * scale))),
@@ -1428,9 +1446,13 @@ class Overlay(QWidget):
         spells = slots * metrics["spell"] + max(0, slots - 1) * metrics["gap"]
         if self.team_is_horizontal():
             return (max(metrics["portrait"], spells),
-                    metrics["portrait"] + metrics["split"] + metrics["spell"])
+                    metrics["portrait"] + metrics["split"] + metrics["spell"]
+                    + metrics["under"])
+        # The portrait stays level with the spells; the strip hangs below them.
+        base = max(metrics["portrait"], metrics["spell"])
         return (metrics["portrait"] + metrics["split"] + spells,
-                max(metrics["portrait"], metrics["spell"]))
+                int(round(max(base, (base - metrics["spell"]) / 2.0
+                              + metrics["spell"] + metrics["under"]))))
 
     def _team_window_size(self, scale: float | None = None) -> tuple[int, int]:
         if scale is None:
@@ -1502,16 +1524,30 @@ class Overlay(QWidget):
             else:
                 left = metrics["pad"]
                 top = metrics["pad"] + index * (block_h + metrics["row_gap"])
-                portrait = QRectF(left, top + (block_h - metrics["portrait"]) / 2.0,
+                base = max(metrics["portrait"], metrics["spell"])
+                portrait = QRectF(left, top + (base - metrics["portrait"]) / 2.0,
                                   metrics["portrait"], metrics["portrait"])
                 x = left + metrics["portrait"] + metrics["split"]
-                y = top + (block_h - metrics["spell"]) / 2.0
+                y = top + (base - metrics["spell"]) / 2.0
             rects = []
             for _slot in member.slots:
                 rects.append(QRectF(x, y, metrics["spell"], metrics["spell"]))
                 x += metrics["spell"] + metrics["gap"]
             cells.append((member, portrait, rects))
         return cells
+
+    def team_timer_rect(self, spell: QRectF, scale: float | None = None) -> QRectF:
+        """Where the countdown of the spell at ``spell`` goes on its bottom edge.
+
+        Centred on that edge. As wide as the icon plus half the gap on each side,
+        so "1:01" keeps its size; neighbouring strips meet but never overlap.
+        """
+        if scale is None:
+            scale = self._scale()
+        metrics = self._team_metrics(scale)
+        return QRectF(spell.left() - metrics["gap"] / 2.0,
+                      spell.bottom() - metrics["strip"] / 2.0,
+                      spell.width() + metrics["gap"], metrics["strip"])
 
     def _team_rest_opacity(self) -> float:
         try:
@@ -1605,6 +1641,7 @@ class Overlay(QWidget):
         Just back: a green ring, while READY would linger in the other displays.
         """
         timer = slot.timer
+        edge_number: tuple[str, QColor] | None = None
         size = round(rect.width())
         path = QPainterPath()
         path.addRoundedRect(rect, corner, corner)
@@ -1624,12 +1661,15 @@ class Overlay(QWidget):
                              (slot.spell_name or "?")[:1].upper())
 
         if down:
-            painter.fillPath(path, QColor(*TEAM_COOLDOWN_DIM))
+            below = self.team_timer_below()
+            painter.fillPath(path, QColor(*(TEAM_COOLDOWN_DIM_BELOW if below
+                                            else TEAM_COOLDOWN_DIM)))
             progress = self._progress(timer)
             painter.save()
             painter.setClipPath(path)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(*TEAM_COOLDOWN_SHADE))
+            painter.setBrush(QColor(*(TEAM_COOLDOWN_SHADE_BELOW if below
+                                      else TEAM_COOLDOWN_SHADE)))
             # Big enough that the wedge reaches the corners of the square.
             reach = rect.width() * 0.5
             wedge = rect.adjusted(-reach, -reach, reach, reach)
@@ -1644,13 +1684,19 @@ class Overlay(QWidget):
             colour = QColor(*(TEAM_TEXT_SOON if remaining <= TEAM_SOON_SECONDS
                               else TEAM_TEXT))
             unsure = timer.uncertain
-            # With a "?" badge in the top corner the number moves down to clear
-            # it, instead of being drawn underneath it.
-            centre = rect.top() + rect.height() * (0.63 if unsure else 0.52)
-            self._paint_icon_number(painter, rect, text, colour, centre,
-                                    max_height=rect.height()
-                                    * (0.48 if unsure else TEAM_TEXT_HEIGHT),
-                                    scale=scale)
+            if self.team_timer_below():
+                # Astride the icon's bottom edge, at the size it would have on
+                # it, and clear of the "?" badge without having to move. Drawn
+                # last, below, so the icon's own edge does not cross the digits.
+                edge_number = (text, colour)
+            else:
+                # With a "?" badge in the top corner the number moves down to
+                # clear it, instead of being drawn underneath it.
+                centre = rect.top() + rect.height() * (0.63 if unsure else 0.52)
+                self._paint_icon_number(painter, rect, text, colour, centre,
+                                        max_height=rect.height()
+                                        * (0.48 if unsure else TEAM_TEXT_HEIGHT),
+                                        scale=scale)
             if unsure:
                 self._paint_unsure_badge(painter, rect, scale)
         elif timer is not None:
@@ -1665,6 +1711,14 @@ class Overlay(QWidget):
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QPen(QColor(0, 0, 0, 160), max(1.0, 1.0 * scale)))
         painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner)
+
+        if edge_number is not None:
+            text, colour = edge_number
+            strip = self.team_timer_rect(rect, scale)
+            self._paint_icon_number(painter, strip, text, colour,
+                                    strip.center().y(),
+                                    max_height=rect.height() * TEAM_TEXT_HEIGHT,
+                                    scale=scale)
 
 
     def _paint_icon_number(self, painter: QPainter, rect: QRectF, text: str,

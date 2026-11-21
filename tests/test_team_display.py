@@ -105,32 +105,58 @@ overlay = Overlay(settings, assets)
 overlay.set_team(team)
 
 
-def all_rects(cells):
+def all_rects(cells, below):
+    """Every rectangle drawn, each with what it belongs to.
+
+    The strip a countdown is written in sits on its own spell's bottom edge by
+    design, so it shares that spell's owner and may overlap it -- but it must fit
+    in the window and stay off everything else.
+    """
     rects = []
     for _member, portrait, spells in cells:
-        rects.append(portrait)
-        rects.extend(spells)
+        rects.append((portrait, len(rects)))
+        for spell in spells:
+            owner = len(rects)
+            rects.append((spell, owner))
+            if below:
+                rects.append((overlay.team_timer_rect(spell), owner))
     return rects
 
 
-for horizontal in (False, True):
-    settings.set("team_horizontal", horizontal)
-    for scale in (0.6, 1.0, 1.6, 2.0):
-        settings.set("overlay_scale", scale)
-        overlay._fit_team_window()
-        cells = overlay.team_cells()
-        rects = all_rects(cells)
-        frame = QRectF(0, 0, overlay.width(), overlay.height())
-        inside = all(frame.contains(r) for r in rects)
-        overlapping = [(i, j) for i in range(len(rects))
-                       for j in range(i + 1, len(rects))
-                       if rects[i].intersected(rects[j]).width() > 0.01
-                       and rects[i].intersected(rects[j]).height() > 0.01]
-        tag = f"{'row' if horizontal else 'column'} at x{scale}"
-        check(f"[{tag}] everything inside the window", inside,
-              f"{overlay.width()}x{overlay.height()}")
-        check(f"[{tag}] nothing on top of anything", not overlapping,
-              str(overlapping[:3]))
+for below in (True, False):
+    settings.set("team_timer_below", below)
+    for horizontal in (False, True):
+        settings.set("team_horizontal", horizontal)
+        for scale in (0.6, 1.0, 1.6, 2.0):
+            settings.set("overlay_scale", scale)
+            overlay._fit_team_window()
+            cells = overlay.team_cells()
+            owned = all_rects(cells, below)
+            rects = [rect for rect, _owner in owned]
+            frame = QRectF(0, 0, overlay.width(), overlay.height())
+            inside = all(frame.contains(r) for r in rects)
+            overlapping = [(i, j) for i in range(len(rects))
+                           for j in range(i + 1, len(rects))
+                           if owned[i][1] != owned[j][1]
+                           and rects[i].intersected(rects[j]).width() > 0.01
+                           and rects[i].intersected(rects[j]).height() > 0.01]
+            tag = (f"{'row' if horizontal else 'column'} at x{scale}, timer "
+                   f"{'below' if below else 'on the icon'}")
+            check(f"[{tag}] everything inside the window", inside,
+                  f"{overlay.width()}x{overlay.height()}")
+            check(f"[{tag}] nothing on top of anything", not overlapping,
+                  str(overlapping[:3]))
+
+settings.set("overlay_scale", 1.0)
+settings.set("team_horizontal", False)
+settings.set("team_timer_below", False)
+overlay._fit_team_window()
+on_icon = (overlay.width(), overlay.height())
+settings.set("team_timer_below", True)
+overlay._fit_team_window()
+check("the timer below adds height and no width",
+      overlay.width() == on_icon[0] and overlay.height() > on_icon[1],
+      f"{on_icon} -> {(overlay.width(), overlay.height())}")
 
 settings.set("team_horizontal", False)
 settings.set("overlay_scale", 1.0)
